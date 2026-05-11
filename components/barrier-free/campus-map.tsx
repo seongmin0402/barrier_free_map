@@ -139,6 +139,7 @@ const MANUAL_BUILDING_LABELS = [
     lng: 127.1409296,
   },
 ] as const;
+const MANUAL_LABEL_LAT_OFFSET = -0.00003;
 
 type MapTypeOptionId = (typeof MAP_TYPE_OPTIONS)[number]["id"];
 
@@ -413,12 +414,12 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
     for (const label of MANUAL_BUILDING_LABELS) {
       const marker = new MarkerCtor({
         map: null,
-        position: new LatLngCtor(label.lat, label.lng),
+        position: new LatLngCtor(label.lat + MANUAL_LABEL_LAT_OFFSET, label.lng),
         title: label.name,
         zIndex: 1200,
         icon: {
           content: labelMarkerHtml(label.name),
-          anchor: new PointCtor(16, 36),
+          anchor: new PointCtor(14, -2),
         },
       });
       manualLabelMarkersRef.current.push(marker);
