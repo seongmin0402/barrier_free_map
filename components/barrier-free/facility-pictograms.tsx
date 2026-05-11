@@ -55,28 +55,8 @@ function PictogramBrailleBlock({ className }: PictogramProps) {
   );
 }
 
-/** 자동문 */
 function PictogramAutoDoor({ className }: PictogramProps) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={cn("shrink-0 text-foreground", className)}
-      aria-hidden
-    >
-      <path d="M5 4v16" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-      <path d="M19 4v16" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-      <path d="M12 4v16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      <path
-        d="M8 10c2-1.2 4-1.2 6 0M8 14c2 1.2 4 1.2 6 0"
-        stroke="currentColor"
-        strokeWidth="1.35"
-        strokeLinecap="round"
-        fill="none"
-      />
-    </svg>
-  );
+  return <FacilityRaster file="door.jpg" className={className} />;
 }
 
 export const facilityPictogramMap: Record<string, ComponentType<PictogramProps>> = {
