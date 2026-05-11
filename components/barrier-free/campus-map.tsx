@@ -187,7 +187,6 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
   const selectedIdRef = useRef<string | null>(null);
   const [sdkLoaded, setSdkLoaded] = useState(false);
   const myLocationMarkerRef = useRef<{ setMap: (v: unknown) => void; setPosition?: (p: unknown) => void } | null>(null);
-  const geoWatchIdRef = useRef<number | null>(null);
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
   const [geoHintMessage, setGeoHintMessage] = useState<string | null>(null);
   const [locationTracking, setLocationTracking] = useState(false);
@@ -200,14 +199,6 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
   const centerMemo = useMemo(() => deriveCenter(buildings), [buildings]);
 
   const teardown = useCallback(() => {
-    if (geoWatchIdRef.current != null && typeof navigator !== "undefined" && navigator.geolocation) {
-      try {
-        navigator.geolocation.clearWatch(geoWatchIdRef.current);
-      } catch {
-        /* ignore */
-      }
-      geoWatchIdRef.current = null;
-    }
     setLocationTracking(false);
 
     try {
@@ -506,14 +497,6 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
 
   useEffect(() => {
     return () => {
-      if (geoWatchIdRef.current != null && typeof navigator !== "undefined" && navigator.geolocation) {
-        try {
-          navigator.geolocation.clearWatch(geoWatchIdRef.current);
-        } catch {
-          /* ignore */
-        }
-        geoWatchIdRef.current = null;
-      }
       try {
         myLocationMarkerRef.current?.setMap(null);
       } catch {
@@ -533,15 +516,6 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
     if (!maps?.LatLng || !maps?.Marker || !maps?.Point || !map) {
       setGeoHintMessage("지도가 준비된 뒤 다시 시도해 주세요.");
       return;
-    }
-
-    if (geoWatchIdRef.current != null) {
-      try {
-        navigator.geolocation.clearWatch(geoWatchIdRef.current);
-      } catch {
-        /* ignore */
-      }
-      geoWatchIdRef.current = null;
     }
 
     const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
@@ -582,30 +556,23 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
         });
         myLocationMarkerRef.current = m;
       }
-      const mp = map as {
-        panTo?: (ll: unknown, o?: unknown) => void;
-        setZoom?: (z: number) => void;
-        relayout?: () => void;
-      };
-      mp.panTo?.(ll, { duration: 320 });
-      mp.setZoom?.(17);
-      try {
-        mp.relayout?.();
-      } catch {
-        /* ignore */
-      }
-      try {
-        (maps.Event as { trigger?: (t: unknown, e: string) => void }).trigger?.(map, "resize");
-      } catch {
-        /* ignore */
-      }
     };
 
-    const watchId = navigator.geolocation.watchPosition(
+    navigator.geolocation.getCurrentPosition(
       (pos) => {
         setGeoHintMessage(null);
         setLocationTracking(true);
-        applyCoords(pos.coords.latitude, pos.coords.longitude);
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        applyCoords(lat, lng);
+
+        const ll = new LatLngCtor(lat, lng);
+        const mp = map as {
+          panTo?: (target: unknown, options?: unknown) => void;
+          setZoom?: (z: number) => void;
+        };
+        mp.panTo?.(ll, { duration: 320 });
+        mp.setZoom?.(17);
       },
       (err) => {
         setLocationTracking(false);
@@ -614,14 +581,6 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
         else if (err.code === 2) msg = "위치를 확인할 수 없습니다.";
         else if (err.code === 3) msg = "위치 확인 시간이 초과되었습니다.";
         setGeoHintMessage(msg);
-        if (geoWatchIdRef.current != null) {
-          try {
-            navigator.geolocation.clearWatch(geoWatchIdRef.current);
-          } catch {
-            /* ignore */
-          }
-          geoWatchIdRef.current = null;
-        }
         try {
           myLocationMarkerRef.current?.setMap(null);
         } catch {
@@ -631,18 +590,9 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
       },
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
     );
-    geoWatchIdRef.current = watchId;
   }, []);
 
   const stopLocationTracking = useCallback(() => {
-    if (geoWatchIdRef.current != null && typeof navigator !== "undefined" && navigator.geolocation) {
-      try {
-        navigator.geolocation.clearWatch(geoWatchIdRef.current);
-      } catch {
-        /* ignore */
-      }
-      geoWatchIdRef.current = null;
-    }
     setLocationTracking(false);
     try {
       myLocationMarkerRef.current?.setMap(null);
