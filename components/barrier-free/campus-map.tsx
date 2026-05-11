@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import Script from "next/script";
-import { Plus, Minus, Locate, Navigation } from "lucide-react";
+import { Plus, Minus, Locate, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -635,6 +635,9 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
           <Button type="button" variant="secondary" size="icon" onClick={() => zoomDelta(-1)} className="shadow-md" aria-label="축소">
             <Minus className="h-5 w-5" />
           </Button>
+          <Button type="button" variant="secondary" size="icon" onClick={showCampusOverview} className="shadow-md" aria-label="캠퍼스 전체 보기" title="캠퍼스 전체 보기">
+            <Maximize2 className="h-5 w-5" />
+          </Button>
           <Button
             type="button"
             variant={locationTracking ? "default" : "secondary"}
@@ -645,12 +648,9 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
             }}
             className="shadow-md"
             disabled={!sdkLoaded}
-            aria-label={locationTracking ? "내 위치 추적 중지" : "내 위치"}
-            title={locationTracking ? "내 위치 추적 중지" : "내 위치"}
+            aria-label={locationTracking ? "내 위치 추적 중지" : "내 위치로 이동"}
+            title={locationTracking ? "내 위치 추적 중지" : "내 위치로 이동"}
           >
-            <Navigation className="h-5 w-5" />
-          </Button>
-          <Button type="button" variant="secondary" size="icon" onClick={showCampusOverview} className="shadow-md" aria-label="캠퍼스 전체 보기">
             <Locate className="h-5 w-5" />
           </Button>
           </div>
