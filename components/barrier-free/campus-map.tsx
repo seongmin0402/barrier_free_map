@@ -702,10 +702,10 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
                     else setLocationDialogOpen(true);
                   }}
                   disabled={!sdkLoaded}
-                  aria-label={locationTracking ? "내 위치 추적 중지" : "내 위치로 이동"}
+                  aria-label="내 위치 표시"
                 >
                   <Locate className="h-4 w-4" />
-                  {locationTracking ? "추적 중지" : "내 위치"}
+                  내 위치
                 </Button>
               </div>
             </div>
