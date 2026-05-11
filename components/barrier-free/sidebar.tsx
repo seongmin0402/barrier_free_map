@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { Building2, ChevronRight } from "lucide-react";
 import { FacilityPictogram } from "@/components/barrier-free/facility-pictograms";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -48,6 +49,12 @@ export function Sidebar({
   onBuildingSelect,
   isOpen,
 }: SidebarProps) {
+  useEffect(() => {
+    if (!selectedBuilding) return;
+    const el = document.getElementById(`sidebar-building-${selectedBuilding}`);
+    el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [selectedBuilding, buildings]);
+
   const toggleFilter = (id: string) => {
     if (filters.includes(id)) {
       onFilterChange(filters.filter((f) => f !== id));
@@ -108,20 +115,34 @@ export function Sidebar({
             buildings.map((building) => (
             <button
               key={building.id}
+              id={`sidebar-building-${building.id}`}
+              type="button"
               onClick={() => onBuildingSelect(building.id)}
+              aria-current={selectedBuilding === building.id ? "true" : undefined}
               className={cn(
                 "w-full flex items-center gap-3 p-3 rounded-lg text-left transition-colors",
                 selectedBuilding === building.id
-                  ? "bg-primary/10 border border-primary"
-                  : "bg-secondary hover:bg-secondary/80 border border-transparent"
+                  ? "border-2 border-primary bg-primary/15 shadow-md ring-2 ring-primary/40 ring-offset-2 ring-offset-background"
+                  : "bg-secondary hover:bg-secondary/80 border-2 border-transparent",
               )}
             >
-              <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-muted">
-                <Building2 className="w-5 h-5 text-muted-foreground" />
+              <div
+                className={cn(
+                  "flex h-9 w-9 items-center justify-center rounded-lg",
+                  selectedBuilding === building.id ? "bg-primary/20 text-primary" : "bg-muted",
+                )}
+              >
+                <Building2
+                  className={cn(
+                    "h-5 w-5",
+                    selectedBuilding === building.id ? "text-primary" : "text-muted-foreground",
+                  )}
+                />
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm text-foreground truncate">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-foreground">
                   {building.name}
+                  {selectedBuilding === building.id ? <span className="sr-only"> (선택됨)</span> : null}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {building.facilities.filter((f) => f !== "charging").length}개 시설
@@ -130,7 +151,7 @@ export function Sidebar({
               <Badge className={cn("shrink-0", accessibilityColors[building.accessibilityLevel])}>
                 {building.accessibilityLevel}
               </Badge>
-              <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
             </button>
           ))
           )}

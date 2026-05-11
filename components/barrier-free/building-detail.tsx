@@ -197,7 +197,8 @@ export function BuildingDetail({ building, onClose }: BuildingDetailProps) {
           "bottom-3 left-3 right-3 sm:left-auto sm:right-4 sm:w-[min(100%,20rem)]",
         )}
       >
-        <div className="rounded-xl border border-border bg-card/95 p-3 shadow-lg backdrop-blur-sm">
+        <div className="rounded-xl border-2 border-primary bg-card/95 p-3 shadow-lg ring-2 ring-primary/30 backdrop-blur-sm">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-primary">선택된 건물</p>
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
               <div className="mb-1 flex flex-wrap items-center gap-1.5">

@@ -44,16 +44,21 @@ function escapeHtml(s: string) {
     .replace(/"/g, "&quot;");
 }
 
-/** 등급 색의 위치 핀 + 등급 글자 (CSV 기반 건물 마커) */
-function pinMarkerHtml(hex: string, level: string) {
+/** 등급 색의 위치 핀 + 등급 글자. selected 시 진한 테두리 링으로 강조 */
+function pinMarkerHtml(hex: string, level: string, selected: boolean) {
   const L = escapeHtml(level.slice(0, 1).toUpperCase());
   const fill = escapeHtml(hex);
-  return `<div aria-hidden="true" style="width:36px;height:44px;">
-    <svg width="36" height="44" viewBox="0 0 36 44" xmlns="http://www.w3.org/2000/svg">
+  const pinSvg = `<svg width="36" height="44" viewBox="0 0 36 44" xmlns="http://www.w3.org/2000/svg">
       <path fill="${fill}" stroke="#fff" stroke-width="2" d="M18 2C10.8 2 5 7.6 5 14.2c0 7.8 11.5 25.5 12 26.4.4-.9 13-18.6 13-26.4C30 7.6 24.2 2 18 2z"/>
       <circle cx="18" cy="14" r="6.5" fill="#fff"/>
       <text x="18" y="16.5" text-anchor="middle" font-size="10" font-weight="700" fill="${fill}" font-family="system-ui,sans-serif">${L}</text>
-    </svg>
+    </svg>`;
+  const ring = selected
+    ? `<div style="position:absolute;left:1px;top:1px;right:1px;bottom:1px;border:3px solid #111;border-radius:12px;box-sizing:border-box;pointer-events:none;"></div>`
+    : "";
+  return `<div aria-hidden="true" style="position:relative;width:44px;height:52px;display:flex;align-items:flex-end;justify-content:center;box-sizing:border-box;">
+    ${ring}
+    <div style="position:relative;z-index:1;line-height:0;margin-bottom:0;">${pinSvg}</div>
   </div>`;
 }
 
@@ -166,7 +171,16 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
   const clientId = process.env.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID ?? "";
   const containerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<unknown>(null);
-  const markersRef = useRef<Array<{ setMap: (map: unknown) => void }>>([]);
+  const markersRef = useRef<
+    Array<{
+      buildingId: string;
+      marker: {
+        setMap: (map: unknown) => void;
+        setIcon?: (opts: Record<string, unknown>) => void;
+        setZIndex?: (z: number) => void;
+      };
+    }>
+  >([]);
   const activeInfoRef = useRef<{ close: () => void } | null>(null);
   const resizeObsRef = useRef<ResizeObserver | null>(null);
   const selectedIdRef = useRef<string | null>(null);
@@ -215,7 +229,7 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
     }
     resizeObsRef.current = null;
 
-    markersRef.current.forEach((marker) => {
+    markersRef.current.forEach(({ marker }) => {
       try {
         marker.setMap(null);
       } catch {
@@ -316,18 +330,20 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
       if (!Number.isFinite(building.lat) || !Number.isFinite(building.lng)) continue;
 
       const color = levelHex[building.accessibilityLevel] ?? levelHex.B;
+      const isSelected = building.id === selectedIdRef.current;
 
       const marker = new MarkerCtor({
         map,
         position: new LatLngCtor(building.lat, building.lng),
         title: `${building.name} · 등급 ${building.accessibilityLevel}`,
+        zIndex: isSelected ? 800 : 1,
         icon: {
-          content: pinMarkerHtml(color, building.accessibilityLevel),
-          anchor: new PointCtor(18, 44),
+          content: pinMarkerHtml(color, building.accessibilityLevel, isSelected),
+          anchor: new PointCtor(22, 52),
         },
       });
 
-      markersRef.current.push(marker);
+      markersRef.current.push({ buildingId: building.id, marker });
 
       maps.Event.addListener(marker, "click", () => {
         try {
@@ -380,6 +396,29 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
       teardown();
     };
   }, [sdkLoaded, clientId, centerMemo.lat, centerMemo.lng, buildings, teardown, onBuildingSelect]);
+
+  /** 선택 변경 시 마커 아이콘·z-index만 갱신 (지도 재생성 없이) */
+  useEffect(() => {
+    if (!sdkLoaded) return;
+    const maps = window.naver?.maps as NMaps | undefined;
+    if (!maps?.Point || markersRef.current.length === 0) return;
+    const PointCtor = maps.Point as new (x: number, y: number) => unknown;
+    for (const { buildingId, marker } of markersRef.current) {
+      const b = buildings.find((x) => x.id === buildingId);
+      if (!b) continue;
+      const color = levelHex[b.accessibilityLevel] ?? levelHex.B;
+      const isSel = buildingId === selectedBuilding;
+      try {
+        marker.setIcon?.({
+          content: pinMarkerHtml(color, b.accessibilityLevel, isSel),
+          anchor: new PointCtor(22, 52),
+        });
+        marker.setZIndex?.(isSel ? 800 : 1);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [selectedBuilding, buildings, sdkLoaded]);
 
   useEffect(() => {
     if (!selectedBuilding) return;
