@@ -144,7 +144,7 @@ type MapTypeOptionId = (typeof MAP_TYPE_OPTIONS)[number]["id"];
 
 function labelMarkerHtml(name: string) {
   const safeName = escapeHtml(name);
-  return `<div aria-hidden="true" style="display:inline-flex;align-items:center;max-width:220px;padding:3px 8px;border:1px solid rgba(17,24,39,.22);border-radius:9999px;background:rgba(255,255,255,.96);box-shadow:0 2px 8px rgba(0,0,0,.2);font-size:11px;line-height:1.2;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${safeName}</div>`;
+  return `<div aria-hidden="true" style="max-width:260px;padding:0;background:transparent;border:0;box-shadow:none;font-size:12px;line-height:1.25;font-weight:600;color:#1f2937;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:-1px -1px 0 rgba(255,255,255,.95),1px -1px 0 rgba(255,255,255,.95),-1px 1px 0 rgba(255,255,255,.95),1px 1px 0 rgba(255,255,255,.95),0 0 2px rgba(255,255,255,.95);">${safeName}</div>`;
 }
 
 function fitToBuildings(
