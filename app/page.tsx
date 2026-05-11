@@ -125,6 +125,14 @@ export default function BarrierFreeMapPage() {
     return buildings.find((b) => b.id === selectedBuildingId) ?? null;
   }, [buildings, selectedBuildingId]);
 
+  const handleBuildingSelect = useCallback((id: string) => {
+    setSelectedBuildingId(id);
+
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+      setIsSidebarOpen(false);
+    }
+  }, []);
+
   return (
     <div
       className="flex h-screen flex-col bg-background text-foreground"
@@ -152,7 +160,7 @@ export default function BarrierFreeMapPage() {
           buildings={filteredBuildings}
           totalBuildingCount={buildings.length}
           selectedBuilding={selectedBuildingId}
-          onBuildingSelect={setSelectedBuildingId}
+          onBuildingSelect={handleBuildingSelect}
           isOpen={isSidebarOpen}
           onRequestClose={() => setIsSidebarOpen(false)}
         />
@@ -161,7 +169,7 @@ export default function BarrierFreeMapPage() {
           <CampusMap
             buildings={filteredBuildings}
             selectedBuilding={selectedBuildingId}
-            onBuildingSelect={setSelectedBuildingId}
+            onBuildingSelect={handleBuildingSelect}
           />
 
           <BuildingDetail building={selectedBuilding} onClose={() => setSelectedBuildingId(null)} />

@@ -430,16 +430,27 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
 
     const map = mapInstanceRef.current as undefined | {
       panTo?: (ll: unknown, opts?: unknown) => void;
+      setCenter?: (ll: unknown) => void;
       setZoom?: (z: number) => void;
+      relayout?: () => void;
     };
-    if (!map?.panTo) return;
+    if (!map?.panTo && !map?.setCenter) return;
 
     const maps = window.naver?.maps as NMaps | undefined;
     if (!maps?.LatLng) return;
     const Ll = maps.LatLng as new (a: number, c: number) => unknown;
 
-    map.panTo(new Ll(b.lat, b.lng), { duration: 280 });
+    const target = new Ll(b.lat, b.lng);
+    map.setCenter?.(target);
+    map.panTo?.(target, { duration: 280 });
     map.setZoom?.(17);
+    requestAnimationFrame(() => {
+      try {
+        map.relayout?.();
+      } catch {
+        /* ignore */
+      }
+    });
   }, [selectedBuilding, buildings]);
 
   const zoomDelta = useCallback((delta: number) => {
