@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
-import { X, Navigation, ParkingCircle } from "lucide-react";
-import { FacilityPictogram } from "@/components/barrier-free/facility-pictograms";
+import { X, Navigation } from "lucide-react";
+import { FacilityPictogram, PictogramDisabledParking } from "@/components/barrier-free/facility-pictograms";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -81,8 +81,8 @@ function BuildingFullSections({
         <BoolLine label="문턱·단차 존재(조사 결과)" value={building.thresholdPresent} />
         <BoolLine label="경사로" value={building.rampAvailable} />
         <div className="flex justify-between gap-4 border-t border-border pt-2 text-sm">
-          <span className="flex items-center gap-1 text-muted-foreground">
-            <ParkingCircle className="h-4 w-4 shrink-0" />
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <PictogramDisabledParking className="h-4 w-4 shrink-0" />
             장애인 주차
           </span>
           <span className="text-right font-medium text-foreground">
