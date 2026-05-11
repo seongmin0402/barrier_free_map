@@ -2,8 +2,16 @@
 
 import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import Script from "next/script";
-import { Plus, Minus, Locate } from "lucide-react";
+import { Plus, Minus, Locate, Navigation } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type { BarrierBuilding } from "@/lib/building-types";
 
 interface CampusMapProps {
@@ -110,6 +118,11 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
   const resizeObsRef = useRef<ResizeObserver | null>(null);
   const selectedIdRef = useRef<string | null>(null);
   const [sdkLoaded, setSdkLoaded] = useState(false);
+  const myLocationMarkerRef = useRef<{ setMap: (v: unknown) => void; setPosition?: (p: unknown) => void } | null>(null);
+  const geoWatchIdRef = useRef<number | null>(null);
+  const [locationDialogOpen, setLocationDialogOpen] = useState(false);
+  const [geoHintMessage, setGeoHintMessage] = useState<string | null>(null);
+  const [locationTracking, setLocationTracking] = useState(false);
   const [scriptError, setScriptError] = useState(false);
   const [mapTypeKey, setMapTypeKey] = useState<MapTypeOptionId>("NORMAL");
 
@@ -118,6 +131,23 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
   const centerMemo = useMemo(() => deriveCenter(buildings), [buildings]);
 
   const teardown = useCallback(() => {
+    if (geoWatchIdRef.current != null && typeof navigator !== "undefined" && navigator.geolocation) {
+      try {
+        navigator.geolocation.clearWatch(geoWatchIdRef.current);
+      } catch {
+        /* ignore */
+      }
+      geoWatchIdRef.current = null;
+    }
+    setLocationTracking(false);
+
+    try {
+      myLocationMarkerRef.current?.setMap(null);
+    } catch {
+      /* ignore */
+    }
+    myLocationMarkerRef.current = null;
+
     try {
       activeInfoRef.current?.close();
     } catch {
@@ -365,6 +395,160 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
     return MAP_TYPE_OPTIONS.filter((opt) => m.MapTypeId![opt.id] !== undefined);
   }, [sdkLoaded]);
 
+  useEffect(() => {
+    if (!geoHintMessage) return;
+    const t = window.setTimeout(() => setGeoHintMessage(null), 8000);
+    return () => window.clearTimeout(t);
+  }, [geoHintMessage]);
+
+  useEffect(() => {
+    return () => {
+      if (geoWatchIdRef.current != null && typeof navigator !== "undefined" && navigator.geolocation) {
+        try {
+          navigator.geolocation.clearWatch(geoWatchIdRef.current);
+        } catch {
+          /* ignore */
+        }
+        geoWatchIdRef.current = null;
+      }
+      try {
+        myLocationMarkerRef.current?.setMap(null);
+      } catch {
+        /* ignore */
+      }
+      myLocationMarkerRef.current = null;
+    };
+  }, []);
+
+  const beginLocationTracking = useCallback(() => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setGeoHintMessage("이 브라우저는 위치 정보를 지원하지 않습니다.");
+      return;
+    }
+    const maps = window.naver?.maps as NMaps | undefined;
+    const map = mapInstanceRef.current;
+    if (!maps?.LatLng || !maps?.Marker || !maps?.Point || !map) {
+      setGeoHintMessage("지도가 준비된 뒤 다시 시도해 주세요.");
+      return;
+    }
+
+    if (geoWatchIdRef.current != null) {
+      try {
+        navigator.geolocation.clearWatch(geoWatchIdRef.current);
+      } catch {
+        /* ignore */
+      }
+      geoWatchIdRef.current = null;
+    }
+
+    const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
+    const PointCtor = maps.Point as new (x: number, y: number) => unknown;
+    const MarkerCtor = maps.Marker as unknown as new (opts: Record<string, unknown>) => {
+      setMap: (t: unknown) => void;
+      setPosition?: (p: unknown) => void;
+    };
+
+    const myIconHtml =
+      '<div aria-hidden="true" style="width:22px;height:22px;border-radius:50%;background:#2563eb;border:3px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.35);"></div>';
+
+    const applyCoords = (lat: number, lng: number) => {
+      const ll = new LatLngCtor(lat, lng);
+      const existing = myLocationMarkerRef.current;
+      if (existing?.setPosition) {
+        try {
+          existing.setPosition(ll);
+        } catch {
+          try {
+            existing.setMap(null);
+          } catch {
+            /* ignore */
+          }
+          myLocationMarkerRef.current = null;
+        }
+      }
+      if (!myLocationMarkerRef.current) {
+        const m = new MarkerCtor({
+          map,
+          position: ll,
+          title: "내 위치",
+          zIndex: 5000,
+          icon: {
+            content: myIconHtml,
+            anchor: new PointCtor(11, 11),
+          },
+        });
+        myLocationMarkerRef.current = m;
+      }
+      const mp = map as {
+        panTo?: (ll: unknown, o?: unknown) => void;
+        setZoom?: (z: number) => void;
+        relayout?: () => void;
+      };
+      mp.panTo?.(ll, { duration: 320 });
+      mp.setZoom?.(17);
+      try {
+        mp.relayout?.();
+      } catch {
+        /* ignore */
+      }
+      try {
+        (maps.Event as { trigger?: (t: unknown, e: string) => void }).trigger?.(map, "resize");
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        setGeoHintMessage(null);
+        setLocationTracking(true);
+        applyCoords(pos.coords.latitude, pos.coords.longitude);
+      },
+      (err) => {
+        setLocationTracking(false);
+        let msg = "위치를 가져올 수 없습니다.";
+        if (err.code === 1) msg = "위치 권한이 거부되었습니다.";
+        else if (err.code === 2) msg = "위치를 확인할 수 없습니다.";
+        else if (err.code === 3) msg = "위치 확인 시간이 초과되었습니다.";
+        setGeoHintMessage(msg);
+        if (geoWatchIdRef.current != null) {
+          try {
+            navigator.geolocation.clearWatch(geoWatchIdRef.current);
+          } catch {
+            /* ignore */
+          }
+          geoWatchIdRef.current = null;
+        }
+        try {
+          myLocationMarkerRef.current?.setMap(null);
+        } catch {
+          /* ignore */
+        }
+        myLocationMarkerRef.current = null;
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
+    );
+    geoWatchIdRef.current = watchId;
+  }, []);
+
+  const stopLocationTracking = useCallback(() => {
+    if (geoWatchIdRef.current != null && typeof navigator !== "undefined" && navigator.geolocation) {
+      try {
+        navigator.geolocation.clearWatch(geoWatchIdRef.current);
+      } catch {
+        /* ignore */
+      }
+      geoWatchIdRef.current = null;
+    }
+    setLocationTracking(false);
+    try {
+      myLocationMarkerRef.current?.setMap(null);
+    } catch {
+      /* ignore */
+    }
+    myLocationMarkerRef.current = null;
+  }, []);
+
   if (!clientId) {
     return (
       <div className="relative flex flex-1 items-center justify-center bg-muted/40 p-8 text-center">
@@ -438,16 +622,38 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
           </div>
         </div>
 
-        <div className="pointer-events-auto absolute right-4 bottom-4 flex flex-col gap-2">
+        <div className="pointer-events-auto absolute right-4 bottom-4 flex flex-col items-end gap-2">
+          {geoHintMessage && (
+            <div className="max-w-[14rem] rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive shadow-md">
+              {geoHintMessage}
+            </div>
+          )}
+          <div className="flex flex-col gap-2">
           <Button type="button" variant="secondary" size="icon" onClick={() => zoomDelta(1)} className="shadow-md" aria-label="확대">
             <Plus className="h-5 w-5" />
           </Button>
           <Button type="button" variant="secondary" size="icon" onClick={() => zoomDelta(-1)} className="shadow-md" aria-label="축소">
             <Minus className="h-5 w-5" />
           </Button>
+          <Button
+            type="button"
+            variant={locationTracking ? "default" : "secondary"}
+            size="icon"
+            onClick={() => {
+              if (locationTracking) stopLocationTracking();
+              else setLocationDialogOpen(true);
+            }}
+            className="shadow-md"
+            disabled={!sdkLoaded}
+            aria-label={locationTracking ? "내 위치 추적 중지" : "내 위치"}
+            title={locationTracking ? "내 위치 추적 중지" : "내 위치"}
+          >
+            <Navigation className="h-5 w-5" />
+          </Button>
           <Button type="button" variant="secondary" size="icon" onClick={showCampusOverview} className="shadow-md" aria-label="캠퍼스 전체 보기">
             <Locate className="h-5 w-5" />
           </Button>
+          </div>
         </div>
 
         <div className="pointer-events-auto absolute left-4 bottom-4 rounded-lg border border-border bg-card/95 p-3 shadow-lg backdrop-blur-sm">
@@ -468,6 +674,32 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
           </div>
         </div>
       </div>
+
+      <AlertDialog open={locationDialogOpen} onOpenChange={setLocationDialogOpen}>
+        <AlertDialogContent className="z-[100]">
+          <AlertDialogHeader>
+            <AlertDialogTitle>현재 위치를 사용할까요?</AlertDialogTitle>
+            <AlertDialogDescription className="text-left">
+              지도에서 내 위치를 표시하려면 기기의 위치 정보가 필요합니다. 아래에서 동의하면 브라우저에서 위치 접근 허용 여부를
+              추가로 묻습니다. 허용하지 않으면 내 위치를 표시할 수 없습니다.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button type="button" variant="outline" onClick={() => setLocationDialogOpen(false)}>
+              취소
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                setLocationDialogOpen(false);
+                beginLocationTracking();
+              }}
+            >
+              위치 사용에 동의합니다
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
