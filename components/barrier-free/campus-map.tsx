@@ -568,11 +568,21 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
 
         const ll = new LatLngCtor(lat, lng);
         const mp = map as {
+          setCenter?: (target: unknown) => void;
           panTo?: (target: unknown, options?: unknown) => void;
           setZoom?: (z: number) => void;
+          relayout?: () => void;
         };
+        mp.setCenter?.(ll);
         mp.panTo?.(ll, { duration: 320 });
         mp.setZoom?.(17);
+        requestAnimationFrame(() => {
+          try {
+            mp.relayout?.();
+          } catch {
+            /* ignore */
+          }
+        });
       },
       (err) => {
         setLocationTracking(false);
