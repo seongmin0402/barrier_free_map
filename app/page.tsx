@@ -52,12 +52,21 @@ export default function BarrierFreeMapPage() {
       if (searchQuery && !building.name.toLowerCase().includes(searchQuery.toLowerCase())) {
         return false;
       }
-      if (filters.length > 0 && !filters.some((f) => building.facilities.includes(f))) {
+      if (filters.length > 0 && !filters.every((f) => building.facilities.includes(f))) {
         return false;
       }
       return true;
     });
   }, [buildings, searchQuery, filters]);
+
+  useEffect(() => {
+    if (
+      selectedBuildingId != null &&
+      !filteredBuildings.some((b) => b.id === selectedBuildingId)
+    ) {
+      setSelectedBuildingId(null);
+    }
+  }, [filteredBuildings, selectedBuildingId]);
 
   const selectedBuilding = useMemo(() => {
     return buildings.find((b) => b.id === selectedBuildingId) ?? null;
@@ -84,6 +93,7 @@ export default function BarrierFreeMapPage() {
           filters={filters}
           onFilterChange={setFilters}
           buildings={filteredBuildings}
+          totalBuildingCount={buildings.length}
           selectedBuilding={selectedBuildingId}
           onBuildingSelect={setSelectedBuildingId}
           isOpen={isSidebarOpen}
@@ -91,7 +101,7 @@ export default function BarrierFreeMapPage() {
 
         <main className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col">
           <CampusMap
-            buildings={buildings}
+            buildings={filteredBuildings}
             selectedBuilding={selectedBuildingId}
             onBuildingSelect={setSelectedBuildingId}
           />

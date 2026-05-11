@@ -18,6 +18,8 @@ interface SidebarProps {
   filters: string[];
   onFilterChange: (filters: string[]) => void;
   buildings: Building[];
+  /** 전체 건물 수(필터·검색 전). 목록 건수와 비교해 표시 */
+  totalBuildingCount: number;
   selectedBuilding: string | null;
   onBuildingSelect: (id: string) => void;
   isOpen: boolean;
@@ -41,6 +43,7 @@ export function Sidebar({
   filters,
   onFilterChange,
   buildings,
+  totalBuildingCount,
   selectedBuilding,
   onBuildingSelect,
   isOpen,
@@ -83,9 +86,26 @@ export function Sidebar({
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
-        <h2 className="font-semibold text-foreground mb-3">건물 목록</h2>
+        <div className="mb-3 flex items-baseline justify-between gap-2">
+          <h2 className="font-semibold text-foreground">건물 목록</h2>
+          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+            {buildings.length === totalBuildingCount ? (
+              <>{totalBuildingCount}개</>
+            ) : (
+              <>
+                <span className="font-medium text-foreground">{buildings.length}</span>
+                <span> / {totalBuildingCount}개</span>
+              </>
+            )}
+          </span>
+        </div>
         <div className="space-y-2">
-          {buildings.map((building) => (
+          {buildings.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-border bg-muted/30 px-3 py-6 text-center text-xs text-muted-foreground">
+              조건에 맞는 건물이 없습니다.
+            </p>
+          ) : (
+            buildings.map((building) => (
             <button
               key={building.id}
               onClick={() => onBuildingSelect(building.id)}
@@ -112,7 +132,8 @@ export function Sidebar({
               </Badge>
               <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
             </button>
-          ))}
+          ))
+          )}
         </div>
       </div>
 
