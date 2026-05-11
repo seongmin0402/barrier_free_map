@@ -91,7 +91,7 @@ export default function BarrierFreeMapPage() {
 
         <main className="relative flex min-h-0 flex-1 flex-col">
           <CampusMap
-            buildings={filteredBuildings}
+            buildings={buildings}
             selectedBuilding={selectedBuildingId}
             onBuildingSelect={setSelectedBuildingId}
           />

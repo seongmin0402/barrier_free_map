@@ -101,6 +101,7 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
   const resizeObsRef = useRef<ResizeObserver | null>(null);
   const selectedIdRef = useRef<string | null>(null);
   const [sdkLoaded, setSdkLoaded] = useState(false);
+  const [scriptError, setScriptError] = useState(false);
 
   selectedIdRef.current = selectedBuilding;
 
@@ -221,14 +222,19 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
 
         onBuildingSelect(building.id);
 
-        const firstLine = building.description.split(/\r?\n/).find((line) => line.trim()) ?? "";
-        const snippet = firstLine.length > 140 ? `${firstLine.slice(0, 140)}…` : firstLine;
+        const raw = (building.description ?? "").trim();
+        const maxChars = 900;
+        const clipped = raw.length > maxChars ? `${raw.slice(0, maxChars)}…` : raw;
+        const detailHtml = clipped
+          ? escapeHtml(clipped).replace(/\r\n|\n|\r/g, "<br/>")
+          : "상세 설명이 없습니다.";
 
         const iw = new InfoWindowCtor({
-          content: `<div style="padding:10px 12px;max-width:280px;font-size:12px;line-height:1.5;border-radius:10px;background:#fff;box-shadow:0 4px 18px rgba(0,0,0,.2);color:#111;">
+          content: `<div style="padding:10px 12px;max-width:min(92vw,340px);max-height:min(50vh,260px);overflow:auto;font-size:12px;line-height:1.5;border-radius:10px;background:#fff;box-shadow:0 4px 18px rgba(0,0,0,.2);color:#111;">
             <div style="font-weight:700;margin-bottom:4px;">${escapeHtml(building.name)}</div>
-            <div style="color:#555;margin-bottom:6px;">${escapeHtml(building.floorLabel)} · 등급 ${escapeHtml(building.accessibilityLevel)}</div>
-            <div style="color:#333;">${escapeHtml(snippet || "상세 설명이 없습니다.")}</div>
+            <div style="color:#555;margin-bottom:8px;">${escapeHtml(building.floorLabel)} · 등급 ${escapeHtml(building.accessibilityLevel)}</div>
+            <div style="color:#333;">${detailHtml}</div>
+            <div style="margin-top:8px;font-size:11px;color:#888;">아래 패널에서 사진·시설 정보를 확인할 수 있습니다.</div>
           </div>`,
           borderWidth: 0,
           backgroundColor: "transparent",
@@ -317,7 +323,34 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
 
   return (
     <div className="relative min-h-0 flex-1 overflow-hidden bg-muted/30">
-      <Script id="naver-maps-sdk" strategy="afterInteractive" src={scriptSrc} onLoad={() => setSdkLoaded(true)} />
+      <Script
+        id="naver-maps-sdk"
+        strategy="afterInteractive"
+        src={scriptSrc}
+        onLoad={() => {
+          setScriptError(false);
+          setSdkLoaded(true);
+        }}
+        onError={() => setScriptError(true)}
+      />
+
+      {!sdkLoaded && !scriptError && (
+        <div className="absolute inset-0 z-[1] flex items-center justify-center bg-muted/50 text-sm text-muted-foreground">
+          네이버 지도를 불러오는 중…
+        </div>
+      )}
+
+      {scriptError && (
+        <div className="absolute inset-0 z-[1] flex items-center justify-center bg-muted/60 p-6 text-center">
+          <div className="max-w-md rounded-lg border border-border bg-card p-4 text-sm text-foreground shadow-sm">
+            <p className="font-medium">지도 스크립트를 불러오지 못했습니다.</p>
+            <p className="mt-2 text-muted-foreground">
+              네이버 클라우드에서 이 도메인을 허용했는지, <code className="rounded bg-muted px-1">NEXT_PUBLIC_NAVER_MAP_CLIENT_ID</code>가
+              빌드에 포함됐는지 확인한 뒤 새로고침 해 주세요.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div ref={containerRef} className="absolute inset-0" role="presentation" />
 
