@@ -125,7 +125,27 @@ const MAP_TYPE_OPTIONS = [
   { id: "HYBRID", label: "하이브리드" },
 ] as const;
 
+const MANUAL_BUILDING_LABELS = [
+  {
+    id: "manual-global-dorm",
+    name: "공주대학교 글로벌우정연수관",
+    lat: 36.4716541,
+    lng: 127.1402118,
+  },
+  {
+    id: "manual-future-history",
+    name: "공주대학교 미래융합역사문화관",
+    lat: 36.4704144,
+    lng: 127.1409296,
+  },
+] as const;
+
 type MapTypeOptionId = (typeof MAP_TYPE_OPTIONS)[number]["id"];
+
+function labelMarkerHtml(name: string) {
+  const safeName = escapeHtml(name);
+  return `<div aria-hidden="true" style="display:inline-flex;align-items:center;max-width:220px;padding:3px 8px;border:1px solid rgba(17,24,39,.22);border-radius:9999px;background:rgba(255,255,255,.96);box-shadow:0 2px 8px rgba(0,0,0,.2);font-size:11px;line-height:1.2;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${safeName}</div>`;
+}
 
 function fitToBuildings(
   maps: NMaps,
@@ -182,6 +202,7 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
       };
     }>
   >([]);
+  const manualLabelMarkersRef = useRef<Array<{ setMap: (target: unknown) => void }>>([]);
   const activeInfoRef = useRef<{ close: () => void } | null>(null);
   const resizeObsRef = useRef<ResizeObserver | null>(null);
   const selectedIdRef = useRef<string | null>(null);
@@ -230,6 +251,14 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
       }
     });
     markersRef.current = [];
+    manualLabelMarkersRef.current.forEach((marker) => {
+      try {
+        marker.setMap(null);
+      } catch {
+        /* ignore */
+      }
+    });
+    manualLabelMarkersRef.current = [];
 
     try {
       (mapInstanceRef.current as null | { destroy?: () => void })?.destroy?.();
@@ -366,6 +395,22 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
         iw.open(map, marker);
         activeInfoRef.current = iw;
       });
+    }
+
+    const existingNameSet = new Set(buildings.map((b) => b.name.trim()));
+    for (const label of MANUAL_BUILDING_LABELS) {
+      if (existingNameSet.has(label.name)) continue;
+      const marker = new MarkerCtor({
+        map,
+        position: new LatLngCtor(label.lat, label.lng),
+        title: label.name,
+        zIndex: 1200,
+        icon: {
+          content: labelMarkerHtml(label.name),
+          anchor: new PointCtor(16, 36),
+        },
+      });
+      manualLabelMarkersRef.current.push(marker);
     }
 
     fitToBuildings(maps as NMaps, map, buildings);
