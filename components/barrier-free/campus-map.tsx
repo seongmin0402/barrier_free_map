@@ -144,7 +144,7 @@ type MapTypeOptionId = (typeof MAP_TYPE_OPTIONS)[number]["id"];
 
 function labelMarkerHtml(name: string) {
   const safeName = escapeHtml(name);
-  return `<div aria-hidden="true" style="max-width:260px;padding:0;background:transparent;border:0;box-shadow:none;font-size:12px;line-height:1.25;font-weight:600;color:#1f2937;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:-1px -1px 0 rgba(255,255,255,.95),1px -1px 0 rgba(255,255,255,.95),-1px 1px 0 rgba(255,255,255,.95),1px 1px 0 rgba(255,255,255,.95),0 0 2px rgba(255,255,255,.95);">${safeName}</div>`;
+  return `<div aria-hidden="true" style="max-width:260px;padding:0;background:transparent;border:0;box-shadow:none;font-size:12px;line-height:1.25;font-weight:600;color:#2f5ea8;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:-1px -1px 0 rgba(255,255,255,.95),1px -1px 0 rgba(255,255,255,.95),-1px 1px 0 rgba(255,255,255,.95),1px 1px 0 rgba(255,255,255,.95),0 0 2px rgba(255,255,255,.95);">${safeName}</div>`;
 }
 
 function fitToBuildings(
@@ -339,6 +339,7 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
     };
 
     const PointCtor = maps.Point as new (x: number, y: number) => unknown;
+    const MANUAL_LABEL_MIN_ZOOM = 17;
 
     if (typeof ResizeObserver !== "undefined") {
       const ro = new ResizeObserver(() => {
@@ -397,9 +398,21 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
       });
     }
 
+    const syncManualLabelVisibility = () => {
+      const zoom = (map as { getZoom?: () => number }).getZoom?.() ?? 16;
+      const shouldShow = zoom >= MANUAL_LABEL_MIN_ZOOM;
+      for (const marker of manualLabelMarkersRef.current) {
+        try {
+          marker.setMap(shouldShow ? map : null);
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+
     for (const label of MANUAL_BUILDING_LABELS) {
       const marker = new MarkerCtor({
-        map,
+        map: null,
         position: new LatLngCtor(label.lat, label.lng),
         title: label.name,
         zIndex: 1200,
@@ -410,6 +423,8 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
       });
       manualLabelMarkersRef.current.push(marker);
     }
+    syncManualLabelVisibility();
+    maps.Event.addListener(map, "zoom_changed", syncManualLabelVisibility);
 
     fitToBuildings(maps as NMaps, map, buildings);
 
