@@ -128,18 +128,19 @@ const MAP_TYPE_OPTIONS = [
 const MANUAL_BUILDING_LABELS = [
   {
     id: "manual-global-dorm",
-    name: "공주대학교 글로벌우정연수관",
+    name: "글로벌우정연수관",
     lat: 36.4716541,
     lng: 127.1402118,
   },
   {
     id: "manual-future-history",
-    name: "공주대학교 미래융합역사문화관",
+    name: "미래융합역사문화관",
     lat: 36.4704144,
     lng: 127.1409296,
   },
 ] as const;
 const MANUAL_LABEL_LAT_OFFSET = -0.00003;
+const MANUAL_LABEL_LNG_OFFSET = -0.00003;
 
 type MapTypeOptionId = (typeof MAP_TYPE_OPTIONS)[number]["id"];
 
@@ -414,7 +415,10 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
     for (const label of MANUAL_BUILDING_LABELS) {
       const marker = new MarkerCtor({
         map: null,
-        position: new LatLngCtor(label.lat + MANUAL_LABEL_LAT_OFFSET, label.lng),
+        position: new LatLngCtor(
+          label.lat + MANUAL_LABEL_LAT_OFFSET,
+          label.lng + MANUAL_LABEL_LNG_OFFSET,
+        ),
         title: label.name,
         zIndex: 1200,
         icon: {
