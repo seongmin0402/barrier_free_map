@@ -7,7 +7,10 @@
     "dev": "npm run build:data && npx next dev",
     "build": "npm run build:data && npx next build",
     "start": "npx next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "deploy": "npx vercel --prod",
+    "deploy:preview": "npx vercel",
+    "vercel:project-json": "node scripts/write-vercel-project-json.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

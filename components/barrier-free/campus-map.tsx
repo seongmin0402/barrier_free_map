@@ -28,12 +28,25 @@ function deriveCenter(items: BarrierBuilding[]) {
   };
 }
 
-function markerHtml(hex: string) {
-  return `<div aria-hidden="true" style="
-    width:22px;height:22px;border-radius:9999px;
-    background:${hex};border:2px solid white;
-    box-shadow:0 2px 8px rgba(0,0,0,0.28);box-sizing:border-box;
-  "/>`;
+function escapeHtml(s: string) {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** 등급 색의 위치 핀 + 등급 글자 (CSV 기반 건물 마커) */
+function pinMarkerHtml(hex: string, level: string) {
+  const L = escapeHtml(level.slice(0, 1).toUpperCase());
+  const fill = escapeHtml(hex);
+  return `<div aria-hidden="true" style="width:36px;height:44px;">
+    <svg width="36" height="44" viewBox="0 0 36 44" xmlns="http://www.w3.org/2000/svg">
+      <path fill="${fill}" stroke="#fff" stroke-width="2" d="M18 2C10.8 2 5 7.6 5 14.2c0 7.8 11.5 25.5 12 26.4.4-.9 13-18.6 13-26.4C30 7.6 24.2 2 18 2z"/>
+      <circle cx="18" cy="14" r="6.5" fill="#fff"/>
+      <text x="18" y="16.5" text-anchor="middle" font-size="10" font-weight="700" fill="${fill}" font-family="system-ui,sans-serif">${L}</text>
+    </svg>
+  </div>`;
 }
 
 type NMaps = NonNullable<Window["naver"]>["maps"];
@@ -84,6 +97,8 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
   const containerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<unknown>(null);
   const markersRef = useRef<Array<{ setMap: (map: unknown) => void }>>([]);
+  const activeInfoRef = useRef<{ close: () => void } | null>(null);
+  const resizeObsRef = useRef<ResizeObserver | null>(null);
   const selectedIdRef = useRef<string | null>(null);
   const [sdkLoaded, setSdkLoaded] = useState(false);
 
@@ -92,6 +107,20 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
   const centerMemo = useMemo(() => deriveCenter(buildings), [buildings]);
 
   const teardown = useCallback(() => {
+    try {
+      activeInfoRef.current?.close();
+    } catch {
+      /* ignore */
+    }
+    activeInfoRef.current = null;
+
+    try {
+      resizeObsRef.current?.disconnect();
+    } catch {
+      /* ignore */
+    }
+    resizeObsRef.current = null;
+
     markersRef.current.forEach((marker) => {
       try {
         marker.setMap(null);
@@ -116,7 +145,7 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
     if (!sdkLoaded || !clientId || !containerRef.current) return;
 
     const maps = window.naver?.maps as NMaps | undefined;
-    if (!maps?.Map || !maps.LatLng || !maps.Marker || !maps.Event?.addListener) return;
+    if (!maps?.Map || !maps.LatLng || !maps.Marker || !maps.Event?.addListener || !maps.InfoWindow || !maps.Point) return;
 
     teardown();
 
@@ -145,6 +174,27 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
       setMap: (target: typeof map | null) => void;
     };
 
+    const InfoWindowCtor = maps.InfoWindow as unknown as new (opts: Record<string, unknown>) => {
+      open: (m: typeof map, marker: unknown) => void;
+      close: () => void;
+    };
+
+    const PointCtor = maps.Point as new (x: number, y: number) => unknown;
+
+    const EventTrigger = maps.Event as unknown as { trigger?: (target: unknown, evt: string) => void };
+
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(() => {
+        try {
+          EventTrigger.trigger?.(map, "resize");
+        } catch {
+          /* ignore */
+        }
+      });
+      ro.observe(el);
+      resizeObsRef.current = ro;
+    }
+
     for (const building of buildings) {
       if (!Number.isFinite(building.lat) || !Number.isFinite(building.lng)) continue;
 
@@ -153,18 +203,51 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
       const marker = new MarkerCtor({
         map,
         position: new LatLngCtor(building.lat, building.lng),
-        title: building.name,
-        icon: { content: markerHtml(color) },
+        title: `${building.name} · 등급 ${building.accessibilityLevel}`,
+        icon: {
+          content: pinMarkerHtml(color, building.accessibilityLevel),
+          anchor: new PointCtor(18, 44),
+        },
       });
 
       markersRef.current.push(marker);
 
       maps.Event.addListener(marker, "click", () => {
+        try {
+          activeInfoRef.current?.close();
+        } catch {
+          /* ignore */
+        }
+
         onBuildingSelect(building.id);
+
+        const firstLine = building.description.split(/\r?\n/).find((line) => line.trim()) ?? "";
+        const snippet = firstLine.length > 140 ? `${firstLine.slice(0, 140)}…` : firstLine;
+
+        const iw = new InfoWindowCtor({
+          content: `<div style="padding:10px 12px;max-width:280px;font-size:12px;line-height:1.5;border-radius:10px;background:#fff;box-shadow:0 4px 18px rgba(0,0,0,.2);color:#111;">
+            <div style="font-weight:700;margin-bottom:4px;">${escapeHtml(building.name)}</div>
+            <div style="color:#555;margin-bottom:6px;">${escapeHtml(building.floorLabel)} · 등급 ${escapeHtml(building.accessibilityLevel)}</div>
+            <div style="color:#333;">${escapeHtml(snippet || "상세 설명이 없습니다.")}</div>
+          </div>`,
+          borderWidth: 0,
+          backgroundColor: "transparent",
+        });
+
+        iw.open(map, marker);
+        activeInfoRef.current = iw;
       });
     }
 
     fitToBuildings(maps as NMaps, map, buildings);
+
+    requestAnimationFrame(() => {
+      try {
+        EventTrigger.trigger?.(map, "resize");
+      } catch {
+        /* ignore */
+      }
+    });
 
     const initiallySelected = selectedIdRef.current;
     if (initiallySelected) {
@@ -177,7 +260,9 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
       }
     }
 
-    return teardown;
+    return () => {
+      teardown();
+    };
   }, [sdkLoaded, clientId, centerMemo.lat, centerMemo.lng, buildings, teardown, onBuildingSelect]);
 
   useEffect(() => {
@@ -231,7 +316,7 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
   const scriptSrc = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${encodeURIComponent(clientId)}`;
 
   return (
-    <div className="relative flex-1 overflow-hidden bg-muted/30">
+    <div className="relative min-h-0 flex-1 overflow-hidden bg-muted/30">
       <Script id="naver-maps-sdk" strategy="afterInteractive" src={scriptSrc} onLoad={() => setSdkLoaded(true)} />
 
       <div ref={containerRef} className="absolute inset-0" role="presentation" />

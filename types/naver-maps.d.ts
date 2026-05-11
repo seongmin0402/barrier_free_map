@@ -6,6 +6,8 @@ declare global {
         LatLng: unknown;
         LatLngBounds: unknown;
         Marker: unknown;
+        InfoWindow: unknown;
+        Point: unknown;
         Animation?: unknown;
         Event: { addListener: (...args: unknown[]) => unknown };
         ZoomControlStyle?: Record<string, number>;

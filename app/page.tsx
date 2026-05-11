@@ -77,7 +77,7 @@ export default function BarrierFreeMapPage() {
         </div>
       )}
 
-      <div className="relative flex flex-1 overflow-hidden">
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <MobileSidebarToggle isOpen={isSidebarOpen} onToggle={() => setIsSidebarOpen(!isSidebarOpen)} />
 
         <Sidebar
@@ -89,7 +89,7 @@ export default function BarrierFreeMapPage() {
           isOpen={isSidebarOpen}
         />
 
-        <main className="relative flex flex-1">
+        <main className="relative flex min-h-0 flex-1 flex-col">
           <CampusMap
             buildings={filteredBuildings}
             selectedBuilding={selectedBuildingId}
