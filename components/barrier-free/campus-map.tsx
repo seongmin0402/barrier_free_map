@@ -397,9 +397,7 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
       });
     }
 
-    const existingNameSet = new Set(buildings.map((b) => b.name.trim()));
     for (const label of MANUAL_BUILDING_LABELS) {
-      if (existingNameSet.has(label.name)) continue;
       const marker = new MarkerCtor({
         map,
         position: new LatLngCtor(label.lat, label.lng),
