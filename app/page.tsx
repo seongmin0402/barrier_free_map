@@ -20,7 +20,6 @@ export default function BarrierFreeMapPage() {
   const [settings, setSettings] = useState({
     highContrast: false,
     fontSize: 100,
-    screenReader: false,
   });
 
   useEffect(() => {

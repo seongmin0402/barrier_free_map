@@ -1,6 +1,6 @@
 "use client";
 
-import { X, Moon, Sun, Type, Volume2 } from "lucide-react";
+import { X, Moon, Sun, Type } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -12,12 +12,10 @@ interface SettingsPanelProps {
   settings: {
     highContrast: boolean;
     fontSize: number;
-    screenReader: boolean;
   };
   onSettingsChange: (settings: {
     highContrast: boolean;
     fontSize: number;
-    screenReader: boolean;
   }) => void;
 }
 
@@ -105,30 +103,6 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange }: S
             >
               <p className="text-foreground">미리보기 텍스트입니다</p>
             </div>
-          </div>
-
-          {/* 스크린리더 최적화 */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-secondary">
-                <Volume2 className="w-5 h-5 text-foreground" />
-              </div>
-              <div>
-                <Label htmlFor="screen-reader" className="text-sm font-medium">
-                  스크린리더 최적화
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  음성 안내 지원 강화
-                </p>
-              </div>
-            </div>
-            <Switch
-              id="screen-reader"
-              checked={settings.screenReader}
-              onCheckedChange={(checked) =>
-                onSettingsChange({ ...settings, screenReader: checked })
-              }
-            />
           </div>
 
           {/* 안내 메시지 */}
