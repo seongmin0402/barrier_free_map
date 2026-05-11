@@ -13,6 +13,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { BarrierBuilding } from "@/lib/building-types";
+import { sortFloorTokens } from "@/lib/floor-sort";
 
 interface CampusMapProps {
   buildings: BarrierBuilding[];
@@ -96,7 +97,7 @@ function createBuildingInfoWindowElement(
 
   const sub = document.createElement("div");
   sub.style.cssText = "color:#555;margin-bottom:8px;";
-  sub.textContent = `${building.floorLabel} · 등급 ${building.accessibilityLevel}`;
+  sub.textContent = `${building.floorLabel?.trim() ? sortFloorTokens(building.floorLabel) : "—"} · 등급 ${building.accessibilityLevel}`;
 
   const detail = document.createElement("div");
   detail.style.color = "#333";

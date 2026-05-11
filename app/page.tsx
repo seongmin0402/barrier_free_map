@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Header } from "@/components/barrier-free/header";
 import { Sidebar } from "@/components/barrier-free/sidebar";
 import { CampusMap } from "@/components/barrier-free/campus-map";
@@ -8,6 +8,34 @@ import { BuildingDetail } from "@/components/barrier-free/building-detail";
 import { SettingsPanel } from "@/components/barrier-free/settings-panel";
 import { MobileSidebarToggle } from "@/components/barrier-free/mobile-sidebar-toggle";
 import type { BarrierBuilding } from "@/lib/building-types";
+
+const SETTINGS_STORAGE_KEY = "barrier-free-map-settings";
+
+type BarrierMapSettings = {
+  highContrast: boolean;
+  fontSize: number;
+};
+
+function loadSettingsFromStorage(): BarrierMapSettings {
+  if (typeof window === "undefined") {
+    return { highContrast: false, fontSize: 100 };
+  }
+  try {
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (!raw) return { highContrast: false, fontSize: 100 };
+    const p = JSON.parse(raw) as Partial<BarrierMapSettings>;
+    const fontSize =
+      typeof p.fontSize === "number" && Number.isFinite(p.fontSize)
+        ? Math.min(150, Math.max(80, Math.round(p.fontSize / 10) * 10))
+        : 100;
+    return {
+      highContrast: typeof p.highContrast === "boolean" ? p.highContrast : false,
+      fontSize,
+    };
+  } catch {
+    return { highContrast: false, fontSize: 100 };
+  }
+}
 
 export default function BarrierFreeMapPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -17,11 +45,23 @@ export default function BarrierFreeMapPage() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [buildings, setBuildings] = useState<BarrierBuilding[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [settings, setSettings] = useState({
+  const [settings, setSettingsState] = useState<BarrierMapSettings>({
     highContrast: false,
     fontSize: 100,
   });
 
+  useEffect(() => {
+    setSettingsState(loadSettingsFromStorage());
+  }, []);
+
+  const updateSettings = useCallback((next: BarrierMapSettings) => {
+    setSettingsState(next);
+    try {
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      /* ignore quota / private mode */
+    }
+  }, []);
   useEffect(() => {
     let cancelled = false;
     fetch("/data/buildings.json")
@@ -117,7 +157,7 @@ export default function BarrierFreeMapPage() {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         settings={settings}
-        onSettingsChange={setSettings}
+        onSettingsChange={updateSettings}
       />
     </div>
   );

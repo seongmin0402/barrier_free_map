@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { X, Navigation } from "lucide-react";
 import { FacilityPictogram, PictogramDisabledParking } from "@/components/barrier-free/facility-pictograms";
@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { sortFloorPhotoGroups, sortFloorPhotoSummary, sortFloorTokens } from "@/lib/floor-sort";
 import type { BarrierBuilding } from "@/lib/building-types";
 
 interface BuildingDetailProps {
@@ -57,8 +58,11 @@ function BuildingFullSections({
   onPhotoClick: (url: string, alt: string) => void;
 }) {
   const info = accessibilityInfo[building.accessibilityLevel];
-  const floorsWithPhotos =
-    building.floorPhotoGroups?.filter((g) => g.images?.length) ?? [];
+  const floorsSorted = sortFloorPhotoGroups(building.floorPhotoGroups ?? []);
+  const floorsWithPhotos = floorsSorted.filter((g) => g.images?.length);
+  const floorSummarySorted = building.floorPhotoSummary
+    ? sortFloorPhotoSummary(building.floorPhotoSummary)
+    : "";
 
   const naverSearchUrl =
     Number.isFinite(building.lat) && Number.isFinite(building.lng)
@@ -110,8 +114,8 @@ function BuildingFullSections({
         </div>
       ) : null}
 
-      {building.floorPhotoSummary ? (
-        <p className="text-xs text-muted-foreground">사진 요약: {building.floorPhotoSummary}</p>
+      {floorSummarySorted ? (
+        <p className="text-xs text-muted-foreground">사진 요약: {floorSummarySorted}</p>
       ) : null}
 
       {floorsWithPhotos.length > 0 ? (
@@ -184,6 +188,12 @@ export function BuildingDetail({ building, onClose }: BuildingDetailProps) {
     setLightbox({ url, alt });
   }, []);
 
+  const sortedFloorLabel = useMemo(() => {
+    const fl = building?.floorLabel?.trim();
+    if (!fl) return "—";
+    return sortFloorTokens(fl);
+  }, [building?.floorLabel]);
+
   if (!building) return null;
 
   const info = accessibilityInfo[building.accessibilityLevel];
@@ -208,7 +218,7 @@ export function BuildingDetail({ building, onClose }: BuildingDetailProps) {
                 </Badge>
               </div>
               <p className="line-clamp-2 text-xs text-muted-foreground">
-                {building.floorLabel || "—"} · {info.description}
+                {sortedFloorLabel} · {info.description}
               </p>
             </div>
             <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={onClose}>
@@ -232,7 +242,7 @@ export function BuildingDetail({ building, onClose }: BuildingDetailProps) {
           <DialogHeader className="shrink-0 border-b border-border px-4 py-3 pr-12 text-left">
             <DialogTitle className="text-base leading-snug sm:text-lg">{building.name}</DialogTitle>
             <p className="text-xs text-muted-foreground">
-              {building.floorLabel || "—"} · 등급 {building.accessibilityLevel} {info.label} · {info.description}
+              {sortedFloorLabel} · 등급 {building.accessibilityLevel} {info.label} · {info.description}
             </p>
           </DialogHeader>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
