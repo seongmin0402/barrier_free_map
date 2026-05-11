@@ -89,7 +89,7 @@ export default function BarrierFreeMapPage() {
           isOpen={isSidebarOpen}
         />
 
-        <main className="relative flex min-h-0 flex-1 flex-col">
+        <main className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col">
           <CampusMap
             buildings={buildings}
             selectedBuilding={selectedBuildingId}

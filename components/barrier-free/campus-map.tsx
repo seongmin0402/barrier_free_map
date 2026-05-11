@@ -171,6 +171,34 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
 
     mapInstanceRef.current = map;
 
+    const EventTrigger = maps.Event as unknown as { trigger?: (target: unknown, evt: string) => void };
+
+    const relayoutMap = () => {
+      try {
+        (map as { relayout?: () => void }).relayout?.();
+      } catch {
+        /* ignore */
+      }
+      try {
+        EventTrigger.trigger?.(map, "resize");
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const scheduleRelayout = () => {
+      relayoutMap();
+      requestAnimationFrame(() => {
+        relayoutMap();
+        requestAnimationFrame(relayoutMap);
+      });
+    };
+    scheduleRelayout();
+
+    maps.Event.addListener(map, "idle", () => {
+      relayoutMap();
+    });
+
     const MarkerCtor = maps.Marker as unknown as new (opts: Record<string, unknown>) => {
       setMap: (target: typeof map | null) => void;
     };
@@ -182,15 +210,9 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
 
     const PointCtor = maps.Point as new (x: number, y: number) => unknown;
 
-    const EventTrigger = maps.Event as unknown as { trigger?: (target: unknown, evt: string) => void };
-
     if (typeof ResizeObserver !== "undefined") {
       const ro = new ResizeObserver(() => {
-        try {
-          EventTrigger.trigger?.(map, "resize");
-        } catch {
-          /* ignore */
-        }
+        relayoutMap();
       });
       ro.observe(el);
       resizeObsRef.current = ro;
@@ -248,11 +270,7 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
     fitToBuildings(maps as NMaps, map, buildings);
 
     requestAnimationFrame(() => {
-      try {
-        EventTrigger.trigger?.(map, "resize");
-      } catch {
-        /* ignore */
-      }
+      relayoutMap();
     });
 
     const initiallySelected = selectedIdRef.current;
@@ -322,7 +340,7 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
   const scriptSrc = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${encodeURIComponent(clientId)}`;
 
   return (
-    <div className="relative min-h-0 flex-1 overflow-hidden bg-muted/30">
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-muted/30">
       <Script
         id="naver-maps-sdk"
         strategy="afterInteractive"
@@ -335,13 +353,13 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
       />
 
       {!sdkLoaded && !scriptError && (
-        <div className="absolute inset-0 z-[1] flex items-center justify-center bg-muted/50 text-sm text-muted-foreground">
+        <div className="absolute inset-0 z-[5] flex items-center justify-center bg-muted/50 text-sm text-muted-foreground">
           네이버 지도를 불러오는 중…
         </div>
       )}
 
       {scriptError && (
-        <div className="absolute inset-0 z-[1] flex items-center justify-center bg-muted/60 p-6 text-center">
+        <div className="absolute inset-0 z-[5] flex items-center justify-center bg-muted/60 p-6 text-center">
           <div className="max-w-md rounded-lg border border-border bg-card p-4 text-sm text-foreground shadow-sm">
             <p className="font-medium">지도 스크립트를 불러오지 못했습니다.</p>
             <p className="mt-2 text-muted-foreground">
@@ -352,9 +370,12 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
         </div>
       )}
 
-      <div ref={containerRef} className="absolute inset-0" role="presentation" />
+      <div className="relative min-h-0 flex-1">
+        {/* 네이버 지도: 부모 높이가 잡힌 뒤 relayout으로 타일 표시 */}
+        <div ref={containerRef} id="map" className="absolute inset-0 z-0 h-full w-full min-h-[1px]" role="presentation" />
+      </div>
 
-      <div className="pointer-events-none absolute inset-0">
+      <div className="pointer-events-none absolute inset-0 z-10">
         <div className="pointer-events-auto absolute right-4 bottom-4 flex flex-col gap-2">
           <Button type="button" variant="secondary" size="icon" onClick={() => zoomDelta(1)} className="shadow-md" aria-label="확대">
             <Plus className="h-5 w-5" />
