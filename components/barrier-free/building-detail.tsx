@@ -2,17 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
-import {
-  X,
-  Navigation,
-  ArrowUpFromLine,
-  Bath,
-  DoorOpen,
-  Footprints,
-  Zap,
-  Accessibility,
-  ParkingCircle,
-} from "lucide-react";
+import { X, Navigation, ParkingCircle } from "lucide-react";
+import { FacilityPictogram } from "@/components/barrier-free/facility-pictograms";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -34,15 +25,6 @@ interface BuildingDetailProps {
   building: BarrierBuilding | null;
   onClose: () => void;
 }
-
-const facilityIcons: Record<string, React.ComponentType<{ className?: string }>> = {
-  elevator: ArrowUpFromLine,
-  ramp: Accessibility,
-  toilet: Bath,
-  braille: Footprints,
-  "auto-door": DoorOpen,
-  charging: Zap,
-};
 
 const facilityLabels: Record<string, string> = {
   elevator: "엘리베이터",
@@ -115,17 +97,14 @@ function BuildingFullSections({
         <div>
           <h3 className="mb-2 text-sm font-semibold text-foreground">정리된 편의시설</h3>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {building.facilities.map((facility) => {
-              const Icon = facilityIcons[facility] || Accessibility;
-              return (
-                <div key={facility} className="flex items-center gap-2 rounded-lg bg-secondary p-2.5">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10">
-                    <Icon className="h-4 w-4 text-primary" />
-                  </div>
-                  <span className="text-sm text-foreground">{facilityLabels[facility] ?? facility}</span>
+            {building.facilities.map((facility) => (
+              <div key={facility} className="flex items-center gap-2 rounded-lg bg-secondary p-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10">
+                  <FacilityPictogram facilityId={facility} className="h-5 w-5 text-primary" />
                 </div>
-              );
-            })}
+                <span className="text-sm text-foreground">{facilityLabels[facility] ?? facility}</span>
+              </div>
+            ))}
           </div>
         </div>
       ) : null}

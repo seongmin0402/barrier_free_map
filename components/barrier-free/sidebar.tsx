@@ -1,15 +1,7 @@
 "use client";
 
-import { 
-  Accessibility, 
-  DoorOpen, 
-  Bath, 
-  Footprints, 
-  Zap,
-  ArrowUpFromLine,
-  Building2,
-  ChevronRight
-} from "lucide-react";
+import { Building2, ChevronRight } from "lucide-react";
+import { FacilityPictogram } from "@/components/barrier-free/facility-pictograms";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -32,13 +24,13 @@ interface SidebarProps {
 }
 
 const facilityOptions = [
-  { id: "elevator", label: "엘리베이터", icon: ArrowUpFromLine },
-  { id: "ramp", label: "경사로", icon: Accessibility },
-  { id: "toilet", label: "장애인 화장실", icon: Bath },
-  { id: "braille", label: "점자블록", icon: Footprints },
-  { id: "auto-door", label: "자동문", icon: DoorOpen },
-  { id: "charging", label: "휠체어 충전소", icon: Zap },
-];
+  { id: "elevator", label: "엘리베이터" },
+  { id: "ramp", label: "경사로" },
+  { id: "toilet", label: "장애인 화장실" },
+  { id: "braille", label: "점자블록" },
+  { id: "auto-door", label: "자동문" },
+  { id: "charging", label: "휠체어 충전소" },
+] as const;
 
 const accessibilityColors = {
   A: "bg-[oklch(0.65_0.18_160)] text-white",
@@ -83,7 +75,7 @@ export function Sidebar({
                 htmlFor={option.id}
                 className="flex items-center gap-2 text-sm cursor-pointer flex-1"
               >
-                <option.icon className="w-4 h-4 text-muted-foreground" />
+                <FacilityPictogram facilityId={option.id} className="h-4 w-4 text-muted-foreground" />
                 {option.label}
               </Label>
             </div>
