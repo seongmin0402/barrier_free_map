@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build:data": "node scripts/convert-buildings.mjs",
+    "build:data": "node scripts/convert-buildings.mjs && node scripts/copy-facility-icons.mjs",
+    "copy:facility-icons": "node scripts/copy-facility-icons.mjs",
     "dev": "npm run build:data && npx next dev",
     "build": "npm run build:data && npx next build",
     "start": "npx next start",

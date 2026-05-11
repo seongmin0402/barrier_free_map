@@ -29,7 +29,6 @@ const facilityOptions = [
   { id: "toilet", label: "장애인 화장실" },
   { id: "braille", label: "점자블록" },
   { id: "auto-door", label: "자동문" },
-  { id: "charging", label: "휠체어 충전소" },
 ] as const;
 
 const accessibilityColors = {
@@ -105,7 +104,7 @@ export function Sidebar({
                   {building.name}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {building.facilities.length}개 시설
+                  {building.facilities.filter((f) => f !== "charging").length}개 시설
                 </p>
               </div>
               <Badge className={cn("shrink-0", accessibilityColors[building.accessibilityLevel])}>

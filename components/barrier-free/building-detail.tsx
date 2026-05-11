@@ -32,7 +32,6 @@ const facilityLabels: Record<string, string> = {
   toilet: "장애인 화장실",
   braille: "점자블록",
   "auto-door": "자동문",
-  charging: "휠체어 충전소",
 };
 
 const accessibilityInfo = {
@@ -93,11 +92,13 @@ function BuildingFullSections({
         </div>
       </div>
 
-      {building.facilities.length > 0 ? (
+      {building.facilities.filter((f) => f !== "charging").length > 0 ? (
         <div>
           <h3 className="mb-2 text-sm font-semibold text-foreground">정리된 편의시설</h3>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {building.facilities.map((facility) => (
+            {building.facilities
+              .filter((f) => f !== "charging")
+              .map((facility) => (
               <div key={facility} className="flex items-center gap-2 rounded-lg bg-secondary p-2.5">
                 <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10">
                   <FacilityPictogram facilityId={facility} className="h-5 w-5 text-primary" />
