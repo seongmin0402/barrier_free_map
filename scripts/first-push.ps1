@@ -1,4 +1,4 @@
-# 최초 1회: GitHub(seongmin04202/barrier_free_map)에 코드 올리기
+# 최초 1회: GitHub(seongmin0402/barrier_free_map)에 코드 올리기
 # PowerShell에서 실행:  .\scripts\first-push.ps1
 # (실행 정책 오류 시) Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 
@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
 
-$remoteUrl = "https://github.com/seongmin04202/barrier_free_map.git"
+$remoteUrl = "https://github.com/seongmin0402/barrier_free_map.git"
 
 if (-not (Test-Path ".git")) {
   git init
