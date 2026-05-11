@@ -73,7 +73,11 @@ export default function BarrierFreeMapPage() {
   }, [buildings, selectedBuildingId]);
 
   return (
-    <div className="flex h-screen flex-col" style={{ fontSize: `${settings.fontSize}%` }}>
+    <div
+      className="flex h-screen flex-col bg-background text-foreground"
+      style={{ fontSize: `${settings.fontSize}%` }}
+      data-high-contrast={settings.highContrast ? "true" : undefined}
+    >
       <Header
         onSettingsClick={() => setIsSettingsOpen(true)}
         searchQuery={searchQuery}
