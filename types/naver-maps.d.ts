@@ -12,6 +12,7 @@ declare global {
         Event: { addListener: (...args: unknown[]) => unknown };
         ZoomControlStyle?: Record<string, number>;
         Position?: Record<string, number>;
+        MapTypeId?: Record<string, unknown>;
       };
     };
   }

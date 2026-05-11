@@ -51,6 +51,15 @@ function pinMarkerHtml(hex: string, level: string) {
 
 type NMaps = NonNullable<Window["naver"]>["maps"];
 
+const MAP_TYPE_OPTIONS = [
+  { id: "NORMAL", label: "일반" },
+  { id: "TERRAIN", label: "지형" },
+  { id: "SATELLITE", label: "위성" },
+  { id: "HYBRID", label: "하이브리드" },
+] as const;
+
+type MapTypeOptionId = (typeof MAP_TYPE_OPTIONS)[number]["id"];
+
 function fitToBuildings(
   maps: NMaps,
   map: unknown,
@@ -102,6 +111,7 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
   const selectedIdRef = useRef<string | null>(null);
   const [sdkLoaded, setSdkLoaded] = useState(false);
   const [scriptError, setScriptError] = useState(false);
+  const [mapTypeKey, setMapTypeKey] = useState<MapTypeOptionId>("NORMAL");
 
   selectedIdRef.current = selectedBuilding;
 
@@ -170,6 +180,7 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
     });
 
     mapInstanceRef.current = map;
+    setMapTypeKey("NORMAL");
 
     const EventTrigger = maps.Event as unknown as { trigger?: (target: unknown, evt: string) => void };
 
@@ -322,6 +333,38 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
     fitToBuildings(maps as NMaps, mapInstanceRef.current, buildings);
   }, [buildings]);
 
+  const applyMapType = useCallback((key: MapTypeOptionId) => {
+    const mapsApi = window.naver?.maps as (NMaps & { MapTypeId?: Record<string, unknown> }) | undefined;
+    const map = mapInstanceRef.current as {
+      getMapTypeId?: () => unknown;
+      setMapTypeId?: (mapTypeId: unknown) => void;
+    } | null;
+    if (!mapsApi?.MapTypeId || !map?.setMapTypeId) return;
+    const nextType = mapsApi.MapTypeId[key];
+    if (nextType === undefined) return;
+    try {
+      if (map.getMapTypeId?.() === nextType) return;
+      map.setMapTypeId(nextType);
+      setMapTypeKey(key);
+      requestAnimationFrame(() => {
+        try {
+          (map as { relayout?: () => void }).relayout?.();
+        } catch {
+          /* ignore */
+        }
+      });
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const mapTypeButtons = useMemo(() => {
+    if (typeof window === "undefined") return [...MAP_TYPE_OPTIONS];
+    const m = window.naver?.maps as { MapTypeId?: Record<string, unknown> } | undefined;
+    if (!m?.MapTypeId) return [...MAP_TYPE_OPTIONS];
+    return MAP_TYPE_OPTIONS.filter((opt) => m.MapTypeId![opt.id] !== undefined);
+  }, [sdkLoaded]);
+
   if (!clientId) {
     return (
       <div className="relative flex flex-1 items-center justify-center bg-muted/40 p-8 text-center">
@@ -376,6 +419,25 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
       </div>
 
       <div className="pointer-events-none absolute inset-0 z-10">
+        <div className="pointer-events-auto absolute top-4 right-4 flex max-w-[min(100%,20rem)] flex-wrap justify-end gap-1 rounded-lg border border-border bg-card/95 p-1 shadow-lg backdrop-blur-sm">
+          <span className="w-full px-2 pt-1 text-[10px] font-medium text-muted-foreground">지도 유형</span>
+          <div className="flex w-full flex-wrap gap-1 px-1 pb-1">
+            {mapTypeButtons.map((opt) => (
+              <Button
+                key={opt.id}
+                type="button"
+                size="sm"
+                variant={mapTypeKey === opt.id ? "default" : "secondary"}
+                className="h-8 flex-1 text-xs sm:flex-none"
+                disabled={!sdkLoaded}
+                onClick={() => applyMapType(opt.id)}
+              >
+                {opt.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+
         <div className="pointer-events-auto absolute right-4 bottom-4 flex flex-col gap-2">
           <Button type="button" variant="secondary" size="icon" onClick={() => zoomDelta(1)} className="shadow-md" aria-label="확대">
             <Plus className="h-5 w-5" />
