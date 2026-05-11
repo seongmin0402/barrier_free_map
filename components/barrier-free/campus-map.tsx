@@ -99,7 +99,7 @@ function createBuildingInfoWindowElement(
 
   const foot = document.createElement("div");
   foot.style.cssText = "margin-top:8px;font-size:11px;color:#888;";
-  foot.textContent = "아래 패널에서 사진·시설 정보를 확인할 수 있습니다.";
+  foot.textContent = "지도 위 요약 카드에서 「자세히 보기」로 전체 정보·사진을 볼 수 있습니다.";
 
   wrap.appendChild(closeBtn);
   wrap.appendChild(title);
