@@ -22,7 +22,9 @@ if ([string]::IsNullOrEmpty($status)) {
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
-if (git remote get-url origin 2>$null) {
+# origin 없을 때 get-url 은 stderr 를 내고 PowerShell 이 오류로 처리함 → remote 목록으로 판별
+$remoteNames = @(git remote 2>$null)
+if ($remoteNames -contains "origin") {
   git remote set-url origin $remoteUrl
 } else {
   git remote add origin $remoteUrl
