@@ -69,6 +69,40 @@ function BuildingFullSections({
       ? `https://map.naver.com/p/search/${encodeURIComponent(building.name)}/${building.lng},${building.lat},PLACE`
       : `https://map.naver.com/p/search/${encodeURIComponent(building.name)}`;
 
+  const openNaverRoute = useCallback(() => {
+    const hasCoords = Number.isFinite(building.lat) && Number.isFinite(building.lng);
+    if (!hasCoords) {
+      window.open(naverSearchUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    const ua = window.navigator.userAgent;
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
+    if (!isMobile) {
+      window.open(naverSearchUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    const destinationName = encodeURIComponent(building.name);
+    const appName = encodeURIComponent("barrier-free-map");
+    const routeScheme = `nmap://route/walk?dlat=${building.lat}&dlng=${building.lng}&dname=${destinationName}&appname=${appName}`;
+
+    // 모바일에서는 앱 스킴 우선 시도 후, 열리지 않으면 웹 링크로 폴백
+    const fallbackTimer = window.setTimeout(() => {
+      window.open(naverSearchUrl, "_blank", "noopener,noreferrer");
+    }, 1200);
+
+    window.location.href = routeScheme;
+
+    const clearFallback = () => {
+      window.clearTimeout(fallbackTimer);
+      document.removeEventListener("visibilitychange", clearFallback);
+      window.removeEventListener("pagehide", clearFallback);
+    };
+    document.addEventListener("visibilitychange", clearFallback, { once: true });
+    window.addEventListener("pagehide", clearFallback, { once: true });
+  }, [building.lat, building.lng, building.name, naverSearchUrl]);
+
   return (
     <div className="space-y-4 pr-1">
       {building.description ? (
@@ -163,11 +197,9 @@ function BuildingFullSections({
         </div>
       ) : null}
 
-      <Button className="w-full gap-2" size="lg" asChild>
-        <a href={naverSearchUrl} target="_blank" rel="noopener noreferrer">
-          <Navigation className="h-5 w-5" />
-          네이버 지도에서 보기 · 길찾기
-        </a>
+      <Button className="w-full gap-2" size="lg" type="button" onClick={openNaverRoute}>
+        <Navigation className="h-5 w-5" />
+        네이버 지도에서 보기 · 길찾기
       </Button>
     </div>
   );
