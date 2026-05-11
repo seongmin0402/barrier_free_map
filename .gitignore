@@ -9,6 +9,9 @@ __v0_jsx-dev-runtime.ts
 # Environment variables
 .env*.local
 
+# pnpm 사용 안 함 — 있으면 Vercel이 pnpm으로 설치하려다 lock 불일치 오류가 남
+pnpm-lock.yaml
+
 # Common ignores
 node_modules
 .next/
