@@ -110,7 +110,7 @@ export function Sidebar({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain p-4 [touch-action:pan-y] [-webkit-overflow-scrolling:touch]">
         <div className="mb-3 flex items-baseline justify-between gap-2">
           <h2 className="font-semibold text-foreground">건물 목록</h2>
           <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
