@@ -16,6 +16,14 @@ type BarrierMapSettings = {
   fontSize: number;
 };
 
+const facilitySearchTerms: Record<string, string[]> = {
+  elevator: ["elevator", "엘리베이터", "승강기"],
+  ramp: ["ramp", "경사로"],
+  toilet: ["toilet", "화장실", "장애인 화장실"],
+  braille: ["braille", "점자", "점자블록"],
+  "auto-door": ["auto-door", "자동문", "자동 문"],
+};
+
 function loadSettingsFromStorage(): BarrierMapSettings {
   if (typeof window === "undefined") {
     return { highContrast: false, fontSize: 100 };
@@ -88,8 +96,14 @@ export default function BarrierFreeMapPage() {
 
   const filteredBuildings = useMemo(() => {
     return buildings.filter((building) => {
-      if (searchQuery && !building.name.toLowerCase().includes(searchQuery.toLowerCase())) {
-        return false;
+      const q = searchQuery.trim().toLowerCase();
+      if (q) {
+        const nameMatched = building.name.toLowerCase().includes(q);
+        const facilityMatched = building.facilities.some((facilityId) => {
+          const terms = facilitySearchTerms[facilityId] ?? [facilityId];
+          return terms.some((term) => term.toLowerCase().includes(q));
+        });
+        if (!nameMatched && !facilityMatched) return false;
       }
       if (filters.length > 0 && !filters.every((f) => building.facilities.includes(f))) {
         return false;
@@ -140,6 +154,7 @@ export default function BarrierFreeMapPage() {
           selectedBuilding={selectedBuildingId}
           onBuildingSelect={setSelectedBuildingId}
           isOpen={isSidebarOpen}
+          onRequestClose={() => setIsSidebarOpen(false)}
         />
 
         <main className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col">

@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect } from "react";
-import { Building2, ChevronRight } from "lucide-react";
+import { Building2, ChevronRight, X } from "lucide-react";
 import { FacilityPictogram } from "@/components/barrier-free/facility-pictograms";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 interface Building {
@@ -24,6 +25,7 @@ interface SidebarProps {
   selectedBuilding: string | null;
   onBuildingSelect: (id: string) => void;
   isOpen: boolean;
+  onRequestClose: () => void;
 }
 
 const facilityOptions = [
@@ -48,6 +50,7 @@ export function Sidebar({
   selectedBuilding,
   onBuildingSelect,
   isOpen,
+  onRequestClose,
 }: SidebarProps) {
   useEffect(() => {
     if (!selectedBuilding) return;
@@ -64,12 +67,27 @@ export function Sidebar({
   };
 
   return (
-    <aside
-      className={cn(
-        "bg-card border-r border-border flex flex-col transition-all duration-300 overflow-hidden",
-        isOpen ? "w-72" : "w-0 md:w-72"
-      )}
-    >
+    <>
+      <div
+        className={cn(
+          "fixed inset-0 z-20 bg-black/35 transition-opacity duration-200 md:hidden",
+          isOpen ? "opacity-100" : "pointer-events-none opacity-0",
+        )}
+        onClick={onRequestClose}
+        aria-hidden={!isOpen}
+      />
+      <aside
+        className={cn(
+          "fixed top-0 left-0 z-30 flex h-full w-72 flex-col border-r border-border bg-card transition-transform duration-300 md:static md:z-auto md:h-auto md:translate-x-0",
+          isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+        )}
+      >
+      <div className="flex items-center justify-between border-b border-border p-4 md:hidden">
+        <h2 className="text-base font-semibold text-foreground">필터와 목록</h2>
+        <Button variant="ghost" size="icon" onClick={onRequestClose} aria-label="사이드바 닫기">
+          <X className="h-5 w-5" />
+        </Button>
+      </div>
       <div className="p-4 border-b border-border">
         <h2 className="font-semibold text-foreground mb-3">시설 필터</h2>
         <div className="space-y-2">
@@ -175,6 +193,7 @@ export function Sidebar({
           </div>
         </div>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import Script from "next/script";
-import { Plus, Minus, Locate, Maximize2 } from "lucide-react";
+import { Plus, Minus, Locate, Maximize2, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -193,6 +193,7 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
   const [locationTracking, setLocationTracking] = useState(false);
   const [scriptError, setScriptError] = useState(false);
   const [mapTypeKey, setMapTypeKey] = useState<MapTypeOptionId>("NORMAL");
+  const [controlsOpen, setControlsOpen] = useState(false);
 
   selectedIdRef.current = selectedBuilding;
 
@@ -694,56 +695,77 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
       </div>
 
       <div className="pointer-events-none absolute inset-0 z-10">
-        <div className="pointer-events-auto absolute top-4 right-4 flex max-w-[min(100%,20rem)] flex-wrap justify-end gap-1 rounded-lg border border-border bg-card/95 p-1 shadow-lg backdrop-blur-sm">
-          <span className="w-full px-2 pt-1 text-[10px] font-medium text-muted-foreground">지도 유형</span>
-          <div className="flex w-full flex-wrap gap-1 px-1 pb-1">
-            {mapTypeButtons.map((opt) => (
-              <Button
-                key={opt.id}
-                type="button"
-                size="sm"
-                variant={mapTypeKey === opt.id ? "default" : "secondary"}
-                className="h-8 flex-1 text-xs sm:flex-none"
-                disabled={!sdkLoaded}
-                onClick={() => applyMapType(opt.id)}
-              >
-                {opt.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-
         <div className="pointer-events-auto absolute right-4 bottom-4 flex flex-col items-end gap-2">
           {geoHintMessage && (
             <div className="max-w-[14rem] rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive shadow-md">
               {geoHintMessage}
             </div>
           )}
+          {controlsOpen && (
+            <div className="w-[min(86vw,18rem)] rounded-lg border border-border bg-card/95 p-2 shadow-lg backdrop-blur-sm">
+              <p className="mb-1 px-1 text-[10px] font-medium text-muted-foreground">지도 옵션</p>
+              <div className="mb-2 flex flex-wrap gap-1">
+                {mapTypeButtons.map((opt) => (
+                  <Button
+                    key={opt.id}
+                    type="button"
+                    size="sm"
+                    variant={mapTypeKey === opt.id ? "default" : "secondary"}
+                    className="h-7 flex-1 text-xs"
+                    disabled={!sdkLoaded}
+                    onClick={() => applyMapType(opt.id)}
+                  >
+                    {opt.label}
+                  </Button>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-1">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-8 gap-1 text-xs"
+                  onClick={showCampusOverview}
+                  aria-label="캠퍼스 전체 보기"
+                >
+                  <Maximize2 className="h-4 w-4" />
+                  전체 보기
+                </Button>
+                <Button
+                  type="button"
+                  variant={locationTracking ? "default" : "secondary"}
+                  size="sm"
+                  className="h-8 gap-1 text-xs"
+                  onClick={() => {
+                    if (locationTracking) stopLocationTracking();
+                    else setLocationDialogOpen(true);
+                  }}
+                  disabled={!sdkLoaded}
+                  aria-label={locationTracking ? "내 위치 추적 중지" : "내 위치로 이동"}
+                >
+                  <Locate className="h-4 w-4" />
+                  {locationTracking ? "추적 중지" : "내 위치"}
+                </Button>
+              </div>
+            </div>
+          )}
           <div className="flex flex-col gap-2">
-          <Button type="button" variant="secondary" size="icon" onClick={() => zoomDelta(1)} className="shadow-md" aria-label="확대">
-            <Plus className="h-5 w-5" />
-          </Button>
-          <Button type="button" variant="secondary" size="icon" onClick={() => zoomDelta(-1)} className="shadow-md" aria-label="축소">
-            <Minus className="h-5 w-5" />
-          </Button>
-          <Button type="button" variant="secondary" size="icon" onClick={showCampusOverview} className="shadow-md" aria-label="캠퍼스 전체 보기" title="캠퍼스 전체 보기">
-            <Maximize2 className="h-5 w-5" />
-          </Button>
-          <Button
-            type="button"
-            variant={locationTracking ? "default" : "secondary"}
-            size="icon"
-            onClick={() => {
-              if (locationTracking) stopLocationTracking();
-              else setLocationDialogOpen(true);
-            }}
-            className="shadow-md"
-            disabled={!sdkLoaded}
-            aria-label={locationTracking ? "내 위치 추적 중지" : "내 위치로 이동"}
-            title={locationTracking ? "내 위치 추적 중지" : "내 위치로 이동"}
-          >
-            <Locate className="h-5 w-5" />
-          </Button>
+            <Button type="button" variant="secondary" size="icon" onClick={() => zoomDelta(1)} className="shadow-md" aria-label="확대">
+              <Plus className="h-5 w-5" />
+            </Button>
+            <Button type="button" variant="secondary" size="icon" onClick={() => zoomDelta(-1)} className="shadow-md" aria-label="축소">
+              <Minus className="h-5 w-5" />
+            </Button>
+            <Button
+              type="button"
+              variant={controlsOpen ? "default" : "secondary"}
+              size="icon"
+              onClick={() => setControlsOpen((prev) => !prev)}
+              className="shadow-md"
+              aria-label={controlsOpen ? "지도 옵션 닫기" : "지도 옵션 열기"}
+            >
+              <SlidersHorizontal className="h-5 w-5" />
+            </Button>
           </div>
         </div>
 
