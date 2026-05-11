@@ -1,0 +1,45 @@
+# Vercel에 Production 배포 (main 브랜치 push 시)
+#
+# 사용 전 GitHub 저장소 Settings → Secrets and variables → Actions 에 다음 추가:
+#   VERCEL_TOKEN        — Vercel → Account Settings → Tokens
+#   VERCEL_ORG_ID       — Vercel 프로젝트 → Settings → General → Team / Personal ID
+#   VERCEL_PROJECT_ID   — 같은 화면의 Project ID
+#
+# Vercel 대시보드에서 이미 GitHub 저장소를 연결해 자동 배포 중이면,
+# 이 워크플로와 중복 배포될 수 있으니 한쪽만 쓰는 것을 권장합니다.
+
+name: Deploy to Vercel
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel Environment Information
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build Project Artifacts
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy to Vercel
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
