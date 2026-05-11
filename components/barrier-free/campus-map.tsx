@@ -57,6 +57,59 @@ function pinMarkerHtml(hex: string, level: string) {
   </div>`;
 }
 
+/** 마커 클릭 시 InfoWindow용 DOM (우측 상단 닫기) */
+function createBuildingInfoWindowElement(
+  building: BarrierBuilding,
+  onClose: () => void,
+): HTMLElement {
+  const raw = (building.description ?? "").trim();
+  const maxChars = 900;
+  const clipped = raw.length > maxChars ? `${raw.slice(0, maxChars)}…` : raw;
+  const detailHtml = clipped
+    ? escapeHtml(clipped).replace(/\r\n|\n|\r/g, "<br/>")
+    : "상세 설명이 없습니다.";
+
+  const wrap = document.createElement("div");
+  wrap.style.cssText =
+    "position:relative;box-sizing:border-box;max-width:min(92vw,340px);max-height:min(50vh,260px);overflow:auto;font-size:12px;line-height:1.5;border-radius:10px;background:#fff;box-shadow:0 4px 18px rgba(0,0,0,.2);color:#111;padding:10px 12px;padding-top:36px;";
+
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.setAttribute("aria-label", "닫기");
+  closeBtn.style.cssText =
+    "position:absolute;top:6px;right:6px;z-index:2;width:28px;height:28px;margin:0;border:0;border-radius:8px;background:#f3f4f6;cursor:pointer;font-size:20px;line-height:1;display:flex;align-items:center;justify-content:center;color:#374151;";
+  closeBtn.textContent = "×";
+  closeBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onClose();
+  });
+
+  const title = document.createElement("div");
+  title.style.cssText = "font-weight:700;margin-bottom:4px;padding-right:32px;";
+  title.textContent = building.name;
+
+  const sub = document.createElement("div");
+  sub.style.cssText = "color:#555;margin-bottom:8px;";
+  sub.textContent = `${building.floorLabel} · 등급 ${building.accessibilityLevel}`;
+
+  const detail = document.createElement("div");
+  detail.style.color = "#333";
+  detail.innerHTML = detailHtml;
+
+  const foot = document.createElement("div");
+  foot.style.cssText = "margin-top:8px;font-size:11px;color:#888;";
+  foot.textContent = "아래 패널에서 사진·시설 정보를 확인할 수 있습니다.";
+
+  wrap.appendChild(closeBtn);
+  wrap.appendChild(title);
+  wrap.appendChild(sub);
+  wrap.appendChild(detail);
+  wrap.appendChild(foot);
+
+  return wrap;
+}
+
 type NMaps = NonNullable<Window["naver"]>["maps"];
 
 const MAP_TYPE_OPTIONS = [
@@ -285,24 +338,22 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
 
         onBuildingSelect(building.id);
 
-        const raw = (building.description ?? "").trim();
-        const maxChars = 900;
-        const clipped = raw.length > maxChars ? `${raw.slice(0, maxChars)}…` : raw;
-        const detailHtml = clipped
-          ? escapeHtml(clipped).replace(/\r\n|\n|\r/g, "<br/>")
-          : "상세 설명이 없습니다.";
+        let iwRef: { close: () => void } | undefined;
+        const el = createBuildingInfoWindowElement(building, () => {
+          try {
+            iwRef?.close();
+          } catch {
+            /* ignore */
+          }
+          activeInfoRef.current = null;
+        });
 
         const iw = new InfoWindowCtor({
-          content: `<div style="padding:10px 12px;max-width:min(92vw,340px);max-height:min(50vh,260px);overflow:auto;font-size:12px;line-height:1.5;border-radius:10px;background:#fff;box-shadow:0 4px 18px rgba(0,0,0,.2);color:#111;">
-            <div style="font-weight:700;margin-bottom:4px;">${escapeHtml(building.name)}</div>
-            <div style="color:#555;margin-bottom:8px;">${escapeHtml(building.floorLabel)} · 등급 ${escapeHtml(building.accessibilityLevel)}</div>
-            <div style="color:#333;">${detailHtml}</div>
-            <div style="margin-top:8px;font-size:11px;color:#888;">아래 패널에서 사진·시설 정보를 확인할 수 있습니다.</div>
-          </div>`,
+          content: el,
           borderWidth: 0,
           backgroundColor: "transparent",
         });
-
+        iwRef = iw;
         iw.open(map, marker);
         activeInfoRef.current = iw;
       });
