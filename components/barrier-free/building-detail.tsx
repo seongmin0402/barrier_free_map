@@ -110,7 +110,6 @@ function BuildingFullSections({
       ) : null}
 
       <div className="grid gap-2 rounded-lg border border-border bg-muted/30 p-3">
-        <BoolLine label="휠체어 동선" value={building.wheelchairAccess} />
         <BoolLine label="엘리베이터" value={building.elevatorAvailable} />
         <BoolLine label="장애인 화장실" value={building.toiletAvailable} />
         <BoolLine label="점자블록" value={building.brailleAvailable} />
