@@ -181,11 +181,6 @@ function BuildingFullSections({
                             className="object-cover transition group-hover:scale-[1.02]"
                             sizes="(max-width: 640px) 50vw, 33vw"
                           />
-                          {im.originalName ? (
-                            <span className="pointer-events-none absolute bottom-0 left-0 right-0 truncate bg-background/80 px-1 py-0.5 text-[10px] text-muted-foreground backdrop-blur-sm">
-                              {im.originalName}
-                            </span>
-                          ) : null}
                         </button>
                       );
                     })}
