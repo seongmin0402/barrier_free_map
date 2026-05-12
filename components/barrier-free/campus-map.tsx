@@ -45,7 +45,7 @@ function escapeHtml(s: string) {
     .replace(/"/g, "&quot;");
 }
 
-/** 등급 색의 위치 핀 + 등급 글자. selected 시 금색 체크 배지 + 점선 링으로 구분 */
+/** 등급 색의 위치 핀 + 등급 글자. selected 시 파란 사각형(핀 바운딩 박스)으로 감쌈 */
 function pinMarkerHtml(hex: string, level: string, selected: boolean) {
   const L = escapeHtml(level.slice(0, 1).toUpperCase());
   const fill = escapeHtml(hex);
@@ -54,15 +54,10 @@ function pinMarkerHtml(hex: string, level: string, selected: boolean) {
       <circle cx="18" cy="14" r="6.5" fill="#fff"/>
       <text x="18" y="16.5" text-anchor="middle" font-size="10" font-weight="700" fill="${fill}" font-family="system-ui,sans-serif">${L}</text>
     </svg>`;
-  const selectedDecor = selected
-    ? `<div style="position:absolute;left:50%;top:3px;width:42px;height:42px;margin-left:-21px;border-radius:50%;border:3px dashed #ca8a06;box-sizing:border-box;pointer-events:none;z-index:0;opacity:0.95;background:rgba(254,243,199,0.2);"></div>
-    <div style="position:absolute;left:-6px;top:-10px;z-index:4;width:26px;height:26px;border-radius:50%;background:linear-gradient(180deg,#fde047 0%,#eab308 52%,#ca8a04 100%);border:2.5px solid #fff;box-shadow:0 2px 12px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.35);display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:900;line-height:1;font-family:system-ui,-apple-system,sans-serif;text-shadow:0 1px 2px rgba(0,0,0,.25);">✓</div>`
-    : "";
   const pinWrapStyle = selected
-    ? "position:relative;z-index:2;line-height:0;margin-bottom:0;transform:scale(1.1);transform-origin:50% 100%;filter:drop-shadow(0 4px 10px rgba(0,0,0,0.4));"
+    ? "position:relative;z-index:1;line-height:0;margin-bottom:0;box-sizing:border-box;border-radius:4px;background:rgba(37,99,235,0.14);box-shadow:0 0 0 4px #2563eb,0 4px 12px rgba(37,99,235,0.35);"
     : "position:relative;z-index:1;line-height:0;margin-bottom:0;";
   return `<div aria-hidden="true" style="position:relative;width:44px;height:52px;display:flex;align-items:flex-end;justify-content:center;box-sizing:border-box;overflow:visible;">
-    ${selectedDecor}
     <div style="${pinWrapStyle}">${pinSvg}</div>
   </div>`;
 }
