@@ -45,7 +45,7 @@ function escapeHtml(s: string) {
     .replace(/"/g, "&quot;");
 }
 
-/** 등급 색의 위치 핀 + 등급 글자. selected 시 진한 테두리 링으로 강조 */
+/** 등급 색의 위치 핀 + 등급 글자. selected 시 후광·이중 링(흰+파랑)·그림자로 강조 */
 function pinMarkerHtml(hex: string, level: string, selected: boolean) {
   const L = escapeHtml(level.slice(0, 1).toUpperCase());
   const fill = escapeHtml(hex);
@@ -54,12 +54,17 @@ function pinMarkerHtml(hex: string, level: string, selected: boolean) {
       <circle cx="18" cy="14" r="6.5" fill="#fff"/>
       <text x="18" y="16.5" text-anchor="middle" font-size="10" font-weight="700" fill="${fill}" font-family="system-ui,sans-serif">${L}</text>
     </svg>`;
-  const ring = selected
-    ? `<div style="position:absolute;left:1px;top:1px;right:1px;bottom:1px;border:3px solid #111;border-radius:12px;box-sizing:border-box;pointer-events:none;"></div>`
+  const accent = "#2563eb";
+  const selectedLayers = selected
+    ? `<div style="position:absolute;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse 95% 75% at 50% 26%,rgba(37,99,235,0.55) 0%,rgba(37,99,235,0.2) 40%,transparent 68%);"></div>
+    <div style="position:absolute;left:50%;top:4px;width:36px;height:36px;margin-left:-18px;border-radius:50%;box-sizing:border-box;pointer-events:none;z-index:1;border:3px solid #fff;box-shadow:0 0 0 4px ${accent},0 0 22px 8px rgba(37,99,235,0.55),0 6px 14px rgba(0,0,0,0.22);"></div>`
     : "";
-  return `<div aria-hidden="true" style="position:relative;width:44px;height:52px;display:flex;align-items:flex-end;justify-content:center;box-sizing:border-box;">
-    ${ring}
-    <div style="position:relative;z-index:1;line-height:0;margin-bottom:0;">${pinSvg}</div>
+  const pinWrapStyle = selected
+    ? "position:relative;z-index:2;line-height:0;margin-bottom:0;transform:scale(1.1);transform-origin:50% 100%;filter:drop-shadow(0 3px 6px rgba(0,0,0,0.32)) drop-shadow(0 0 12px rgba(37,99,235,0.75));"
+    : "position:relative;z-index:1;line-height:0;margin-bottom:0;";
+  return `<div aria-hidden="true" style="position:relative;width:44px;height:52px;display:flex;align-items:flex-end;justify-content:center;box-sizing:border-box;overflow:visible;">
+    ${selectedLayers}
+    <div style="${pinWrapStyle}">${pinSvg}</div>
   </div>`;
 }
 
