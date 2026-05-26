@@ -19,15 +19,6 @@ import {
   type FootprintFeatureCollection,
 } from "@/lib/campus-footprints";
 import { sortFloorTokens } from "@/lib/floor-sort";
-import campusFootprintGeoJson from "@/polygon.geojson";
-
-function loadFootprintCollection(): FootprintFeatureCollection | null {
-  const data = campusFootprintGeoJson as FootprintFeatureCollection;
-  if (data?.type === "FeatureCollection" && Array.isArray(data.features)) {
-    return data;
-  }
-  return null;
-}
 
 interface CampusMapProps {
   buildings: BarrierBuilding[];
@@ -219,7 +210,7 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
   >([]);
   const manualLabelMarkersRef = useRef<Array<{ setMap: (target: unknown) => void }>>([]);
   const footprintPolygonsRef = useRef<Array<{ setMap: (target: unknown) => void }>>([]);
-  const [footprintCollection] = useState<FootprintFeatureCollection | null>(loadFootprintCollection);
+  const [footprintCollection, setFootprintCollection] = useState<FootprintFeatureCollection | null>(null);
   const [mapReadyEpoch, setMapReadyEpoch] = useState(0);
   const activeInfoRef = useRef<{ close: () => void } | null>(null);
   const resizeObsRef = useRef<ResizeObserver | null>(null);
@@ -236,6 +227,26 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
   selectedIdRef.current = selectedBuilding;
 
   const centerMemo = useMemo(() => deriveCenter(buildings), [buildings]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/data/polygon.geojson")
+      .then((res) => {
+        if (!res.ok) throw new Error(String(res.status));
+        return res.json() as Promise<FootprintFeatureCollection>;
+      })
+      .then((data) => {
+        if (!cancelled && data?.type === "FeatureCollection" && Array.isArray(data.features)) {
+          setFootprintCollection(data);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setFootprintCollection(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const teardown = useCallback(() => {
     setLocationTracking(false);
