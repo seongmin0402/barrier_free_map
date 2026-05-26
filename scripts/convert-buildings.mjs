@@ -62,11 +62,11 @@ function parseCsvObjects(text) {
 
 const projectRoot = path.join(__dirname, "..");
 /** Desktop 폴더의 CSV 파일명 (바탕화면 최종캡스톤과 같은 디렉터리 기준). */
-const DEFAULT_DESKTOP_CSV = path.join(projectRoot, "..", "barrier_free_data_1778422736181.csv");
+const DEFAULT_DESKTOP_CSV = path.join(projectRoot, "..", "barrier_free_data_1779802242012.csv");
 /** 리포 안에 두는 경우 우선 시도. */
 const REPO_DATA_CSV = path.join(projectRoot, "data", "barrier_free_data.csv");
 /** 프로젝트 루트에 CSV를 두었을 때 */
-const REPO_ROOT_CSV = path.join(projectRoot, "barrier_free_data_1778422736181.csv");
+const REPO_ROOT_CSV = path.join(projectRoot, "barrier_free_data_1779802242012.csv");
 
 function csvPath() {
   if (process.env.BARRIER_FREE_CSV) return path.resolve(process.env.BARRIER_FREE_CSV);
