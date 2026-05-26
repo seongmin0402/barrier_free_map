@@ -13,6 +13,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { BarrierBuilding } from "@/lib/building-types";
+import {
+  FOOTPRINT_STROKE,
+  footprintPolygonPathGroups,
+  type FootprintFeatureCollection,
+} from "@/lib/campus-footprints";
 import { sortFloorTokens } from "@/lib/floor-sort";
 
 interface CampusMapProps {
@@ -204,6 +209,9 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
     }>
   >([]);
   const manualLabelMarkersRef = useRef<Array<{ setMap: (target: unknown) => void }>>([]);
+  const footprintPolygonsRef = useRef<Array<{ setMap: (target: unknown) => void }>>([]);
+  const [footprintCollection, setFootprintCollection] = useState<FootprintFeatureCollection | null>(null);
+  const [mapReadyEpoch, setMapReadyEpoch] = useState(0);
   const activeInfoRef = useRef<{ close: () => void } | null>(null);
   const resizeObsRef = useRef<ResizeObserver | null>(null);
   const selectedIdRef = useRef<string | null>(null);
@@ -219,6 +227,26 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
   selectedIdRef.current = selectedBuilding;
 
   const centerMemo = useMemo(() => deriveCenter(buildings), [buildings]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/campus-footprints")
+      .then((res) => {
+        if (!res.ok) throw new Error(String(res.status));
+        return res.json() as Promise<FootprintFeatureCollection>;
+      })
+      .then((data) => {
+        if (!cancelled && data?.type === "FeatureCollection" && Array.isArray(data.features)) {
+          setFootprintCollection(data);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setFootprintCollection(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const teardown = useCallback(() => {
     setLocationTracking(false);
@@ -261,6 +289,15 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
     });
     manualLabelMarkersRef.current = [];
 
+    footprintPolygonsRef.current.forEach((poly) => {
+      try {
+        poly.setMap(null);
+      } catch {
+        /* ignore */
+      }
+    });
+    footprintPolygonsRef.current = [];
+
     try {
       (mapInstanceRef.current as null | { destroy?: () => void })?.destroy?.();
     } catch {
@@ -300,6 +337,7 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
     });
 
     mapInstanceRef.current = map;
+    setMapReadyEpoch((n) => n + 1);
     setMapTypeKey("NORMAL");
 
     const EventTrigger = maps.Event as unknown as { trigger?: (target: unknown, evt: string) => void };
@@ -474,6 +512,51 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
       }
     }
   }, [selectedBuilding, buildings, sdkLoaded]);
+
+  useEffect(() => {
+    if (!sdkLoaded || !footprintCollection?.features.length) return;
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    const maps = window.naver?.maps as NMaps | undefined;
+    const PolygonCtor = maps?.Polygon as
+      | (new (opts: Record<string, unknown>) => { setMap: (target: unknown) => void })
+      | undefined;
+    const LatLngCtor = maps?.LatLng as new (lat: number, lng: number) => unknown | undefined;
+    if (!PolygonCtor || !LatLngCtor) return;
+
+    footprintPolygonsRef.current.forEach((poly) => {
+      try {
+        poly.setMap(null);
+      } catch {
+        /* ignore */
+      }
+    });
+    footprintPolygonsRef.current = [];
+
+    for (const feature of footprintCollection.features) {
+      const groups = footprintPolygonPathGroups(feature.geometry, LatLngCtor);
+      for (const paths of groups) {
+        const poly = new PolygonCtor({
+          map,
+          paths,
+          ...FOOTPRINT_STROKE,
+        });
+        footprintPolygonsRef.current.push(poly);
+      }
+    }
+
+    return () => {
+      footprintPolygonsRef.current.forEach((poly) => {
+        try {
+          poly.setMap(null);
+        } catch {
+          /* ignore */
+        }
+      });
+      footprintPolygonsRef.current = [];
+    };
+  }, [sdkLoaded, footprintCollection, mapReadyEpoch]);
 
   useEffect(() => {
     if (!selectedBuilding) return;

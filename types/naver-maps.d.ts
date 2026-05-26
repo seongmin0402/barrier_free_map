@@ -6,6 +6,7 @@ declare global {
         LatLng: unknown;
         LatLngBounds: unknown;
         Marker: unknown;
+        Polygon: unknown;
         InfoWindow: unknown;
         Point: unknown;
         Animation?: unknown;
