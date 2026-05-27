@@ -768,25 +768,25 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
           </div>
         </div>
 
-        <div className="pointer-events-auto absolute left-4 bottom-4 rounded-lg border border-border bg-card/95 p-3 shadow-lg backdrop-blur-sm">
-          <h4 className="mb-2 text-xs font-semibold text-foreground">건물 테두리 (등급)</h4>
-          <p className="mb-2 text-[10px] text-muted-foreground">건물 폴리곤을 눌러 상세 정보를 볼 수 있습니다.</p>
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              <span className="h-0 w-5 shrink-0 border-t-[3px]" style={{ borderColor: FOOTPRINT_LEVEL_STROKE.A }} />
-              <span className="text-xs text-muted-foreground">A 우수</span>
+        <div className="pointer-events-auto absolute left-3 bottom-3 rounded-md border border-border bg-card/95 p-2 shadow-md backdrop-blur-sm">
+          <h4 className="mb-1 text-[11px] font-semibold text-foreground">건물 테두리 (등급)</h4>
+          <p className="mb-1.5 text-[9px] text-muted-foreground">건물 폴리곤을 눌러 상세 정보를 볼 수 있습니다.</p>
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5">
+              <span className="h-0 w-4 shrink-0 border-t-2" style={{ borderColor: FOOTPRINT_LEVEL_STROKE.A }} />
+              <span className="text-[11px] text-muted-foreground">A 우수</span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="h-0 w-5 shrink-0 border-t-[3px]" style={{ borderColor: FOOTPRINT_LEVEL_STROKE.B }} />
-              <span className="text-xs text-muted-foreground">B 양호</span>
+            <div className="flex items-center gap-1.5">
+              <span className="h-0 w-4 shrink-0 border-t-2" style={{ borderColor: FOOTPRINT_LEVEL_STROKE.B }} />
+              <span className="text-[11px] text-muted-foreground">B 양호</span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="h-0 w-5 shrink-0 border-t-[3px]" style={{ borderColor: FOOTPRINT_LEVEL_STROKE.C }} />
-              <span className="text-xs text-muted-foreground">C 개선필요</span>
+            <div className="flex items-center gap-1.5">
+              <span className="h-0 w-4 shrink-0 border-t-2" style={{ borderColor: FOOTPRINT_LEVEL_STROKE.C }} />
+              <span className="text-[11px] text-muted-foreground">C 개선필요</span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="h-0 w-5 shrink-0 border-t-[3px]" style={{ borderColor: FOOTPRINT_STROKE_UNKNOWN }} />
-              <span className="text-xs text-muted-foreground">미조사</span>
+            <div className="flex items-center gap-1.5">
+              <span className="h-0 w-4 shrink-0 border-t-2" style={{ borderColor: FOOTPRINT_STROKE_UNKNOWN }} />
+              <span className="text-[11px] text-muted-foreground">미조사</span>
             </div>
           </div>
         </div>
