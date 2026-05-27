@@ -171,7 +171,7 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/data/polygon.geojson")
+    fetch("/api/naver-geojson")
       .then((res) => {
         if (!res.ok) throw new Error(String(res.status));
         return res.json() as Promise<FootprintFeatureCollection>;
