@@ -158,6 +158,7 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
   const [sdkLoaded, setSdkLoaded] = useState(false);
   const myLocationMarkerRef = useRef<{ setMap: (v: unknown) => void; setPosition?: (p: unknown) => void } | null>(null);
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
+  const [gradeGuideOpen, setGradeGuideOpen] = useState(false);
   const [geoHintMessage, setGeoHintMessage] = useState<string | null>(null);
   const [locationTracking, setLocationTracking] = useState(false);
   const [scriptError, setScriptError] = useState(false);
@@ -769,7 +770,19 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
         </div>
 
         <div className="pointer-events-auto absolute left-3 bottom-3 rounded-md border border-border bg-card/95 p-2 shadow-md backdrop-blur-sm">
-          <h4 className="mb-1 text-[11px] font-semibold text-foreground">건물 테두리 (등급)</h4>
+          <div className="mb-1 flex items-center gap-1.5">
+            <h4 className="text-[11px] font-semibold text-foreground">건물 테두리 (등급)</h4>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-4 w-4 rounded-full p-0 text-[10px] font-bold"
+              onClick={() => setGradeGuideOpen(true)}
+              aria-label="접근성 등급 설명 열기"
+            >
+              ?
+            </Button>
+          </div>
           <p className="mb-1.5 text-[9px] text-muted-foreground">건물 폴리곤을 눌러 상세 정보를 볼 수 있습니다.</p>
           <div className="space-y-1">
             <div className="flex items-center gap-1.5">
@@ -813,6 +826,38 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
               }}
             >
               위치 사용에 동의합니다
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={gradeGuideOpen} onOpenChange={setGradeGuideOpen}>
+        <AlertDialogContent className="z-[100] max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>접근성 등급 안내</AlertDialogTitle>
+            <AlertDialogDescription className="text-left">
+              건물별 접근성 등급은 현장 조사 결과를 바탕으로 안내하며, 이용자마다 체감이 다를 수 있습니다.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2 text-sm text-foreground">
+            <p>
+              <strong className="text-[#22A557]">A 우수</strong> · 주요 이동 동선에서 접근이 비교적 원활하고 편의시설이 전반적으로
+              잘 갖춰진 건물
+            </p>
+            <p>
+              <strong className="text-[#F5A623]">B 양호</strong> · 이용은 가능하지만 일부 구간(문턱, 동선, 시설 수 등)에 보완이
+              필요한 건물
+            </p>
+            <p>
+              <strong className="text-[#DC3545]">C 개선필요</strong> · 이동 또는 이용에 제약이 커서 사전 확인과 도움이 필요한 건물
+            </p>
+            <p>
+              <strong className="text-[#1a1a1a]">미조사</strong> · 상세 접근성 데이터가 아직 등록되지 않은 건물
+            </p>
+          </div>
+          <AlertDialogFooter>
+            <Button type="button" onClick={() => setGradeGuideOpen(false)}>
+              닫기
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
