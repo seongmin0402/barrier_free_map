@@ -14,24 +14,19 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { BarrierBuilding } from "@/lib/building-types";
 import {
-  FOOTPRINT_STROKE,
   footprintPolygonPathGroups,
+  footprintStrokeOptions,
+  FOOTPRINT_LEVEL_STROKE,
+  FOOTPRINT_STROKE_UNKNOWN,
+  type FootprintAccessibilityLevel,
+  type FootprintFeature,
   type FootprintFeatureCollection,
 } from "@/lib/campus-footprints";
-import { sortFloorTokens } from "@/lib/floor-sort";
-
 interface CampusMapProps {
   buildings: BarrierBuilding[];
   selectedBuilding: string | null;
   onBuildingSelect: (id: string) => void;
 }
-
-/** CURSOR_PROMPT 접근성 색상 */
-const levelHex: Record<string, string> = {
-  A: "#22A557",
-  B: "#F5A623",
-  C: "#DC3545",
-};
 
 function deriveCenter(items: BarrierBuilding[]) {
   const valid = items.filter((b) => Number.isFinite(b.lat) && Number.isFinite(b.lng));
@@ -50,77 +45,32 @@ function escapeHtml(s: string) {
     .replace(/"/g, "&quot;");
 }
 
-/** 등급 색의 위치 핀 + 등급 글자. selected 시 파란 사각형(핀 바운딩 박스)으로 감쌈 */
-function pinMarkerHtml(hex: string, level: string, selected: boolean) {
-  const L = escapeHtml(level.slice(0, 1).toUpperCase());
-  const fill = escapeHtml(hex);
-  const pinSvg = `<svg width="36" height="44" viewBox="0 0 36 44" xmlns="http://www.w3.org/2000/svg">
-      <path fill="${fill}" stroke="#fff" stroke-width="2" d="M18 2C10.8 2 5 7.6 5 14.2c0 7.8 11.5 25.5 12 26.4.4-.9 13-18.6 13-26.4C30 7.6 24.2 2 18 2z"/>
-      <circle cx="18" cy="14" r="6.5" fill="#fff"/>
-      <text x="18" y="16.5" text-anchor="middle" font-size="10" font-weight="700" fill="${fill}" font-family="system-ui,sans-serif">${L}</text>
-    </svg>`;
-  const pinWrapStyle = selected
-    ? "position:relative;z-index:1;line-height:0;margin-bottom:0;box-sizing:border-box;border-radius:4px;background:rgba(37,99,235,0.14);box-shadow:0 0 0 4px #2563eb,0 4px 12px rgba(37,99,235,0.35);"
-    : "position:relative;z-index:1;line-height:0;margin-bottom:0;";
-  return `<div aria-hidden="true" style="position:relative;width:44px;height:52px;display:flex;align-items:flex-end;justify-content:center;box-sizing:border-box;overflow:visible;">
-    <div style="${pinWrapStyle}">${pinSvg}</div>
-  </div>`;
-}
-
-/** 마커 클릭 시 InfoWindow용 DOM (우측 상단 닫기) */
-function createBuildingInfoWindowElement(
-  building: BarrierBuilding,
-  onClose: () => void,
-): HTMLElement {
-  const raw = (building.description ?? "").trim();
-  const maxChars = 900;
-  const clipped = raw.length > maxChars ? `${raw.slice(0, maxChars)}…` : raw;
-  const detailHtml = clipped
-    ? escapeHtml(clipped).replace(/\r\n|\n|\r/g, "<br/>")
-    : "상세 설명이 없습니다.";
-
-  const wrap = document.createElement("div");
-  wrap.style.cssText =
-    "position:relative;box-sizing:border-box;max-width:min(92vw,340px);max-height:min(50vh,260px);overflow:auto;font-size:12px;line-height:1.5;border-radius:10px;background:#fff;box-shadow:0 4px 18px rgba(0,0,0,.2);color:#111;padding:10px 12px;padding-top:36px;";
-
-  const closeBtn = document.createElement("button");
-  closeBtn.type = "button";
-  closeBtn.setAttribute("aria-label", "닫기");
-  closeBtn.style.cssText =
-    "position:absolute;top:6px;right:6px;z-index:2;width:28px;height:28px;margin:0;border:0;border-radius:8px;background:#f3f4f6;cursor:pointer;font-size:20px;line-height:1;display:flex;align-items:center;justify-content:center;color:#374151;";
-  closeBtn.textContent = "×";
-  closeBtn.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onClose();
-  });
-
-  const title = document.createElement("div");
-  title.style.cssText = "font-weight:700;margin-bottom:4px;padding-right:32px;";
-  title.textContent = building.name;
-
-  const sub = document.createElement("div");
-  sub.style.cssText = "color:#555;margin-bottom:8px;";
-  sub.textContent = `${building.floorLabel?.trim() ? sortFloorTokens(building.floorLabel) : "—"} · 등급 ${building.accessibilityLevel}`;
-
-  const detail = document.createElement("div");
-  detail.style.color = "#333";
-  detail.innerHTML = detailHtml;
-
-  const foot = document.createElement("div");
-  foot.style.cssText = "margin-top:8px;font-size:11px;color:#888;";
-  foot.textContent = "지도 위 요약 카드에서 「자세히 보기」로 전체 정보·사진을 볼 수 있습니다.";
-
-  wrap.appendChild(closeBtn);
-  wrap.appendChild(title);
-  wrap.appendChild(sub);
-  wrap.appendChild(detail);
-  wrap.appendChild(foot);
-
-  return wrap;
-}
-
 type NMaps = NonNullable<Window["naver"]>["maps"];
+
+type FootprintPolyEntry = {
+  poly: { setMap: (target: unknown) => void; setOptions?: (opts: Record<string, unknown>) => void };
+  buildingId: string | null;
+  level: FootprintAccessibilityLevel | null;
+};
+
+function normalizeFootprintBuildingId(raw: string | null | undefined): string | null {
+  if (raw == null) return null;
+  const id = String(raw).trim();
+  return id.length > 0 ? id : null;
+}
+
+function footprintLevelForFeature(
+  feature: FootprintFeature,
+  buildingsById: Map<string, BarrierBuilding>,
+): FootprintAccessibilityLevel | null {
+  const buildingId = normalizeFootprintBuildingId(feature.properties?.id);
+  if (!buildingId) return null;
+  const building = buildingsById.get(buildingId);
+  if (!building) return null;
+  const level = building.accessibilityLevel;
+  if (level === "A" || level === "B" || level === "C") return level;
+  return null;
+}
 
 const MAP_TYPE_OPTIONS = [
   { id: "NORMAL", label: "일반" },
@@ -198,23 +148,13 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
   const clientId = process.env.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID ?? "";
   const containerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<unknown>(null);
-  const markersRef = useRef<
-    Array<{
-      buildingId: string;
-      marker: {
-        setMap: (map: unknown) => void;
-        setIcon?: (opts: Record<string, unknown>) => void;
-        setZIndex?: (z: number) => void;
-      };
-    }>
-  >([]);
   const manualLabelMarkersRef = useRef<Array<{ setMap: (target: unknown) => void }>>([]);
-  const footprintPolygonsRef = useRef<Array<{ setMap: (target: unknown) => void }>>([]);
+  const footprintPolygonsRef = useRef<FootprintPolyEntry[]>([]);
   const [footprintCollection, setFootprintCollection] = useState<FootprintFeatureCollection | null>(null);
   const [mapReadyEpoch, setMapReadyEpoch] = useState(0);
-  const activeInfoRef = useRef<{ close: () => void } | null>(null);
   const resizeObsRef = useRef<ResizeObserver | null>(null);
   const selectedIdRef = useRef<string | null>(null);
+  const onBuildingSelectRef = useRef(onBuildingSelect);
   const [sdkLoaded, setSdkLoaded] = useState(false);
   const myLocationMarkerRef = useRef<{ setMap: (v: unknown) => void; setPosition?: (p: unknown) => void } | null>(null);
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
@@ -225,6 +165,7 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
   const [controlsOpen, setControlsOpen] = useState(false);
 
   selectedIdRef.current = selectedBuilding;
+  onBuildingSelectRef.current = onBuildingSelect;
 
   const centerMemo = useMemo(() => deriveCenter(buildings), [buildings]);
 
@@ -259,27 +200,12 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
     myLocationMarkerRef.current = null;
 
     try {
-      activeInfoRef.current?.close();
-    } catch {
-      /* ignore */
-    }
-    activeInfoRef.current = null;
-
-    try {
       resizeObsRef.current?.disconnect();
     } catch {
       /* ignore */
     }
     resizeObsRef.current = null;
 
-    markersRef.current.forEach(({ marker }) => {
-      try {
-        marker.setMap(null);
-      } catch {
-        /* ignore */
-      }
-    });
-    markersRef.current = [];
     manualLabelMarkersRef.current.forEach((marker) => {
       try {
         marker.setMap(null);
@@ -289,7 +215,7 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
     });
     manualLabelMarkersRef.current = [];
 
-    footprintPolygonsRef.current.forEach((poly) => {
+    footprintPolygonsRef.current.forEach(({ poly }) => {
       try {
         poly.setMap(null);
       } catch {
@@ -313,7 +239,7 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
     if (!sdkLoaded || !clientId || !containerRef.current) return;
 
     const maps = window.naver?.maps as NMaps | undefined;
-    if (!maps?.Map || !maps.LatLng || !maps.Marker || !maps.Event?.addListener || !maps.InfoWindow || !maps.Point) return;
+    if (!maps?.Map || !maps.LatLng || !maps.Marker || !maps.Event?.addListener || !maps.Point) return;
 
     teardown();
 
@@ -372,11 +298,6 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
       setMap: (target: typeof map | null) => void;
     };
 
-    const InfoWindowCtor = maps.InfoWindow as unknown as new (opts: Record<string, unknown>) => {
-      open: (m: typeof map, marker: unknown) => void;
-      close: () => void;
-    };
-
     const PointCtor = maps.Point as new (x: number, y: number) => unknown;
     const MANUAL_LABEL_MIN_ZOOM = 17;
 
@@ -386,55 +307,6 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
       });
       ro.observe(el);
       resizeObsRef.current = ro;
-    }
-
-    for (const building of buildings) {
-      if (!Number.isFinite(building.lat) || !Number.isFinite(building.lng)) continue;
-
-      const color = levelHex[building.accessibilityLevel] ?? levelHex.B;
-      const isSelected = building.id === selectedIdRef.current;
-
-      const marker = new MarkerCtor({
-        map,
-        position: new LatLngCtor(building.lat, building.lng),
-        title: `${building.name} · 등급 ${building.accessibilityLevel}`,
-        zIndex: isSelected ? 800 : 1,
-        icon: {
-          content: pinMarkerHtml(color, building.accessibilityLevel, isSelected),
-          anchor: new PointCtor(22, 52),
-        },
-      });
-
-      markersRef.current.push({ buildingId: building.id, marker });
-
-      maps.Event.addListener(marker, "click", () => {
-        try {
-          activeInfoRef.current?.close();
-        } catch {
-          /* ignore */
-        }
-
-        onBuildingSelect(building.id);
-
-        let iwRef: { close: () => void } | undefined;
-        const el = createBuildingInfoWindowElement(building, () => {
-          try {
-            iwRef?.close();
-          } catch {
-            /* ignore */
-          }
-          activeInfoRef.current = null;
-        });
-
-        const iw = new InfoWindowCtor({
-          content: el,
-          borderWidth: 0,
-          backgroundColor: "transparent",
-        });
-        iwRef = iw;
-        iw.open(map, marker);
-        activeInfoRef.current = iw;
-      });
     }
 
     const syncManualLabelVisibility = () => {
@@ -490,29 +362,6 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
     };
   }, [sdkLoaded, clientId, centerMemo.lat, centerMemo.lng, buildings, teardown, onBuildingSelect]);
 
-  /** 선택 변경 시 마커 아이콘·z-index만 갱신 (지도 재생성 없이) */
-  useEffect(() => {
-    if (!sdkLoaded) return;
-    const maps = window.naver?.maps as NMaps | undefined;
-    if (!maps?.Point || markersRef.current.length === 0) return;
-    const PointCtor = maps.Point as new (x: number, y: number) => unknown;
-    for (const { buildingId, marker } of markersRef.current) {
-      const b = buildings.find((x) => x.id === buildingId);
-      if (!b) continue;
-      const color = levelHex[b.accessibilityLevel] ?? levelHex.B;
-      const isSel = buildingId === selectedBuilding;
-      try {
-        marker.setIcon?.({
-          content: pinMarkerHtml(color, b.accessibilityLevel, isSel),
-          anchor: new PointCtor(22, 52),
-        });
-        marker.setZIndex?.(isSel ? 800 : 1);
-      } catch {
-        /* ignore */
-      }
-    }
-  }, [selectedBuilding, buildings, sdkLoaded]);
-
   useEffect(() => {
     if (!sdkLoaded || !footprintCollection?.features.length) return;
     const map = mapInstanceRef.current;
@@ -520,12 +369,15 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
 
     const maps = window.naver?.maps as NMaps | undefined;
     const PolygonCtor = maps?.Polygon as
-      | (new (opts: Record<string, unknown>) => { setMap: (target: unknown) => void })
+      | (new (opts: Record<string, unknown>) => {
+          setMap: (target: unknown) => void;
+          setOptions?: (opts: Record<string, unknown>) => void;
+        })
       | undefined;
     const LatLngCtor = maps?.LatLng as new (lat: number, lng: number) => unknown | undefined;
-    if (!PolygonCtor || !LatLngCtor) return;
+    if (!PolygonCtor || !LatLngCtor || !maps?.Event?.addListener) return;
 
-    footprintPolygonsRef.current.forEach((poly) => {
+    footprintPolygonsRef.current.forEach(({ poly }) => {
       try {
         poly.setMap(null);
       } catch {
@@ -534,20 +386,38 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
     });
     footprintPolygonsRef.current = [];
 
+    const buildingMap = new Map(buildings.map((b) => [b.id, b]));
+
     for (const feature of footprintCollection.features) {
+      const buildingId = normalizeFootprintBuildingId(feature.properties?.id);
+      const level = footprintLevelForFeature(feature, buildingMap);
+      const building = buildingId ? buildingMap.get(buildingId) : undefined;
+      const isSelected = buildingId != null && buildingId === selectedIdRef.current;
+      const stroke = footprintStrokeOptions(level, isSelected);
       const groups = footprintPolygonPathGroups(feature.geometry, LatLngCtor);
+
       for (const paths of groups) {
         const poly = new PolygonCtor({
           map,
           paths,
-          ...FOOTPRINT_STROKE,
+          ...stroke,
         });
-        footprintPolygonsRef.current.push(poly);
+
+        footprintPolygonsRef.current.push({ poly, buildingId, level });
+
+        maps.Event.addListener(poly, "click", () => {
+          if (building) {
+            onBuildingSelectRef.current(building.id);
+            return;
+          }
+          const label = feature.properties?.building_n?.trim() || "건물";
+          setGeoHintMessage(`${label}: 베리어프리 조사 정보가 없습니다.`);
+        });
       }
     }
 
     return () => {
-      footprintPolygonsRef.current.forEach((poly) => {
+      footprintPolygonsRef.current.forEach(({ poly }) => {
         try {
           poly.setMap(null);
         } catch {
@@ -556,7 +426,20 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
       });
       footprintPolygonsRef.current = [];
     };
-  }, [sdkLoaded, footprintCollection, mapReadyEpoch]);
+  }, [sdkLoaded, footprintCollection, mapReadyEpoch, buildings]);
+
+  /** 선택 변경 시 폴리곤 테두리만 갱신 */
+  useEffect(() => {
+    if (!sdkLoaded || footprintPolygonsRef.current.length === 0) return;
+    for (const entry of footprintPolygonsRef.current) {
+      const isSelected = entry.buildingId != null && entry.buildingId === selectedBuilding;
+      try {
+        entry.poly.setOptions?.(footprintStrokeOptions(entry.level, isSelected));
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [selectedBuilding, sdkLoaded]);
 
   useEffect(() => {
     if (!selectedBuilding) return;
@@ -886,19 +769,24 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
         </div>
 
         <div className="pointer-events-auto absolute left-4 bottom-4 rounded-lg border border-border bg-card/95 p-3 shadow-lg backdrop-blur-sm">
-          <h4 className="mb-2 text-xs font-semibold text-foreground">마커 등급</h4>
+          <h4 className="mb-2 text-xs font-semibold text-foreground">건물 테두리 (등급)</h4>
+          <p className="mb-2 text-[10px] text-muted-foreground">건물 폴리곤을 눌러 상세 정보를 볼 수 있습니다.</p>
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
-              <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: levelHex.A }} />
+              <span className="h-0 w-5 shrink-0 border-t-[3px]" style={{ borderColor: FOOTPRINT_LEVEL_STROKE.A }} />
               <span className="text-xs text-muted-foreground">A 우수</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: levelHex.B }} />
+              <span className="h-0 w-5 shrink-0 border-t-[3px]" style={{ borderColor: FOOTPRINT_LEVEL_STROKE.B }} />
               <span className="text-xs text-muted-foreground">B 양호</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: levelHex.C }} />
+              <span className="h-0 w-5 shrink-0 border-t-[3px]" style={{ borderColor: FOOTPRINT_LEVEL_STROKE.C }} />
               <span className="text-xs text-muted-foreground">C 개선필요</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-0 w-5 shrink-0 border-t-[3px]" style={{ borderColor: FOOTPRINT_STROKE_UNKNOWN }} />
+              <span className="text-xs text-muted-foreground">미조사</span>
             </div>
           </div>
         </div>
