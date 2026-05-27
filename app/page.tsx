@@ -170,6 +170,7 @@ export default function BarrierFreeMapPage() {
             buildings={filteredBuildings}
             selectedBuilding={selectedBuildingId}
             onBuildingSelect={handleBuildingSelect}
+            showFacilityPins={filters.length > 0}
           />
 
           <BuildingDetail building={selectedBuilding} onClose={() => setSelectedBuildingId(null)} />

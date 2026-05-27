@@ -26,6 +26,7 @@ interface CampusMapProps {
   buildings: BarrierBuilding[];
   selectedBuilding: string | null;
   onBuildingSelect: (id: string) => void;
+  showFacilityPins?: boolean;
 }
 
 function deriveCenter(items: BarrierBuilding[]) {
@@ -103,6 +104,15 @@ function labelMarkerHtml(name: string) {
   return `<div aria-hidden="true" style="max-width:260px;padding:0;background:transparent;border:0;box-shadow:none;font-size:12px;line-height:1.25;font-weight:600;color:#2f5ea8;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:-1px -1px 0 rgba(255,255,255,.95),1px -1px 0 rgba(255,255,255,.95),-1px 1px 0 rgba(255,255,255,.95),1px 1px 0 rgba(255,255,255,.95),0 0 2px rgba(255,255,255,.95);">${safeName}</div>`;
 }
 
+function facilityPinHtml() {
+  return `<div aria-hidden="true" style="position:relative;width:22px;height:30px;display:flex;align-items:flex-end;justify-content:center;">
+    <svg width="22" height="30" viewBox="0 0 22 30" xmlns="http://www.w3.org/2000/svg">
+      <path fill="#2563eb" stroke="#ffffff" stroke-width="1.8" d="M11 1.8C6.07 1.8 2.1 5.66 2.1 10.31c0 5.58 8.21 16.89 8.58 17.49.36-.6 9.22-11.91 9.22-17.49C19.9 5.66 15.93 1.8 11 1.8z"/>
+      <circle cx="11" cy="10.1" r="3.2" fill="#ffffff"/>
+    </svg>
+  </div>`;
+}
+
 function fitToBuildings(
   maps: NMaps,
   map: unknown,
@@ -144,11 +154,12 @@ function fitToBuildings(
   }
 }
 
-export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: CampusMapProps) {
+export function CampusMap({ buildings, selectedBuilding, onBuildingSelect, showFacilityPins = false }: CampusMapProps) {
   const clientId = process.env.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID ?? "";
   const containerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<unknown>(null);
   const manualLabelMarkersRef = useRef<Array<{ setMap: (target: unknown) => void }>>([]);
+  const facilityPinMarkersRef = useRef<Array<{ setMap: (target: unknown) => void }>>([]);
   const footprintPolygonsRef = useRef<FootprintPolyEntry[]>([]);
   const [footprintCollection, setFootprintCollection] = useState<FootprintFeatureCollection | null>(null);
   const [mapReadyEpoch, setMapReadyEpoch] = useState(0);
@@ -215,6 +226,14 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
       }
     });
     manualLabelMarkersRef.current = [];
+    facilityPinMarkersRef.current.forEach((marker) => {
+      try {
+        marker.setMap(null);
+      } catch {
+        /* ignore */
+      }
+    });
+    facilityPinMarkersRef.current = [];
 
     footprintPolygonsRef.current.forEach(({ poly }) => {
       try {
@@ -341,6 +360,26 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
     syncManualLabelVisibility();
     maps.Event.addListener(map, "zoom_changed", syncManualLabelVisibility);
 
+    if (showFacilityPins) {
+      for (const building of buildings) {
+        if (!Number.isFinite(building.lat) || !Number.isFinite(building.lng)) continue;
+        const marker = new MarkerCtor({
+          map,
+          position: new LatLngCtor(building.lat, building.lng),
+          title: `${building.name} 시설 필터 매치`,
+          zIndex: 1600,
+          icon: {
+            content: facilityPinHtml(),
+            anchor: new PointCtor(11, 30),
+          },
+        });
+        facilityPinMarkersRef.current.push(marker);
+        maps.Event.addListener(marker, "click", () => {
+          onBuildingSelectRef.current(building.id);
+        });
+      }
+    }
+
     fitToBuildings(maps as NMaps, map, buildings);
 
     requestAnimationFrame(() => {
@@ -361,7 +400,7 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect }: Cam
     return () => {
       teardown();
     };
-  }, [sdkLoaded, clientId, centerMemo.lat, centerMemo.lng, buildings, teardown, onBuildingSelect]);
+  }, [sdkLoaded, clientId, centerMemo.lat, centerMemo.lng, buildings, teardown, onBuildingSelect, showFacilityPins]);
 
   useEffect(() => {
     if (!sdkLoaded || !footprintCollection?.features.length) return;
