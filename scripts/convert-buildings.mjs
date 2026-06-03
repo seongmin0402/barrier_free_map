@@ -61,6 +61,81 @@ function parseCsvObjects(text) {
 }
 
 const projectRoot = path.join(__dirname, "..");
+const PUBLIC_PHOTO_PREFIX = "/images/barrier";
+const PHOTO_DIR_NAMES = [
+  "barrier_free_photos_1778423209775",
+  "barrier_free_photos",
+];
+
+function findPhotoSourceDir() {
+  if (process.env.BARRIER_FREE_PHOTOS_DIR) {
+    const custom = path.resolve(process.env.BARRIER_FREE_PHOTOS_DIR);
+    if (fs.existsSync(custom)) return custom;
+  }
+  const publicDir = path.join(projectRoot, "public", "images", "barrier");
+  if (fs.existsSync(publicDir)) return publicDir;
+  for (const name of PHOTO_DIR_NAMES) {
+    const dir = path.join(projectRoot, name);
+    if (fs.existsSync(dir) && fs.statSync(dir).isDirectory()) return dir;
+  }
+  return null;
+}
+
+const photoSourceDir = findPhotoSourceDir();
+
+function buildingPhotoDir(buildingIdx) {
+  return path.join(photoSourceDir ?? "", `data_${buildingIdx + 1}`);
+}
+
+function imageFileName(im) {
+  const name = String(im.name ?? "").trim();
+  if (name) return name;
+  const fromPath = String(im.path ?? "").trim();
+  if (fromPath) return path.basename(fromPath.replace(/\\/g, "/"));
+  const fromUrl = String(im.url ?? "").trim();
+  if (fromUrl) {
+    try {
+      return path.basename(new URL(fromUrl).pathname);
+    } catch {
+      return path.basename(fromUrl.split("?")[0].replace(/\\/g, "/"));
+    }
+  }
+  return String(im.originalName ?? "").trim();
+}
+
+function findPhotoOnDisk(buildingIdx, floor, im) {
+  if (!photoSourceDir) return null;
+  const floorDir = path.join(buildingPhotoDir(buildingIdx), floor);
+  if (!fs.existsSync(floorDir)) return null;
+
+  const preferred = imageFileName(im);
+  if (preferred) {
+    const exact = path.join(floorDir, preferred);
+    if (fs.existsSync(exact)) return preferred;
+  }
+
+  const originalName = String(im.originalName ?? "").trim();
+  if (originalName) {
+    const files = fs.readdirSync(floorDir);
+    const match =
+      files.find((f) => f === originalName) ??
+      files.find((f) => f.endsWith(`_${originalName}`)) ??
+      files.find((f) => f.endsWith(originalName));
+    if (match) return match;
+  }
+
+  return preferred || null;
+}
+
+function localPhotoUrl(buildingIdx, floor, im) {
+  const fileName = findPhotoOnDisk(buildingIdx, floor, im);
+  if (!fileName) return null;
+  const segments = [`data_${buildingIdx + 1}`, floor, fileName].map((part) =>
+    encodeURIComponent(part).replace(/%2F/g, "/"),
+  );
+  return `${PUBLIC_PHOTO_PREFIX}/${segments.join("/")}`;
+}
+
 /** Desktop 폴더의 CSV 파일명 (바탕화면 최종캡스톤과 같은 디렉터리 기준). */
 const DEFAULT_DESKTOP_CSV = path.join(projectRoot, "..", "barrier_free_data_1779802242012.csv");
 /** 리포 안에 두는 경우 우선 시도. */
@@ -109,12 +184,13 @@ function deriveLevel(row) {
   return "C";
 }
 
-function parseFloors(jsonStr) {
+function parseFloors(jsonStr, buildingIdx) {
   if (!jsonStr || !String(jsonStr).trim()) return [];
   try {
     const arr = JSON.parse(String(jsonStr));
     if (!Array.isArray(arr)) return [];
     return arr.map((g) => {
+      const floor = String(g.floor ?? "").trim();
       const imgs = Array.isArray(g.imageFiles)
         ? g.imageFiles
         : Array.isArray(g.images)
@@ -123,10 +199,12 @@ function parseFloors(jsonStr) {
       const images = imgs
         .map((im) => {
           if (typeof im === "string") {
-            const url = im.trim();
-            return url ? { url } : null;
+            const fileName = path.basename(String(im).trim());
+            if (!fileName) return null;
+            const url = localPhotoUrl(buildingIdx, floor, { name: fileName, originalName: fileName });
+            return url ? { url, originalName: fileName } : null;
           }
-          const url = String(im.url ?? "").trim();
+          const url = localPhotoUrl(buildingIdx, floor, im);
           if (!url) return null;
           const entry = { url };
           const on = im.originalName;
@@ -134,7 +212,7 @@ function parseFloors(jsonStr) {
           return entry;
         })
         .filter(Boolean);
-      return { floor: String(g.floor ?? "").trim(), images };
+      return { floor, images };
     });
   } catch {
     return [];
@@ -190,7 +268,7 @@ const buildings = rows.map((r, idx) => {
     description: String(r.description ?? "").trim(),
     floorPhotoSummary: String(r.floorPhotoSummary ?? "").trim(),
     floorPhotoImageNames: String(r.floorPhotoImageNames ?? "").trim(),
-    floorPhotoGroups: parseFloors(r.floorPhotoGroupsJson),
+    floorPhotoGroups: parseFloors(r.floorPhotoGroupsJson, idx),
     facilities: deriveFacilities(row),
     accessibilityLevel: deriveLevel(row),
   };
@@ -201,4 +279,11 @@ fs.mkdirSync(outDir, { recursive: true });
 const outPath = path.join(outDir, "buildings.json");
 fs.writeFileSync(outPath, JSON.stringify(buildings), "utf8");
 
-console.log(`Wrote ${buildings.length} buildings from ${path.basename(src)} → public/data/buildings.json`);
+const photoCount = buildings.reduce(
+  (n, b) => n + b.floorPhotoGroups.reduce((m, g) => m + g.images.length, 0),
+  0,
+);
+const photoSourceLabel = photoSourceDir ? path.basename(photoSourceDir) : "none";
+console.log(
+  `Wrote ${buildings.length} buildings (${photoCount} local photos from ${photoSourceLabel}) → public/data/buildings.json`,
+);
