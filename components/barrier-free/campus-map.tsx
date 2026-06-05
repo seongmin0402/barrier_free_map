@@ -744,12 +744,14 @@ export function CampusMap({
       const margin = isMobile
         ? { top: 64, right: 40, bottom: 64, left: 40 }
         : { top: 70, right: 70, bottom: 70, left: 380 };
+      // 출발/도착 선택 시 화면을 확대하지 않는다.
+      // 현재 줌보다 더 당기지 않고, 경로가 화면 밖으로 클 때만 멀리서(줌아웃) 보여준다.
+      const m = map as unknown as { getZoom?: () => number; setZoom?: (z: number) => void };
+      const prevZoom = m.getZoom?.() ?? 16;
       map.fitBounds(bounds, margin);
-      // 확대(줌인) 대신 한 단계 멀리서 보는 느낌으로 줌 상한을 둔다.
       requestAnimationFrame(() => {
-        const m = map as unknown as { getZoom?: () => number; setZoom?: (z: number) => void };
-        const z = m.getZoom?.();
-        if (z != null && m.setZoom) m.setZoom(Math.min(z, 16));
+        const fitZoom = m.getZoom?.();
+        if (fitZoom != null && m.setZoom) m.setZoom(Math.min(fitZoom, prevZoom, 16));
       });
     } catch {
       /* ignore */
