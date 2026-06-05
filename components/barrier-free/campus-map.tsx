@@ -231,6 +231,33 @@ export function CampusMap({
 
   const centerMemo = useMemo(() => deriveCenter(buildings), [buildings]);
 
+  /**
+   * 클라이언트 라우팅(예: / → /route)으로 진입하면 네이버 SDK가 이미 로드돼 있어
+   * <Script>의 onLoad가 다시 호출되지 않는다. 마운트 시 직접 확인하고,
+   * 로딩 중이면 잠깐 폴링해 바로 지도가 뜨도록 한다.
+   */
+  useEffect(() => {
+    if (sdkLoaded) return;
+    const ready = () =>
+      Boolean((window.naver?.maps as NMaps | undefined)?.Map && window.naver?.maps?.LatLng);
+    if (ready()) {
+      setSdkLoaded(true);
+      return;
+    }
+    const timer = window.setInterval(() => {
+      if (ready()) {
+        setScriptError(false);
+        setSdkLoaded(true);
+        window.clearInterval(timer);
+      }
+    }, 150);
+    const stop = window.setTimeout(() => window.clearInterval(timer), 10000);
+    return () => {
+      window.clearInterval(timer);
+      window.clearTimeout(stop);
+    };
+  }, [sdkLoaded]);
+
   useEffect(() => {
     let cancelled = false;
     fetch("/api/naver-geojson")
