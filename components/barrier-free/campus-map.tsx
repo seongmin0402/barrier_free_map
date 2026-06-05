@@ -738,11 +738,13 @@ export function CampusMap({
     try {
       const bounds = new BoundsCtor();
       for (const p of routeLine) bounds.extend(new LatLngCtor(p.lat, p.lng));
-      // 모바일: 하단 시트, 데스크톱: 좌측 패널 영역만큼 여백을 줘서 경로가 안 가리게
+      // 모바일: 하단 시트, 데스크톱: 좌측 패널 영역만큼 여백을 줘서 경로가 안 가리게.
+      // 모바일은 화면 절반 높이를 시트 몫으로 비워 경로가 위쪽에 한눈에 보이게 한다.
       const isMobile =
         typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches;
+      const vh = typeof window !== "undefined" ? window.innerHeight : 800;
       const margin = isMobile
-        ? { top: 90, right: 36, bottom: 300, left: 36 }
+        ? { top: 80, right: 32, bottom: Math.round(vh * 0.5), left: 32 }
         : { top: 70, right: 70, bottom: 70, left: 380 };
       map.fitBounds(bounds, margin);
       // 짧은 경로에서 과도한 확대 방지

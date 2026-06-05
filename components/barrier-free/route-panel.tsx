@@ -288,7 +288,10 @@ export function RoutePanel(props: RoutePanelProps) {
         </div>
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto p-3">
+      <div
+        className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 pb-[max(1rem,env(safe-area-inset-bottom))]"
+        style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
+      >
         {/* 출발/도착 입력 */}
         <div className="space-y-2">
           <PointField
