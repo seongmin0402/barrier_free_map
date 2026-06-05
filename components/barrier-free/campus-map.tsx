@@ -13,6 +13,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { BarrierBuilding } from "@/lib/building-types";
+import type { LatLng } from "@/lib/routing/geo";
 import {
   footprintPolygonPathGroups,
   footprintStrokeOptions,
@@ -27,6 +28,17 @@ interface CampusMapProps {
   selectedBuilding: string | null;
   onBuildingSelect: (id: string) => void;
   showFacilityPins?: boolean;
+  /** 길찾기 경로 좌표열 */
+  routeLine?: LatLng[] | null;
+  originPoint?: LatLng | null;
+  destPoint?: LatLng | null;
+  /** 실시간 GPS 위치 (네비게이션 중) */
+  liveUserPosition?: LatLng | null;
+  /** 지도에서 출발/도착 지점 선택 모드 */
+  pickMode?: "origin" | "destination" | null;
+  onMapPick?: (point: LatLng) => void;
+  /** 네비게이션 중 사용자 위치로 지도 추적 */
+  followUser?: boolean;
 }
 
 function deriveCenter(items: BarrierBuilding[]) {
@@ -154,10 +166,44 @@ function fitToBuildings(
   }
 }
 
-export function CampusMap({ buildings, selectedBuilding, onBuildingSelect, showFacilityPins = false }: CampusMapProps) {
+function markerPinHtml(color: string, label: string) {
+  const safe = escapeHtml(label);
+  return `<div aria-hidden="true" style="position:relative;width:26px;height:34px;display:flex;align-items:flex-end;justify-content:center;">
+    <svg width="26" height="34" viewBox="0 0 26 34" xmlns="http://www.w3.org/2000/svg">
+      <path fill="${color}" stroke="#ffffff" stroke-width="2" d="M13 2C7.2 2 2.5 6.6 2.5 12.2c0 6.7 9.7 19.3 10.1 19.9.4-.6 10.9-13.2 10.9-19.9C23.5 6.6 18.8 2 13 2z"/>
+      <text x="13" y="16" text-anchor="middle" font-size="11" font-weight="700" fill="#ffffff" font-family="sans-serif">${safe}</text>
+    </svg>
+  </div>`;
+}
+
+function navArrowHtml() {
+  return `<div aria-hidden="true" style="width:24px;height:24px;transform:translate(-50%,-50%);">
+    <div style="width:18px;height:18px;margin:3px;border-radius:50%;background:#2563eb;border:3px solid #ffffff;box-shadow:0 0 0 2px rgba(37,99,235,.35),0 1px 3px rgba(0,0,0,.4);"></div>
+  </div>`;
+}
+
+export function CampusMap({
+  buildings,
+  selectedBuilding,
+  onBuildingSelect,
+  showFacilityPins = false,
+  routeLine = null,
+  originPoint = null,
+  destPoint = null,
+  liveUserPosition = null,
+  pickMode = null,
+  onMapPick,
+  followUser = false,
+}: CampusMapProps) {
   const clientId = process.env.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID ?? "";
   const containerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<unknown>(null);
+  const routePolylineRef = useRef<Array<{ setMap: (t: unknown) => void }>>([]);
+  const routeMarkersRef = useRef<Array<{ setMap: (t: unknown) => void }>>([]);
+  const navUserMarkerRef = useRef<{ setMap: (t: unknown) => void; setPosition?: (p: unknown) => void } | null>(null);
+  const pickListenerRef = useRef<unknown>(null);
+  const onMapPickRef = useRef(onMapPick);
+  onMapPickRef.current = onMapPick;
   const manualLabelMarkersRef = useRef<Array<{ setMap: (target: unknown) => void }>>([]);
   const facilityPinMarkersRef = useRef<Array<{ setMap: (target: unknown) => void }>>([]);
   const footprintPolygonsRef = useRef<FootprintPolyEntry[]>([]);
@@ -243,6 +289,29 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect, showF
       }
     });
     footprintPolygonsRef.current = [];
+
+    routePolylineRef.current.forEach((p) => {
+      try {
+        p.setMap(null);
+      } catch {
+        /* ignore */
+      }
+    });
+    routePolylineRef.current = [];
+    routeMarkersRef.current.forEach((m) => {
+      try {
+        m.setMap(null);
+      } catch {
+        /* ignore */
+      }
+    });
+    routeMarkersRef.current = [];
+    try {
+      navUserMarkerRef.current?.setMap(null);
+    } catch {
+      /* ignore */
+    }
+    navUserMarkerRef.current = null;
 
     try {
       (mapInstanceRef.current as null | { destroy?: () => void })?.destroy?.();
@@ -512,6 +581,197 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect, showF
     });
   }, [selectedBuilding, buildings]);
 
+  /** 길찾기 경로 폴리라인 + 출발/도착 마커 */
+  useEffect(() => {
+    if (!sdkLoaded) return;
+    const map = mapInstanceRef.current;
+    const maps = window.naver?.maps as NMaps | undefined;
+    if (!map || !maps?.LatLng) return;
+
+    const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
+    const PolylineCtor = maps.Polyline as
+      | (new (opts: Record<string, unknown>) => { setMap: (t: unknown) => void })
+      | undefined;
+    const MarkerCtor = maps.Marker as
+      | (new (opts: Record<string, unknown>) => { setMap: (t: unknown) => void })
+      | undefined;
+    const PointCtor = maps.Point as (new (x: number, y: number) => unknown) | undefined;
+
+    // 기존 경로/마커 제거
+    routePolylineRef.current.forEach((p) => {
+      try {
+        p.setMap(null);
+      } catch {
+        /* ignore */
+      }
+    });
+    routePolylineRef.current = [];
+    routeMarkersRef.current.forEach((m) => {
+      try {
+        m.setMap(null);
+      } catch {
+        /* ignore */
+      }
+    });
+    routeMarkersRef.current = [];
+
+    if (routeLine && routeLine.length >= 2 && PolylineCtor) {
+      const path = routeLine.map((p) => new LatLngCtor(p.lat, p.lng));
+      // 흰색 외곽선 + 파란 본선 (가독성)
+      const outline = new PolylineCtor({
+        map,
+        path,
+        strokeColor: "#ffffff",
+        strokeOpacity: 0.9,
+        strokeWeight: 11,
+        strokeLineCap: "round",
+        strokeLineJoin: "round",
+        zIndex: 300,
+      });
+      const main = new PolylineCtor({
+        map,
+        path,
+        strokeColor: "#2563eb",
+        strokeOpacity: 0.95,
+        strokeWeight: 6,
+        strokeLineCap: "round",
+        strokeLineJoin: "round",
+        zIndex: 301,
+      });
+      routePolylineRef.current.push(outline, main);
+    }
+
+    if (MarkerCtor && PointCtor) {
+      if (originPoint) {
+        const m = new MarkerCtor({
+          map,
+          position: new LatLngCtor(originPoint.lat, originPoint.lng),
+          zIndex: 400,
+          icon: { content: markerPinHtml("#16a34a", "출"), anchor: new PointCtor(13, 33) },
+        });
+        routeMarkersRef.current.push(m);
+      }
+      if (destPoint) {
+        const m = new MarkerCtor({
+          map,
+          position: new LatLngCtor(destPoint.lat, destPoint.lng),
+          zIndex: 400,
+          icon: { content: markerPinHtml("#dc2626", "도"), anchor: new PointCtor(13, 33) },
+        });
+        routeMarkersRef.current.push(m);
+      }
+    }
+
+    return () => {
+      routePolylineRef.current.forEach((p) => {
+        try {
+          p.setMap(null);
+        } catch {
+          /* ignore */
+        }
+      });
+      routePolylineRef.current = [];
+      routeMarkersRef.current.forEach((m) => {
+        try {
+          m.setMap(null);
+        } catch {
+          /* ignore */
+        }
+      });
+      routeMarkersRef.current = [];
+    };
+  }, [sdkLoaded, mapReadyEpoch, routeLine, originPoint, destPoint]);
+
+  /** 경로가 생기면 전체가 보이도록 맞춤 (네비게이션 추적 중에는 제외) */
+  useEffect(() => {
+    if (!sdkLoaded || followUser) return;
+    if (!routeLine || routeLine.length < 2) return;
+    const maps = window.naver?.maps as NMaps | undefined;
+    const map = mapInstanceRef.current as undefined | { fitBounds?: (b: unknown, o?: unknown) => void };
+    if (!maps?.LatLng || !maps.LatLngBounds || !map?.fitBounds) return;
+    const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
+    const BoundsCtor = maps.LatLngBounds as unknown as new () => { extend(ll: unknown): void };
+    try {
+      const bounds = new BoundsCtor();
+      for (const p of routeLine) bounds.extend(new LatLngCtor(p.lat, p.lng));
+      map.fitBounds(bounds, { padding: 90, maxZoom: 18 });
+    } catch {
+      /* ignore */
+    }
+  }, [sdkLoaded, mapReadyEpoch, routeLine, followUser]);
+
+  /** 실시간 GPS 위치 마커 + 추적 이동 */
+  useEffect(() => {
+    if (!sdkLoaded) return;
+    const map = mapInstanceRef.current;
+    const maps = window.naver?.maps as NMaps | undefined;
+    if (!map || !maps?.LatLng) return;
+    const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
+    const MarkerCtor = maps.Marker as
+      | (new (opts: Record<string, unknown>) => {
+          setMap: (t: unknown) => void;
+          setPosition?: (p: unknown) => void;
+        })
+      | undefined;
+    const PointCtor = maps.Point as (new (x: number, y: number) => unknown) | undefined;
+
+    if (!liveUserPosition) {
+      try {
+        navUserMarkerRef.current?.setMap(null);
+      } catch {
+        /* ignore */
+      }
+      navUserMarkerRef.current = null;
+      return;
+    }
+
+    const pos = new LatLngCtor(liveUserPosition.lat, liveUserPosition.lng);
+    if (navUserMarkerRef.current?.setPosition) {
+      navUserMarkerRef.current.setPosition(pos);
+    } else if (MarkerCtor && PointCtor) {
+      navUserMarkerRef.current = new MarkerCtor({
+        map,
+        position: pos,
+        zIndex: 500,
+        icon: { content: navArrowHtml(), anchor: new PointCtor(12, 12) },
+      }) as { setMap: (t: unknown) => void; setPosition?: (p: unknown) => void };
+    }
+
+    if (followUser) {
+      const m = map as { panTo?: (ll: unknown, o?: unknown) => void; setCenter?: (ll: unknown) => void };
+      m.panTo?.(pos, { duration: 500 });
+    }
+  }, [sdkLoaded, mapReadyEpoch, liveUserPosition, followUser]);
+
+  /** 지도에서 출발/도착 지점 선택 */
+  useEffect(() => {
+    if (!sdkLoaded) return;
+    const map = mapInstanceRef.current;
+    const maps = window.naver?.maps as NMaps | undefined;
+    if (!map || !maps?.Event?.addListener) return;
+
+    if (pickListenerRef.current && (maps.Event as { removeListener?: (l: unknown) => void }).removeListener) {
+      (maps.Event as { removeListener?: (l: unknown) => void }).removeListener?.(pickListenerRef.current);
+      pickListenerRef.current = null;
+    }
+
+    if (!pickMode) return;
+
+    const listener = maps.Event.addListener(map, "click", (e: unknown) => {
+      const coord = (e as { coord?: { lat: () => number; lng: () => number } })?.coord;
+      if (!coord) return;
+      onMapPickRef.current?.({ lat: coord.lat(), lng: coord.lng() });
+    });
+    pickListenerRef.current = listener;
+
+    return () => {
+      if (pickListenerRef.current && (maps.Event as { removeListener?: (l: unknown) => void }).removeListener) {
+        (maps.Event as { removeListener?: (l: unknown) => void }).removeListener?.(pickListenerRef.current);
+        pickListenerRef.current = null;
+      }
+    };
+  }, [sdkLoaded, mapReadyEpoch, pickMode]);
+
   const zoomDelta = useCallback((delta: number) => {
     const map = mapInstanceRef.current as undefined | { getZoom: () => number; setZoom: (z: number) => void };
     if (!map?.getZoom || !map?.setZoom) return;
@@ -730,7 +990,18 @@ export function CampusMap({ buildings, selectedBuilding, onBuildingSelect, showF
 
       <div className="relative min-h-0 flex-1">
         {/* 네이버 지도: 부모 높이가 잡힌 뒤 relayout으로 타일 표시 */}
-        <div ref={containerRef} id="map" className="absolute inset-0 z-0 h-full w-full min-h-[1px]" role="presentation" />
+        <div
+          ref={containerRef}
+          id="map"
+          className="absolute inset-0 z-0 h-full w-full min-h-[1px]"
+          role="presentation"
+          style={pickMode ? { cursor: "crosshair" } : undefined}
+        />
+        {pickMode && (
+          <div className="pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full bg-blue-600/95 px-4 py-1.5 text-xs font-medium text-white shadow-lg">
+            지도에서 {pickMode === "origin" ? "출발지" : "도착지"}를 터치하세요
+          </div>
+        )}
       </div>
 
       <div className="pointer-events-none absolute inset-0 z-10">

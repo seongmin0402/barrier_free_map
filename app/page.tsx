@@ -7,6 +7,10 @@ import { CampusMap } from "@/components/barrier-free/campus-map";
 import { BuildingDetail } from "@/components/barrier-free/building-detail";
 import { SettingsPanel } from "@/components/barrier-free/settings-panel";
 import { MobileSidebarToggle } from "@/components/barrier-free/mobile-sidebar-toggle";
+import { RoutePanel } from "@/components/barrier-free/route-panel";
+import { useNavigation } from "@/hooks/use-navigation";
+import { Button } from "@/components/ui/button";
+import { Navigation } from "lucide-react";
 import type { BarrierBuilding } from "@/lib/building-types";
 
 const SETTINGS_STORAGE_KEY = "barrier-free-map-settings";
@@ -133,6 +137,8 @@ export default function BarrierFreeMapPage() {
     }
   }, []);
 
+  const nav = useNavigation(buildings);
+
   return (
     <div
       className="flex h-screen flex-col bg-background text-foreground"
@@ -171,6 +177,47 @@ export default function BarrierFreeMapPage() {
             selectedBuilding={selectedBuildingId}
             onBuildingSelect={handleBuildingSelect}
             showFacilityPins={filters.length > 0}
+            routeLine={nav.route?.coords ?? null}
+            originPoint={nav.origin?.point ?? null}
+            destPoint={nav.destination?.point ?? null}
+            liveUserPosition={nav.navigating ? nav.userPos : null}
+            pickMode={nav.pickMode}
+            onMapPick={nav.handleMapPick}
+            followUser={nav.navigating}
+          />
+
+          {!nav.open && (
+            <Button
+              type="button"
+              onClick={() => nav.setOpen(true)}
+              className="absolute left-4 top-4 z-20 gap-1.5 shadow-lg"
+            >
+              <Navigation className="h-4 w-4" />
+              길찾기
+            </Button>
+          )}
+
+          <RoutePanel
+            open={nav.open}
+            onClose={nav.close}
+            buildings={buildings}
+            origin={nav.origin}
+            destination={nav.destination}
+            onSelectBuilding={nav.selectBuilding}
+            onPickOnMap={nav.startPickOnMap}
+            pickMode={nav.pickMode}
+            onUseCurrentLocation={nav.useCurrentLocation}
+            onClearPoint={nav.clearPoint}
+            onSwap={nav.swap}
+            route={nav.route}
+            routeError={nav.routeError}
+            navigating={nav.navigating}
+            onStartNav={nav.startNav}
+            onStopNav={nav.stopNav}
+            currentStepIndex={nav.currentStepIndex}
+            remaining={nav.remaining}
+            voiceEnabled={nav.voiceEnabled}
+            onToggleVoice={nav.setVoiceEnabled}
           />
 
           <BuildingDetail building={selectedBuilding} onClose={() => setSelectedBuildingId(null)} />
