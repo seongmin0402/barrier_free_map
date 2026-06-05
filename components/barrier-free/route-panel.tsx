@@ -169,7 +169,7 @@ function PointField({
             }}
             onFocus={() => setOpenList(true)}
             placeholder="건물 이름 검색 또는 아래 버튼 사용"
-            className="w-full rounded-md border border-input bg-background px-2.5 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="w-full rounded-md border border-input bg-background px-2.5 py-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-sm"
           />
           {openList && filtered.length > 0 && (
             <div className="mt-1 max-h-44 overflow-y-auto rounded-md border border-border bg-popover shadow-sm">
