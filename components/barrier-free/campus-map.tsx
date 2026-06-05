@@ -500,7 +500,10 @@ export function CampusMap({
     return () => {
       teardown();
     };
-  }, [sdkLoaded, clientId, centerMemo.lat, centerMemo.lng, buildings, teardown, onBuildingSelect, showFacilityPins]);
+    // onBuildingSelect 은 ref(onBuildingSelectRef)로 읽으므로 의존성에서 제외한다.
+    // (의존성에 넣으면 매 렌더마다 지도가 재초기화되어 살짝 확대/재맞춤되는 현상 발생)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sdkLoaded, clientId, centerMemo.lat, centerMemo.lng, buildings, teardown, showFacilityPins]);
 
   useEffect(() => {
     if (!sdkLoaded || !footprintCollection?.features.length) return;
