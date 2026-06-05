@@ -30,6 +30,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useAppSettings } from "@/components/app-settings-provider";
 import type { BarrierBuilding } from "@/lib/building-types";
+import { useUi } from "@/hooks/use-ui";
 import { remainingDistanceLabel } from "@/lib/i18n/navigation";
 import { formatDistance } from "@/lib/routing/geo";
 import { ROUTE_LEGEND } from "@/lib/routing/style";
@@ -121,6 +122,7 @@ function PointField({
   onClear: () => void;
   showDot?: boolean;
 }) {
+  const ui = useUi();
   const [query, setQuery] = useState("");
   const [openList, setOpenList] = useState(false);
 
@@ -146,7 +148,7 @@ function PointField({
             type="button"
             onClick={onClear}
             className="ml-auto rounded p-0.5 text-muted-foreground hover:text-foreground"
-            aria-label={`${label} 지우기`}
+            aria-label={ui.route.clearPoint(label)}
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -174,7 +176,7 @@ function PointField({
               setOpenList(true);
             }}
             onFocus={() => setOpenList(true)}
-            placeholder="건물 이름 검색 또는 아래 버튼 사용"
+            placeholder={ui.route.searchPlaceholder}
             className="w-full rounded-md border border-input bg-background px-2.5 py-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-sm"
           />
           {openList && filtered.length > 0 && (
@@ -204,7 +206,7 @@ function PointField({
               onClick={onPickOnMap}
             >
               <MapIcon className="h-3.5 w-3.5" />
-              지도에서 선택
+              {ui.route.pickOnMap}
             </Button>
             <Button
               type="button"
@@ -214,7 +216,7 @@ function PointField({
               onClick={onUseCurrentLocation}
             >
               <LocateFixed className="h-3.5 w-3.5" />
-              현재 위치
+              {ui.route.currentLocation}
             </Button>
           </div>
         </>
@@ -248,6 +250,7 @@ export function RoutePanel(props: RoutePanelProps) {
   } = props;
 
   const { locale } = useAppSettings();
+  const ui = useUi();
   const SNAP_PEEK = 32;
   const SNAP_HALF = 54;
   const SNAP_FULL = 86;
@@ -324,7 +327,7 @@ export function RoutePanel(props: RoutePanelProps) {
         onPointerCancel={onHandleUp}
         className="flex shrink-0 cursor-grab touch-none flex-col items-center justify-center py-3 active:cursor-grabbing sm:hidden"
         role="separator"
-        aria-label="길찾기 창 높이 조절"
+        aria-label={ui.route.sheetResize}
       >
         <span className="h-1.5 w-12 rounded-full bg-muted-foreground/40" />
       </div>
@@ -334,14 +337,14 @@ export function RoutePanel(props: RoutePanelProps) {
           type="button"
           onClick={onClose}
           className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
-          aria-label="지도로 돌아가기"
+          aria-label={ui.route.back}
         >
           <ArrowLeft className="h-5 w-5" />
-          <span>뒤로</span>
+          <span>{ui.route.back}</span>
         </button>
         <div className="flex items-center gap-2">
           <Navigation className="h-5 w-5 text-blue-600" />
-          <h2 className="text-base font-semibold">길찾기</h2>
+          <h2 className="text-base font-semibold">{ui.route.title}</h2>
         </div>
       </div>
 
@@ -370,7 +373,7 @@ export function RoutePanel(props: RoutePanelProps) {
               variant="outline"
               className="absolute left-1/2 top-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full bg-background shadow-sm"
               onClick={onSwap}
-              aria-label="출발지와 도착지 교환"
+              aria-label={ui.route.swap}
             >
               <ArrowUpDown className="h-4 w-4" />
             </Button>
@@ -379,7 +382,7 @@ export function RoutePanel(props: RoutePanelProps) {
           <div className="min-w-0 flex-1 space-y-2">
             <PointField
               which="origin"
-              label="출발지"
+              label={ui.route.origin}
               value={origin}
               buildings={buildings}
               pickActive={pickMode === "origin"}
@@ -392,7 +395,7 @@ export function RoutePanel(props: RoutePanelProps) {
 
             <PointField
               which="destination"
-              label="도착지"
+              label={ui.route.destination}
               value={destination}
               buildings={buildings}
               pickActive={pickMode === "destination"}
@@ -418,17 +421,16 @@ export function RoutePanel(props: RoutePanelProps) {
             <div className="flex items-end justify-between">
               <div>
                 <p className="text-2xl font-bold leading-none">
-                  약 {estimateMinutes(route)}
-                  <span className="ml-1 text-sm font-medium text-muted-foreground">분</span>
+                  {ui.route.aboutMinutes} {estimateMinutes(route)}
+                  <span className="ml-1 text-sm font-medium text-muted-foreground">{ui.route.min}</span>
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {locale === "en" ? "Total" : "총"} {formatDistance(route.distance, locale)} ·{" "}
-                  {locale === "en" ? "Walking" : "도보"}
+                  {ui.route.total} {formatDistance(route.distance, locale)} · {ui.route.walking}
                 </p>
               </div>
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                 <Footprints className="h-4 w-4" />
-                보행로 기반
+                {ui.route.walkwayBased}
               </div>
             </div>
             {/* 색상 범례 — 경로에 실제 등장하는 종류만 표시 */}
@@ -441,7 +443,7 @@ export function RoutePanel(props: RoutePanelProps) {
                     className="inline-block h-1 w-4 rounded-full"
                     style={{ backgroundColor: l.color }}
                   />
-                  {l.label}
+                  {ui.route.legend[l.type]}
                 </span>
               ))}
             </div>
@@ -449,7 +451,7 @@ export function RoutePanel(props: RoutePanelProps) {
             {route.hasStairs && (
               <div className="mt-2 flex items-center gap-1.5 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
                 <TriangleAlert className="h-3.5 w-3.5" />
-                경로에 계단이 포함되어 있습니다
+                {ui.route.stairsWarning}
               </div>
             )}
 
@@ -457,7 +459,7 @@ export function RoutePanel(props: RoutePanelProps) {
               {!navigating ? (
                 <Button type="button" className="h-9 flex-1 gap-1.5" onClick={onStartNav}>
                   <Navigation className="h-4 w-4" />
-                  안내 시작
+                  {ui.route.startNav}
                 </Button>
               ) : (
                 <Button
@@ -466,7 +468,7 @@ export function RoutePanel(props: RoutePanelProps) {
                   className="h-9 flex-1 gap-1.5"
                   onClick={onStopNav}
                 >
-                  안내 중지
+                  {ui.route.stopNav}
                 </Button>
               )}
               <Button
@@ -475,8 +477,8 @@ export function RoutePanel(props: RoutePanelProps) {
                 size="icon"
                 className="h-9 w-9"
                 onClick={() => onToggleVoice(!voiceEnabled)}
-                aria-label={voiceEnabled ? "음성 안내 끄기" : "음성 안내 켜기"}
-                title={voiceEnabled ? "음성 안내 켜짐" : "음성 안내 꺼짐"}
+                aria-label={voiceEnabled ? ui.route.voiceOn : ui.route.voiceOff}
+                title={voiceEnabled ? ui.route.voiceOnTitle : ui.route.voiceOffTitle}
               >
                 {voiceEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
               </Button>
@@ -529,9 +531,9 @@ export function RoutePanel(props: RoutePanelProps) {
 
         {!route && !routeError && (
           <p className="px-1 py-6 text-center text-sm text-muted-foreground">
-            출발지와 도착지를 선택하면
+            {ui.route.emptyHint1}
             <br />
-            보행로 기반 경로를 안내합니다.
+            {ui.route.emptyHint2}
           </p>
         )}
       </div>

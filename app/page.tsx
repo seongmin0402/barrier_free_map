@@ -11,6 +11,7 @@ import { useAppSettings } from "@/components/app-settings-provider";
 import { Button } from "@/components/ui/button";
 import { Navigation } from "lucide-react";
 import Link from "next/link";
+import { useUi } from "@/hooks/use-ui";
 import type { BarrierBuilding } from "@/lib/building-types";
 
 const facilitySearchTerms: Record<string, string[]> = {
@@ -23,6 +24,7 @@ const facilitySearchTerms: Record<string, string[]> = {
 
 export default function BarrierFreeMapPage() {
   const { settings, updateSettings } = useAppSettings();
+  const ui = useUi();
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState<string[]>([]);
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null);
@@ -47,7 +49,7 @@ export default function BarrierFreeMapPage() {
       .catch(() => {
         if (!cancelled) {
           setBuildings([]);
-          setLoadError("건물 데이터를 불러오지 못했습니다. 배포 후에도 발생하면 빌드 시 CSV 경로와 public/data/buildings.json 생성 여부를 확인해 주세요.");
+          setLoadError(ui.page.loadError);
         }
       });
     return () => {
@@ -138,7 +140,7 @@ export default function BarrierFreeMapPage() {
             <Link href="/route">
               <Navigation className="h-4 w-4" />
               <span className={selectedBuildingId ? "sr-only sm:not-sr-only" : undefined}>
-                길찾기
+                {ui.page.directions}
               </span>
             </Link>
           </Button>

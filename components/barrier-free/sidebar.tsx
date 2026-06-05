@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useUi } from "@/hooks/use-ui";
 
 interface Building {
   id: string;
@@ -28,13 +29,7 @@ interface SidebarProps {
   onRequestClose: () => void;
 }
 
-const facilityOptions = [
-  { id: "elevator", label: "엘리베이터" },
-  { id: "ramp", label: "경사로" },
-  { id: "toilet", label: "장애인 화장실" },
-  { id: "braille", label: "점자블록" },
-  { id: "auto-door", label: "자동문" },
-] as const;
+const facilityIds = ["elevator", "ramp", "toilet", "braille", "auto-door"] as const;
 
 const accessibilityColors = {
   A: "bg-[oklch(0.65_0.18_160)] text-white",
@@ -52,6 +47,8 @@ export function Sidebar({
   isOpen,
   onRequestClose,
 }: SidebarProps) {
+  const ui = useUi();
+
   useEffect(() => {
     if (!selectedBuilding) return;
     const el = document.getElementById(`sidebar-building-${selectedBuilding}`);
@@ -83,27 +80,27 @@ export function Sidebar({
         )}
       >
       <div className="flex items-center justify-between border-b border-border p-4 md:hidden">
-        <h2 className="text-base font-semibold text-foreground">필터와 목록</h2>
-        <Button variant="ghost" size="icon" onClick={onRequestClose} aria-label="사이드바 닫기">
+        <h2 className="text-base font-semibold text-foreground">{ui.sidebar.filtersAndList}</h2>
+        <Button variant="ghost" size="icon" onClick={onRequestClose} aria-label={ui.sidebar.close}>
           <X className="h-5 w-5" />
         </Button>
       </div>
       <div className="p-4 border-b border-border">
-        <h2 className="font-semibold text-foreground mb-3">시설 필터</h2>
+        <h2 className="font-semibold text-foreground mb-3">{ui.sidebar.facilityFilter}</h2>
         <div className="space-y-2">
-          {facilityOptions.map((option) => (
-            <div key={option.id} className="flex items-center gap-3">
+          {facilityIds.map((id) => (
+            <div key={id} className="flex items-center gap-3">
               <Checkbox
-                id={option.id}
-                checked={filters.includes(option.id)}
-                onCheckedChange={() => toggleFilter(option.id)}
+                id={id}
+                checked={filters.includes(id)}
+                onCheckedChange={() => toggleFilter(id)}
               />
               <Label
-                htmlFor={option.id}
+                htmlFor={id}
                 className="flex items-center gap-2 text-sm cursor-pointer flex-1"
               >
-                <FacilityPictogram facilityId={option.id} className="h-4 w-4 text-muted-foreground" />
-                {option.label}
+                <FacilityPictogram facilityId={id} className="h-4 w-4 text-muted-foreground" />
+                {ui.facilities[id]}
               </Label>
             </div>
           ))}
@@ -112,22 +109,19 @@ export function Sidebar({
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain p-4 [touch-action:pan-y] [-webkit-overflow-scrolling:touch]">
         <div className="mb-3 flex items-baseline justify-between gap-2">
-          <h2 className="font-semibold text-foreground">건물 목록</h2>
+          <h2 className="font-semibold text-foreground">{ui.sidebar.buildingList}</h2>
           <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
             {buildings.length === totalBuildingCount ? (
-              <>{totalBuildingCount}개</>
+              <>{ui.sidebar.count(totalBuildingCount)}</>
             ) : (
-              <>
-                <span className="font-medium text-foreground">{buildings.length}</span>
-                <span> / {totalBuildingCount}개</span>
-              </>
+              <>{ui.sidebar.countOf(buildings.length, totalBuildingCount)}</>
             )}
           </span>
         </div>
         <div className="space-y-2">
           {buildings.length === 0 ? (
             <p className="rounded-lg border border-dashed border-border bg-muted/30 px-3 py-6 text-center text-xs text-muted-foreground">
-              조건에 맞는 건물이 없습니다.
+              {ui.sidebar.empty}
             </p>
           ) : (
             buildings.map((building) => (
@@ -160,10 +154,10 @@ export function Sidebar({
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-foreground">
                   {building.name}
-                  {selectedBuilding === building.id ? <span className="sr-only"> (선택됨)</span> : null}
+                  {selectedBuilding === building.id ? <span className="sr-only">{ui.sidebar.selected}</span> : null}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {building.facilities.filter((f) => f !== "charging").length}개 시설
+                  {ui.sidebar.facilities(building.facilities.filter((f) => f !== "charging").length)}
                 </p>
               </div>
               <Badge className={cn("shrink-0", accessibilityColors[building.accessibilityLevel])}>
@@ -177,19 +171,19 @@ export function Sidebar({
       </div>
 
       <div className="p-4 border-t border-border bg-muted/50">
-        <h3 className="text-xs font-medium text-muted-foreground mb-2">접근성 등급</h3>
+        <h3 className="text-xs font-medium text-muted-foreground mb-2">{ui.sidebar.accessibilityGrade}</h3>
         <div className="flex gap-2">
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-[oklch(0.65_0.18_160)]" />
-            <span className="text-xs text-muted-foreground">A 우수</span>
+            <span className="text-xs text-muted-foreground">{ui.sidebar.gradeA}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-[oklch(0.70_0.18_85)]" />
-            <span className="text-xs text-muted-foreground">B 양호</span>
+            <span className="text-xs text-muted-foreground">{ui.sidebar.gradeB}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-[oklch(0.55_0.22_25)]" />
-            <span className="text-xs text-muted-foreground">C 개선필요</span>
+            <span className="text-xs text-muted-foreground">{ui.sidebar.gradeC}</span>
           </div>
         </div>
       </div>

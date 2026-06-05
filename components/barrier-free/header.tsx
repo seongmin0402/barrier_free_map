@@ -3,6 +3,7 @@
 import { Search, Settings, Accessibility } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useUi } from "@/hooks/use-ui";
 
 interface HeaderProps {
   onSettingsClick: () => void;
@@ -11,6 +12,8 @@ interface HeaderProps {
 }
 
 export function Header({ onSettingsClick, searchQuery, onSearchChange }: HeaderProps) {
+  const ui = useUi();
+
   return (
     <header className="flex items-center justify-between gap-2 bg-card px-3 py-2.5 shadow-sm border-b border-border sm:gap-4 sm:px-4 sm:py-3">
       <div className="flex min-w-0 shrink items-center gap-2 sm:gap-3">
@@ -19,11 +22,11 @@ export function Header({ onSettingsClick, searchQuery, onSearchChange }: HeaderP
         </div>
         <div className="min-w-0">
           <h1 className="truncate text-sm font-bold leading-tight text-foreground sm:text-lg">
-            공주대학교
+            {ui.header.university}
           </h1>
           <p className="truncate text-[10px] text-muted-foreground sm:text-xs">
-            <span className="sm:hidden">베리어프리맵</span>
-            <span className="hidden sm:inline">신관캠퍼스 베리어프리맵</span>
+            <span className="sm:hidden">{ui.header.subtitleShort}</span>
+            <span className="hidden sm:inline">{ui.header.subtitleFull}</span>
           </p>
         </div>
       </div>
@@ -33,11 +36,11 @@ export function Header({ onSettingsClick, searchQuery, onSearchChange }: HeaderP
           <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground sm:left-3" />
           <Input
             type="search"
-            placeholder="건물·시설 검색"
+            placeholder={ui.header.searchPlaceholder}
             className="h-9 pl-9 text-base sm:h-10 sm:pl-10 sm:text-sm"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            aria-label="건물·시설 검색"
+            aria-label={ui.header.searchPlaceholder}
           />
         </div>
       </div>
@@ -46,7 +49,7 @@ export function Header({ onSettingsClick, searchQuery, onSearchChange }: HeaderP
         variant="outline"
         size="icon"
         onClick={onSettingsClick}
-        aria-label="접근성 설정"
+        aria-label={ui.header.settingsAria}
         className="shrink-0"
       >
         <Settings className="w-5 h-5" />

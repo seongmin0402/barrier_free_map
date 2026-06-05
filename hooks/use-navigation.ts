@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppSettings } from "@/components/app-settings-provider";
 import type { BarrierBuilding } from "@/lib/building-types";
 import { arriveMessage, navSpeechText } from "@/lib/i18n/navigation";
+import { getUi } from "@/lib/i18n/ui";
 import type { LatLng } from "@/lib/routing/geo";
 import { formatDistance } from "@/lib/routing/geo";
 import {
@@ -79,11 +80,12 @@ export function useNavigation(buildings: BarrierBuilding[]) {
   }, [graph, origin, destination, locale]);
 
   const routeError = useMemo(() => {
+    const t = getUi(locale).route.errors;
     if (!origin || !destination) return null;
-    if (!graph.nodes.size) return "보행로 데이터를 불러오는 중입니다…";
-    if (!route) return "두 지점을 잇는 보행로 경로를 찾지 못했습니다. 다른 지점을 선택해 보세요.";
+    if (!graph.nodes.size) return t.loadingWalkways;
+    if (!route) return t.noRoute;
     return null;
-  }, [origin, destination, graph, route]);
+  }, [origin, destination, graph, route, locale]);
 
   // 음성 on/off 동기화
   useEffect(() => {
@@ -122,17 +124,18 @@ export function useNavigation(buildings: BarrierBuilding[]) {
   const handleMapPick = useCallback(
     (point: LatLng) => {
       if (!pickMode) return;
-      const label = `지도 선택 (${point.lat.toFixed(5)}, ${point.lng.toFixed(5)})`;
+      const label = getUi(locale).route.mapPickLabel(point.lat, point.lng);
       setPoint(pickMode, { kind: "map", label, point });
       setPickMode(null);
     },
-    [pickMode, setPoint],
+    [pickMode, setPoint, locale],
   );
 
   const useCurrentLocation = useCallback(
     (which: WhichPoint) => {
+      const t = getUi(locale).route.errors;
       if (typeof navigator === "undefined" || !navigator.geolocation) {
-        setGeoError("이 브라우저에서는 위치를 사용할 수 없습니다.");
+        setGeoError(t.geoUnsupported);
         return;
       }
       setPickMode(null);
@@ -141,21 +144,21 @@ export function useNavigation(buildings: BarrierBuilding[]) {
           setGeoError(null);
           setPoint(which, {
             kind: "gps",
-            label: "현재 위치",
+            label: getUi(locale).route.currentLocationLabel,
             point: { lat: pos.coords.latitude, lng: pos.coords.longitude },
           });
         },
         (err) => {
-          let msg = "위치를 가져올 수 없습니다.";
-          if (err.code === 1) msg = "위치 권한이 거부되었습니다.";
-          else if (err.code === 2) msg = "위치를 확인할 수 없습니다.";
-          else if (err.code === 3) msg = "위치 확인 시간이 초과되었습니다.";
+          let msg = t.geoFailed;
+          if (err.code === 1) msg = t.geoDenied;
+          else if (err.code === 2) msg = t.geoUnavailable;
+          else if (err.code === 3) msg = t.geoTimeout;
           setGeoError(msg);
         },
         { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
       );
     },
-    [setPoint],
+    [setPoint, locale],
   );
 
   const clearPoint = useCallback(
@@ -183,8 +186,9 @@ export function useNavigation(buildings: BarrierBuilding[]) {
 
   const startNav = useCallback(() => {
     if (!route) return;
+    const t = getUi(locale).route.errors;
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setGeoError("이 브라우저에서는 위치 안내를 사용할 수 없습니다.");
+      setGeoError(t.navGeoUnsupported);
       return;
     }
     setNavigating(true);
@@ -204,8 +208,9 @@ export function useNavigation(buildings: BarrierBuilding[]) {
         setUserPos(here);
       },
       (err) => {
-        let msg = "위치 추적 실패";
-        if (err.code === 1) msg = "위치 권한이 거부되었습니다.";
+        const te = getUi(locale).route.errors;
+        let msg = te.trackFailed;
+        if (err.code === 1) msg = te.geoDenied;
         setGeoError(msg);
       },
       { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 },

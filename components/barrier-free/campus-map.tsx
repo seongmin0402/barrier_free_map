@@ -15,6 +15,7 @@ import {
 import type { BarrierBuilding } from "@/lib/building-types";
 import type { LatLng } from "@/lib/routing/geo";
 import { segmentColor } from "@/lib/routing/style";
+import { useUi } from "@/hooks/use-ui";
 import {
   footprintPolygonPathGroups,
   footprintStrokeOptions,
@@ -88,12 +89,9 @@ function footprintLevelForFeature(
   return null;
 }
 
-const MAP_TYPE_OPTIONS = [
-  { id: "NORMAL", label: "일반" },
-  { id: "TERRAIN", label: "지형" },
-  { id: "SATELLITE", label: "위성" },
-  { id: "HYBRID", label: "하이브리드" },
-] as const;
+const MAP_TYPE_IDS = ["NORMAL", "TERRAIN", "SATELLITE", "HYBRID"] as const;
+
+type MapTypeOptionId = (typeof MAP_TYPE_IDS)[number];
 
 const MANUAL_BUILDING_LABELS = [
   {
@@ -111,8 +109,6 @@ const MANUAL_BUILDING_LABELS = [
 ] as const;
 const MANUAL_LABEL_LAT_OFFSET = -0.00003;
 const MANUAL_LABEL_LNG_OFFSET = -0.00003;
-
-type MapTypeOptionId = (typeof MAP_TYPE_OPTIONS)[number]["id"];
 
 function labelMarkerHtml(name: string) {
   const safeName = escapeHtml(name);
@@ -199,6 +195,7 @@ export function CampusMap({
   onMapPick,
   followUser = false,
 }: CampusMapProps) {
+  const ui = useUi();
   const clientId = process.env.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID ?? "";
   const containerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<unknown>(null);
@@ -466,7 +463,7 @@ export function CampusMap({
         const marker = new MarkerCtor({
           map,
           position: new LatLngCtor(building.lat, building.lng),
-          title: `${building.name} 시설 필터 매치`,
+          title: ui.map.facilityFilterMatch(building.name),
           zIndex: 1600,
           icon: {
             content: facilityPinHtml(),
@@ -553,8 +550,8 @@ export function CampusMap({
             onBuildingSelectRef.current(building.id);
             return;
           }
-          const label = feature.properties?.building_n?.trim() || "건물";
-          setGeoHintMessage(`${label}: 베리어프리 조사 정보가 없습니다.`);
+          const label = feature.properties?.building_n?.trim() || ui.map.buildingFallback;
+          setGeoHintMessage(ui.map.noBarrierInfo(label));
         });
       }
     }
@@ -569,7 +566,7 @@ export function CampusMap({
       });
       footprintPolygonsRef.current = [];
     };
-  }, [sdkLoaded, footprintCollection, mapReadyEpoch, buildings]);
+  }, [sdkLoaded, footprintCollection, mapReadyEpoch, buildings, ui]);
 
   /** 선택 변경 시 폴리곤 테두리만 갱신 */
   useEffect(() => {
@@ -694,7 +691,7 @@ export function CampusMap({
           map,
           position: new LatLngCtor(originPoint.lat, originPoint.lng),
           zIndex: 400,
-          icon: { content: markerPinHtml("#16a34a", "출"), anchor: new PointCtor(13, 33) },
+          icon: { content: markerPinHtml("#16a34a", ui.map.originMarker), anchor: new PointCtor(13, 33) },
         });
         routeMarkersRef.current.push(m);
       }
@@ -703,7 +700,7 @@ export function CampusMap({
           map,
           position: new LatLngCtor(destPoint.lat, destPoint.lng),
           zIndex: 400,
-          icon: { content: markerPinHtml("#dc2626", "도"), anchor: new PointCtor(13, 33) },
+          icon: { content: markerPinHtml("#dc2626", ui.map.destMarker), anchor: new PointCtor(13, 33) },
         });
         routeMarkersRef.current.push(m);
       }
@@ -727,7 +724,7 @@ export function CampusMap({
       });
       routeMarkersRef.current = [];
     };
-  }, [sdkLoaded, mapReadyEpoch, routeLine, routeSegments, originPoint, destPoint]);
+  }, [sdkLoaded, mapReadyEpoch, routeLine, routeSegments, originPoint, destPoint, ui]);
 
   /** 경로가 생기면 줌은 그대로 두고 경로 중심으로만 이동 (확대하지 않음) */
   useEffect(() => {
@@ -871,11 +868,12 @@ export function CampusMap({
   }, []);
 
   const mapTypeButtons = useMemo(() => {
-    if (typeof window === "undefined") return [...MAP_TYPE_OPTIONS];
+    const all = MAP_TYPE_IDS.map((id) => ({ id, label: ui.map.mapTypes[id] }));
+    if (typeof window === "undefined") return all;
     const m = window.naver?.maps as { MapTypeId?: Record<string, unknown> } | undefined;
-    if (!m?.MapTypeId) return [...MAP_TYPE_OPTIONS];
-    return MAP_TYPE_OPTIONS.filter((opt) => m.MapTypeId![opt.id] !== undefined);
-  }, [sdkLoaded]);
+    if (!m?.MapTypeId) return all;
+    return all.filter((opt) => m.MapTypeId![opt.id] !== undefined);
+  }, [sdkLoaded, ui]);
 
   useEffect(() => {
     if (!geoHintMessage) return;
@@ -896,13 +894,13 @@ export function CampusMap({
 
   const beginLocationTracking = useCallback(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setGeoHintMessage("이 브라우저는 위치 정보를 지원하지 않습니다.");
+      setGeoHintMessage(ui.map.geoUnsupported);
       return;
     }
     const maps = window.naver?.maps as NMaps | undefined;
     const map = mapInstanceRef.current;
     if (!maps?.LatLng || !maps?.Marker || !maps?.Point || !map) {
-      setGeoHintMessage("지도가 준비된 뒤 다시 시도해 주세요.");
+      setGeoHintMessage(ui.map.mapNotReady);
       return;
     }
 
@@ -935,7 +933,7 @@ export function CampusMap({
         const m = new MarkerCtor({
           map,
           position: ll,
-          title: "내 위치",
+          title: ui.map.myLocationTitle,
           zIndex: 5000,
           icon: {
             content: myIconHtml,
@@ -974,10 +972,10 @@ export function CampusMap({
       },
       (err) => {
         setLocationTracking(false);
-        let msg = "위치를 가져올 수 없습니다.";
-        if (err.code === 1) msg = "위치 권한이 거부되었습니다.";
-        else if (err.code === 2) msg = "위치를 확인할 수 없습니다.";
-        else if (err.code === 3) msg = "위치 확인 시간이 초과되었습니다.";
+        let msg = ui.map.geoFailed;
+        if (err.code === 1) msg = ui.map.geoDenied;
+        else if (err.code === 2) msg = ui.map.geoUnavailable;
+        else if (err.code === 3) msg = ui.map.geoTimeout;
         setGeoHintMessage(msg);
         try {
           myLocationMarkerRef.current?.setMap(null);
@@ -988,7 +986,7 @@ export function CampusMap({
       },
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
     );
-  }, []);
+  }, [ui]);
 
   const stopLocationTracking = useCallback(() => {
     setLocationTracking(false);
@@ -1004,12 +1002,8 @@ export function CampusMap({
     return (
       <div className="relative flex flex-1 items-center justify-center bg-muted/40 p-8 text-center">
         <div className="max-w-md space-y-2 rounded-lg border border-border bg-card p-6 shadow-sm">
-          <p className="font-semibold text-foreground">네이버 지도 클라이언트 ID 필요</p>
-          <p className="text-sm text-muted-foreground">
-            네이버 클라우드 플랫폼에서 Dynamic Map을 활성화한 애플리케이션 클라이언트 ID를{" "}
-            <code className="rounded bg-muted px-1">NEXT_PUBLIC_NAVER_MAP_CLIENT_ID</code> 에 넣어 주세요. Vercel 프로젝트
-            설정에도 같은 환경 변수를 추가해야 배포 환경에서 지도가 열립니다.
-          </p>
+          <p className="font-semibold text-foreground">{ui.map.clientIdRequired}</p>
+          <p className="text-sm text-muted-foreground">{ui.map.clientIdHint}</p>
         </div>
       </div>
     );
@@ -1032,18 +1026,15 @@ export function CampusMap({
 
       {!sdkLoaded && !scriptError && (
         <div className="absolute inset-0 z-[5] flex items-center justify-center bg-muted/50 text-sm text-muted-foreground">
-          네이버 지도를 불러오는 중…
+          {ui.map.loading}
         </div>
       )}
 
       {scriptError && (
         <div className="absolute inset-0 z-[5] flex items-center justify-center bg-muted/60 p-6 text-center">
           <div className="max-w-md rounded-lg border border-border bg-card p-4 text-sm text-foreground shadow-sm">
-            <p className="font-medium">지도 스크립트를 불러오지 못했습니다.</p>
-            <p className="mt-2 text-muted-foreground">
-              네이버 클라우드에서 이 도메인을 허용했는지, <code className="rounded bg-muted px-1">NEXT_PUBLIC_NAVER_MAP_CLIENT_ID</code>가
-              빌드에 포함됐는지 확인한 뒤 새로고침 해 주세요.
-            </p>
+            <p className="font-medium">{ui.map.scriptError}</p>
+            <p className="mt-2 text-muted-foreground">{ui.map.scriptErrorHint}</p>
           </div>
         </div>
       )}
@@ -1059,7 +1050,7 @@ export function CampusMap({
         />
         {pickMode && (
           <div className="pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full bg-blue-600/95 px-4 py-1.5 text-xs font-medium text-white shadow-lg">
-            지도에서 {pickMode === "origin" ? "출발지" : "도착지"}를 터치하세요
+            {pickMode === "origin" ? ui.map.pickOrigin : ui.map.pickDestination}
           </div>
         )}
       </div>
@@ -1073,7 +1064,7 @@ export function CampusMap({
           )}
           {controlsOpen && (
             <div className="w-[min(86vw,18rem)] rounded-lg border border-border bg-card/95 p-2 shadow-lg backdrop-blur-sm">
-              <p className="mb-1 px-1 text-[10px] font-medium text-muted-foreground">지도 옵션</p>
+              <p className="mb-1 px-1 text-[10px] font-medium text-muted-foreground">{ui.map.mapOptions}</p>
               <div className="mb-2 flex flex-wrap gap-1">
                 {mapTypeButtons.map((opt) => (
                   <Button
@@ -1096,10 +1087,10 @@ export function CampusMap({
                   size="sm"
                   className="h-8 gap-1 text-xs"
                   onClick={showCampusOverview}
-                  aria-label="캠퍼스 전체 보기"
+                  aria-label={ui.map.campusOverview}
                 >
                   <Maximize2 className="h-4 w-4" />
-                  전체 보기
+                  {ui.map.campusOverview}
                 </Button>
                 <Button
                   type="button"
@@ -1111,19 +1102,19 @@ export function CampusMap({
                     else setLocationDialogOpen(true);
                   }}
                   disabled={!sdkLoaded}
-                  aria-label="내 위치 표시"
+                  aria-label={ui.map.myLocation}
                 >
                   <Locate className="h-4 w-4" />
-                  내 위치
+                  {ui.map.myLocation}
                 </Button>
               </div>
             </div>
           )}
           <div className="flex flex-col gap-2">
-            <Button type="button" variant="secondary" size="icon" onClick={() => zoomDelta(1)} className="shadow-md" aria-label="확대">
+            <Button type="button" variant="secondary" size="icon" onClick={() => zoomDelta(1)} className="shadow-md" aria-label={ui.map.zoomIn}>
               <Plus className="h-5 w-5" />
             </Button>
-            <Button type="button" variant="secondary" size="icon" onClick={() => zoomDelta(-1)} className="shadow-md" aria-label="축소">
+            <Button type="button" variant="secondary" size="icon" onClick={() => zoomDelta(-1)} className="shadow-md" aria-label={ui.map.zoomOut}>
               <Minus className="h-5 w-5" />
             </Button>
             <Button
@@ -1132,7 +1123,7 @@ export function CampusMap({
               size="icon"
               onClick={() => setControlsOpen((prev) => !prev)}
               className="shadow-md"
-              aria-label={controlsOpen ? "지도 옵션 닫기" : "지도 옵션 열기"}
+              aria-label={controlsOpen ? ui.map.mapOptionsClose : ui.map.mapOptionsOpen}
             >
               <SlidersHorizontal className="h-5 w-5" />
             </Button>
@@ -1141,35 +1132,35 @@ export function CampusMap({
 
         <div className="pointer-events-auto absolute left-3 bottom-3 rounded-md border border-border bg-card/95 p-2 shadow-md backdrop-blur-sm">
           <div className="mb-1 flex items-center gap-1.5">
-            <h4 className="text-[11px] font-semibold text-foreground">건물 테두리 (등급)</h4>
+            <h4 className="text-[11px] font-semibold text-foreground">{ui.map.footprintLegend}</h4>
             <Button
               type="button"
               variant="outline"
               size="icon"
               className="h-4 w-4 rounded-full p-0 text-[10px] font-bold"
               onClick={() => setGradeGuideOpen(true)}
-              aria-label="접근성 등급 설명 열기"
+              aria-label={ui.map.gradeGuideOpen}
             >
               ?
             </Button>
           </div>
-          <p className="mb-1.5 text-[9px] text-muted-foreground">건물 폴리곤을 눌러 상세 정보를 볼 수 있습니다.</p>
+          <p className="mb-1.5 text-[9px] text-muted-foreground">{ui.map.footprintHint}</p>
           <div className="space-y-1">
             <div className="flex items-center gap-1.5">
               <span className="h-0 w-4 shrink-0 border-t-2" style={{ borderColor: FOOTPRINT_LEVEL_STROKE.A }} />
-              <span className="text-[11px] text-muted-foreground">A 우수</span>
+              <span className="text-[11px] text-muted-foreground">{ui.sidebar.gradeA}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="h-0 w-4 shrink-0 border-t-2" style={{ borderColor: FOOTPRINT_LEVEL_STROKE.B }} />
-              <span className="text-[11px] text-muted-foreground">B 양호</span>
+              <span className="text-[11px] text-muted-foreground">{ui.sidebar.gradeB}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="h-0 w-4 shrink-0 border-t-2" style={{ borderColor: FOOTPRINT_LEVEL_STROKE.C }} />
-              <span className="text-[11px] text-muted-foreground">C 개선필요</span>
+              <span className="text-[11px] text-muted-foreground">{ui.sidebar.gradeC}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="h-0 w-4 shrink-0 border-t-2" style={{ borderColor: FOOTPRINT_STROKE_UNKNOWN }} />
-              <span className="text-[11px] text-muted-foreground">미조사</span>
+              <span className="text-[11px] text-muted-foreground">{ui.gradeUnsurveyed}</span>
             </div>
           </div>
         </div>
@@ -1178,15 +1169,12 @@ export function CampusMap({
       <AlertDialog open={locationDialogOpen} onOpenChange={setLocationDialogOpen}>
         <AlertDialogContent className="z-[100]">
           <AlertDialogHeader>
-            <AlertDialogTitle>현재 위치를 사용할까요?</AlertDialogTitle>
-            <AlertDialogDescription className="text-left">
-              지도에서 내 위치를 표시하려면 기기의 위치 정보가 필요합니다. 아래에서 동의하면 브라우저에서 위치 접근 허용 여부를
-              추가로 묻습니다. 허용하지 않으면 내 위치를 표시할 수 없습니다.
-            </AlertDialogDescription>
+            <AlertDialogTitle>{ui.map.locationDialogTitle}</AlertDialogTitle>
+            <AlertDialogDescription className="text-left">{ui.map.locationDialogBody}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <Button type="button" variant="outline" onClick={() => setLocationDialogOpen(false)}>
-              취소
+              {ui.map.locationDialogCancel}
             </Button>
             <Button
               type="button"
@@ -1195,7 +1183,7 @@ export function CampusMap({
                 beginLocationTracking();
               }}
             >
-              위치 사용에 동의합니다
+              {ui.map.locationDialogConfirm}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1204,30 +1192,18 @@ export function CampusMap({
       <AlertDialog open={gradeGuideOpen} onOpenChange={setGradeGuideOpen}>
         <AlertDialogContent className="z-[100] max-w-md">
           <AlertDialogHeader>
-            <AlertDialogTitle>접근성 등급 안내</AlertDialogTitle>
-            <AlertDialogDescription className="text-left">
-              건물별 접근성 등급은 현장 조사 결과를 바탕으로 안내하며, 이용자마다 체감이 다를 수 있습니다.
-            </AlertDialogDescription>
+            <AlertDialogTitle>{ui.map.gradeGuideTitle}</AlertDialogTitle>
+            <AlertDialogDescription className="text-left">{ui.map.gradeGuideIntro}</AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-2 text-sm text-foreground">
-            <p>
-              <strong className="text-[#22A557]">A 우수</strong> · 주요 이동 동선에서 접근이 비교적 원활하고 편의시설이 전반적으로
-              잘 갖춰진 건물
-            </p>
-            <p>
-              <strong className="text-[#F5A623]">B 양호</strong> · 이용은 가능하지만 일부 구간(문턱, 동선, 시설 수 등)에 보완이
-              필요한 건물
-            </p>
-            <p>
-              <strong className="text-[#DC3545]">C 개선필요</strong> · 이동 또는 이용에 제약이 커서 사전 확인과 도움이 필요한 건물
-            </p>
-            <p>
-              <strong className="text-[#1a1a1a]">미조사</strong> · 상세 접근성 데이터가 아직 등록되지 않은 건물
-            </p>
+            <p>{ui.map.gradeGuideA}</p>
+            <p>{ui.map.gradeGuideB}</p>
+            <p>{ui.map.gradeGuideC}</p>
+            <p>{ui.map.gradeGuideUnsurveyed}</p>
           </div>
           <AlertDialogFooter>
             <Button type="button" onClick={() => setGradeGuideOpen(false)}>
-              닫기
+              {ui.map.gradeGuideClose}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
