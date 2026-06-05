@@ -5,6 +5,7 @@ import type { AppLocale } from "@/lib/app-settings";
 /** Google Cloud TTS 재생기 — 동시 재생 방지 */
 export class SpeechGuide {
   private audio: HTMLAudioElement | null = null;
+  private objectUrl: string | null = null;
   private lastText = "";
   private lastAt = 0;
   enabled = true;
@@ -23,6 +24,14 @@ export class SpeechGuide {
       }
       this.audio = null;
     }
+    if (this.objectUrl) {
+      try {
+        URL.revokeObjectURL(this.objectUrl);
+      } catch {
+        /* ignore */
+      }
+      this.objectUrl = null;
+    }
   }
 
   /** 같은 문구가 짧은 시간 안에 반복되면 무시 */
@@ -38,11 +47,23 @@ export class SpeechGuide {
     this.stop();
     const lang = opts?.locale ?? "ko";
     const url = `/api/tts?text=${encodeURIComponent(trimmed)}&lang=${lang}`;
-    const audio = new Audio(url);
-    this.audio = audio;
-    audio.play().catch(() => {
-      /* 자동재생 차단/네트워크 오류 무시 */
-    });
+
+    void (async () => {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const blob = await res.blob();
+        if (!blob.size) return;
+        const objectUrl = URL.createObjectURL(blob);
+        this.objectUrl = objectUrl;
+        const audio = new Audio(objectUrl);
+        this.audio = audio;
+        audio.onended = () => this.stop();
+        await audio.play();
+      } catch {
+        /* 자동재생 차단/네트워크 오류 무시 */
+      }
+    })();
   }
 }
 

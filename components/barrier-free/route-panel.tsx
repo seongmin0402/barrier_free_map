@@ -269,10 +269,22 @@ export function RoutePanel(props: RoutePanelProps) {
 
   // 상태에 따라 기본 높이 자동 조정 (지도가 보이게 낮춤). 이후 드래그로 자유 조절 가능.
   useEffect(() => {
-    if (pickMode || navigating) setSheetVh(SNAP_PEEK);
+    if (pickMode) setSheetVh(SNAP_PEEK);
+    else if (navigating) setSheetVh(SNAP_HALF);
     else if (route) setSheetVh(SNAP_HALF);
     else setSheetVh(SNAP_FULL);
   }, [route, navigating, pickMode]);
+
+  const routeSummaryRef = useRef<HTMLDivElement>(null);
+
+  const handleStartNav = useCallback(() => {
+    onStartNav();
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches) {
+      requestAnimationFrame(() => {
+        routeSummaryRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      });
+    }
+  }, [onStartNav]);
 
   const onHandleDown = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -417,7 +429,7 @@ export function RoutePanel(props: RoutePanelProps) {
 
         {/* 경로 요약 */}
         {route && (
-          <div className="rounded-lg border border-border bg-card p-3">
+          <div ref={routeSummaryRef} className="rounded-lg border border-border bg-card p-3">
             <div className="flex items-end justify-between">
               <div>
                 <p className="text-2xl font-bold leading-none">
@@ -457,7 +469,7 @@ export function RoutePanel(props: RoutePanelProps) {
 
             <div className="mt-3 flex gap-2">
               {!navigating ? (
-                <Button type="button" className="h-9 flex-1 gap-1.5" onClick={onStartNav}>
+                <Button type="button" className="h-9 flex-1 gap-1.5" onClick={handleStartNav}>
                   <Navigation className="h-4 w-4" />
                   {ui.route.startNav}
                 </Button>
@@ -484,9 +496,11 @@ export function RoutePanel(props: RoutePanelProps) {
               </Button>
             </div>
 
-            {navigating && remaining != null && (
-              <p className="mt-2 text-center text-xs text-muted-foreground">
-                {remainingDistanceLabel(locale)} {formatDistance(remaining, locale)}
+            {navigating && (
+              <p className="mt-2 text-center text-xs font-medium text-blue-700 dark:text-blue-300">
+                {remaining != null
+                  ? `${ui.route.navActive} · ${remainingDistanceLabel(locale)} ${formatDistance(remaining, locale)}`
+                  : ui.route.acquiringGps}
               </p>
             )}
           </div>

@@ -115,6 +115,8 @@ export type UiText = {
     stairsWarning: string;
     startNav: string;
     stopNav: string;
+    acquiringGps: string;
+    navActive: string;
     voiceOn: string;
     voiceOff: string;
     voiceOnTitle: string;
@@ -288,6 +290,8 @@ const ko: UiText = {
     stairsWarning: "경로에 계단이 포함되어 있습니다",
     startNav: "안내 시작",
     stopNav: "안내 중지",
+    acquiringGps: "GPS 위치를 확인하는 중…",
+    navActive: "길안내 진행 중",
     voiceOn: "음성 안내 끄기",
     voiceOff: "음성 안내 켜기",
     voiceOnTitle: "음성 안내 켜짐",
@@ -467,6 +471,8 @@ const en: UiText = {
     stairsWarning: "This route includes stairs",
     startNav: "Start guidance",
     stopNav: "Stop guidance",
+    acquiringGps: "Acquiring GPS location…",
+    navActive: "Guidance active",
     voiceOn: "Turn voice off",
     voiceOff: "Turn voice on",
     voiceOnTitle: "Voice guidance on",

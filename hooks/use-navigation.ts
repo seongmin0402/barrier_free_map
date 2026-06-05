@@ -28,6 +28,9 @@ type WhichPoint = "origin" | "destination";
 
 export function useNavigation(buildings: BarrierBuilding[]) {
   const { locale } = useAppSettings();
+  const localeRef = useRef(locale);
+  localeRef.current = locale;
+
   const [open, setOpen] = useState(false);
   const [walkways, setWalkways] = useState<FeatureCollection<WalkwayFeature> | null>(null);
   const [entranceList, setEntranceList] = useState<BuildingEntrance[]>([]);
@@ -37,6 +40,8 @@ export function useNavigation(buildings: BarrierBuilding[]) {
   const [pickMode, setPickMode] = useState<WhichPoint | null>(null);
 
   const [navigating, setNavigating] = useState(false);
+  /** 안내 시작 시점의 경로 — locale 변경으로 steps/coords 참조가 바뀌어도 추적 유지 */
+  const [navigationRoute, setNavigationRoute] = useState<ComputedRoute | null>(null);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [userPos, setUserPos] = useState<LatLng | null>(null);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
@@ -46,6 +51,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
 
   const watchIdRef = useRef<number | null>(null);
   const lastSpokenStepRef = useRef<number>(-1);
+  const navigationStartedAtRef = useRef<number>(0);
 
   // 데이터 로드 (패널을 처음 열 때)
   useEffect(() => {
@@ -92,6 +98,13 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     getSpeechGuide().setEnabled(voiceEnabled);
   }, [voiceEnabled]);
 
+  const clearWatch = useCallback(() => {
+    if (watchIdRef.current != null && typeof navigator !== "undefined") {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+  }, []);
+
   /** 건물의 대표 출입구를 RoutePoint로 변환 */
   const buildingToPoint = useCallback(
     (building: BarrierBuilding): RoutePoint => {
@@ -124,16 +137,16 @@ export function useNavigation(buildings: BarrierBuilding[]) {
   const handleMapPick = useCallback(
     (point: LatLng) => {
       if (!pickMode) return;
-      const label = getUi(locale).route.mapPickLabel(point.lat, point.lng);
+      const label = getUi(localeRef.current).route.mapPickLabel(point.lat, point.lng);
       setPoint(pickMode, { kind: "map", label, point });
       setPickMode(null);
     },
-    [pickMode, setPoint, locale],
+    [pickMode, setPoint],
   );
 
   const useCurrentLocation = useCallback(
     (which: WhichPoint) => {
-      const t = getUi(locale).route.errors;
+      const t = getUi(localeRef.current).route.errors;
       if (typeof navigator === "undefined" || !navigator.geolocation) {
         setGeoError(t.geoUnsupported);
         return;
@@ -144,7 +157,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
           setGeoError(null);
           setPoint(which, {
             kind: "gps",
-            label: getUi(locale).route.currentLocationLabel,
+            label: getUi(localeRef.current).route.currentLocationLabel,
             point: { lat: pos.coords.latitude, lng: pos.coords.longitude },
           });
         },
@@ -158,7 +171,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
         { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
       );
     },
-    [setPoint, locale],
+    [setPoint],
   );
 
   const clearPoint = useCallback(
@@ -175,80 +188,101 @@ export function useNavigation(buildings: BarrierBuilding[]) {
 
   const stopNav = useCallback(() => {
     setNavigating(false);
-    if (watchIdRef.current != null && typeof navigator !== "undefined") {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-      watchIdRef.current = null;
-    }
+    setNavigationRoute(null);
+    clearWatch();
     getSpeechGuide().stop();
+    setUserPos(null);
     setRemaining(null);
     setDistanceToNext(null);
-  }, []);
+    navigationStartedAtRef.current = 0;
+  }, [clearWatch]);
 
   const startNav = useCallback(() => {
     if (!route) return;
-    const t = getUi(locale).route.errors;
+    const t = getUi(localeRef.current).route.errors;
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setGeoError(t.navGeoUnsupported);
       return;
     }
-    setNavigating(true);
+
+    clearWatch();
+    setUserPos(null);
+    setGeoError(null);
     setCurrentStepIndex(0);
     lastSpokenStepRef.current = -1;
-    setGeoError(null);
+    navigationStartedAtRef.current = Date.now();
+    setNavigationRoute(route);
+    setNavigating(true);
+    setRemaining(route.distance);
+    setDistanceToNext(null);
+
+    const navLocale = localeRef.current;
 
     // 시작 안내
     if (route.steps[0]) {
-      getSpeechGuide().speak(route.steps[0].text, { force: true, locale });
+      getSpeechGuide().speak(route.steps[0].text, { force: true, locale: navLocale });
       lastSpokenStepRef.current = 0;
     }
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
-        const here: LatLng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        setUserPos(here);
+        setUserPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
       },
       (err) => {
-        const te = getUi(locale).route.errors;
+        const te = getUi(localeRef.current).route.errors;
         let msg = te.trackFailed;
         if (err.code === 1) msg = te.geoDenied;
         setGeoError(msg);
       },
       { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 },
     );
-  }, [route, locale]);
+  }, [route, clearWatch]);
 
   // GPS 갱신 → 진행 상황 계산 + 음성 안내
   useEffect(() => {
-    if (!navigating || !route || !userPos) return;
-    const progress = computeProgress(route, userPos);
+    const activeRoute = navigationRoute;
+    if (!navigating || !activeRoute || !userPos) return;
+
+    const progress = computeProgress(activeRoute, userPos);
     if (!progress) return;
+
     setCurrentStepIndex(progress.stepIndex);
     setRemaining(progress.remaining);
     setDistanceToNext(progress.distanceToNext);
 
-    const step = route.steps[progress.stepIndex];
+    const step = activeRoute.steps[progress.stepIndex];
     if (!step) return;
+
+    const navLocale = localeRef.current;
+    const sinceStartMs = Date.now() - navigationStartedAtRef.current;
+    const canAutoArrive = sinceStartMs > 4000;
 
     // 새 단계 진입 시 안내
     if (progress.stepIndex !== lastSpokenStepRef.current) {
       lastSpokenStepRef.current = progress.stepIndex;
       if (step.maneuver === "arrive") {
-        getSpeechGuide().speak(arriveMessage(locale), { force: true, locale });
+        getSpeechGuide().speak(arriveMessage(navLocale), { force: true, locale: navLocale });
       } else {
-        const distLabel = formatDistance(progress.distanceToNext, locale);
+        const distLabel = formatDistance(progress.distanceToNext, navLocale);
         getSpeechGuide().speak(
-          navSpeechText(locale, progress.distanceToNext, distLabel, step.maneuver),
-          { force: true, locale },
+          navSpeechText(navLocale, progress.distanceToNext, distLabel, step.maneuver),
+          { force: true, locale: navLocale },
         );
       }
     }
 
-    // 도착 처리
-    if (progress.remaining < 8) {
-      getSpeechGuide().speak(arriveMessage(locale), { force: true, locale });
+    // 도착 처리 — 안내 직후 GPS 오차로 즉시 종료되지 않도록 유예 + arrive 단계 확인
+    const atDestination =
+      step.maneuver === "arrive" ||
+      (canAutoArrive &&
+        progress.stepIndex >= activeRoute.steps.length - 1 &&
+        progress.remaining < 12);
+
+    if (atDestination) {
+      getSpeechGuide().speak(arriveMessage(navLocale), { force: true, locale: navLocale });
       stopNav();
     }
-  }, [navigating, route, userPos, stopNav, locale]);
+  }, [navigating, navigationRoute, userPos, stopNav]);
 
   // 패널 닫으면 정리
   const close = useCallback(() => {
@@ -260,11 +294,11 @@ export function useNavigation(buildings: BarrierBuilding[]) {
   // 언마운트 정리
   useEffect(() => {
     return () => {
-      if (watchIdRef.current != null && typeof navigator !== "undefined") {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-      }
+      clearWatch();
     };
-  }, []);
+  }, [clearWatch]);
+
+  const displayRoute = navigating && navigationRoute ? navigationRoute : route;
 
   return {
     open,
@@ -273,7 +307,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     origin,
     destination,
     pickMode,
-    route,
+    route: displayRoute,
     routeError: routeError ?? geoError,
     navigating,
     voiceEnabled,
