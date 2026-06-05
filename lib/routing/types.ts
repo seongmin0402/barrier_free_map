@@ -100,4 +100,7 @@ export interface ComputedRoute {
   distance: number;
   steps: RouteStep[];
   hasStairs: boolean;
+  hasCrosswalk: boolean;
+  /** coords[i] → coords[i+1] 구간의 종류 (length = coords.length - 1) */
+  segmentTypes: WalkwayType[];
 }

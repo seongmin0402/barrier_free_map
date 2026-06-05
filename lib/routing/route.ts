@@ -280,7 +280,9 @@ export function computeRoute(
   }
 
   const steps = buildSteps(coords, fullSegs);
+  const segmentTypes = fullSegs.map((s) => s.type);
   const hasStairs = segs.some((s) => s.type === "stairs");
+  const hasCrosswalk = segs.some((s) => s.type === "crosswalk");
 
-  return { coords, distance, steps, hasStairs };
+  return { coords, distance, steps, hasStairs, hasCrosswalk, segmentTypes };
 }

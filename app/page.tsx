@@ -178,6 +178,7 @@ export default function BarrierFreeMapPage() {
             onBuildingSelect={handleBuildingSelect}
             showFacilityPins={filters.length > 0}
             routeLine={nav.route?.coords ?? null}
+            routeSegments={nav.route?.segmentTypes ?? null}
             originPoint={nav.origin?.point ?? null}
             destPoint={nav.destination?.point ?? null}
             liveUserPosition={nav.navigating ? nav.userPos : null}
@@ -190,7 +191,7 @@ export default function BarrierFreeMapPage() {
             <Button
               type="button"
               onClick={() => nav.setOpen(true)}
-              className="absolute left-4 top-4 z-20 gap-1.5 shadow-lg"
+              className="absolute right-4 top-4 z-20 gap-1.5 shadow-lg"
             >
               <Navigation className="h-4 w-4" />
               길찾기

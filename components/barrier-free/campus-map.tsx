@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { BarrierBuilding } from "@/lib/building-types";
 import type { LatLng } from "@/lib/routing/geo";
+import { segmentColor } from "@/lib/routing/style";
 import {
   footprintPolygonPathGroups,
   footprintStrokeOptions,
@@ -30,6 +31,8 @@ interface CampusMapProps {
   showFacilityPins?: boolean;
   /** 길찾기 경로 좌표열 */
   routeLine?: LatLng[] | null;
+  /** 경로 각 구간 종류 (routeLine 길이 - 1), 종류별 색상 표시용 */
+  routeSegments?: string[] | null;
   originPoint?: LatLng | null;
   destPoint?: LatLng | null;
   /** 실시간 GPS 위치 (네비게이션 중) */
@@ -188,6 +191,7 @@ export function CampusMap({
   onBuildingSelect,
   showFacilityPins = false,
   routeLine = null,
+  routeSegments = null,
   originPoint = null,
   destPoint = null,
   liveUserPosition = null,
@@ -617,7 +621,7 @@ export function CampusMap({
 
     if (routeLine && routeLine.length >= 2 && PolylineCtor) {
       const path = routeLine.map((p) => new LatLngCtor(p.lat, p.lng));
-      // 흰색 외곽선 + 파란 본선 (가독성)
+      // 흰색 외곽선 (가독성)
       const outline = new PolylineCtor({
         map,
         path,
@@ -628,17 +632,30 @@ export function CampusMap({
         strokeLineJoin: "round",
         zIndex: 300,
       });
-      const main = new PolylineCtor({
-        map,
-        path,
-        strokeColor: "#2563eb",
-        strokeOpacity: 0.95,
-        strokeWeight: 6,
-        strokeLineCap: "round",
-        strokeLineJoin: "round",
-        zIndex: 301,
-      });
-      routePolylineRef.current.push(outline, main);
+      routePolylineRef.current.push(outline);
+
+      // 구간 종류별 색상으로 본선을 나눠 그림 (횡단보도/계단/경사로 구분)
+      const colorAt = (i: number) => segmentColor(routeSegments?.[i] ?? "path");
+      let start = 0;
+      for (let i = 0; i < path.length - 1; i++) {
+        const isLast = i === path.length - 2;
+        const colorChanges = !isLast && colorAt(i + 1) !== colorAt(i);
+        if (isLast || colorChanges) {
+          const groupPath = path.slice(start, i + 2);
+          const seg = new PolylineCtor({
+            map,
+            path: groupPath,
+            strokeColor: colorAt(start),
+            strokeOpacity: 0.95,
+            strokeWeight: 6,
+            strokeLineCap: "round",
+            strokeLineJoin: "round",
+            zIndex: 301,
+          });
+          routePolylineRef.current.push(seg);
+          start = i + 1;
+        }
+      }
     }
 
     if (MarkerCtor && PointCtor) {
@@ -680,7 +697,7 @@ export function CampusMap({
       });
       routeMarkersRef.current = [];
     };
-  }, [sdkLoaded, mapReadyEpoch, routeLine, originPoint, destPoint]);
+  }, [sdkLoaded, mapReadyEpoch, routeLine, routeSegments, originPoint, destPoint]);
 
   /** 경로가 생기면 전체가 보이도록 맞춤 (네비게이션 추적 중에는 제외) */
   useEffect(() => {

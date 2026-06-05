@@ -23,6 +23,7 @@ import {
 import { Button } from "@/components/ui/button";
 import type { BarrierBuilding } from "@/lib/building-types";
 import { formatDistance } from "@/lib/routing/geo";
+import { ROUTE_LEGEND } from "@/lib/routing/style";
 import type { ComputedRoute, ManeuverKind, RoutePoint, RouteStep } from "@/lib/routing/types";
 
 type WhichPoint = "origin" | "destination";
@@ -304,6 +305,21 @@ export function RoutePanel(props: RoutePanelProps) {
                 보행로 기반
               </div>
             </div>
+            {/* 색상 범례 — 경로에 실제 등장하는 종류만 표시 */}
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+              {ROUTE_LEGEND.filter(
+                (l) => l.type === "path" || route.segmentTypes.includes(l.type),
+              ).map((l) => (
+                <span key={l.type} className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <span
+                    className="inline-block h-1 w-4 rounded-full"
+                    style={{ backgroundColor: l.color }}
+                  />
+                  {l.label}
+                </span>
+              ))}
+            </div>
+
             {route.hasStairs && (
               <div className="mt-2 flex items-center gap-1.5 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
                 <TriangleAlert className="h-3.5 w-3.5" />
