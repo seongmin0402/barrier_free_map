@@ -726,33 +726,32 @@ export function CampusMap({
     };
   }, [sdkLoaded, mapReadyEpoch, routeLine, routeSegments, originPoint, destPoint]);
 
-  /** 경로가 생기면 전체가 보이도록 맞춤 (네비게이션 추적 중에는 제외) */
+  /** 경로가 생기면 줌은 그대로 두고 경로 중심으로만 이동 (확대하지 않음) */
   useEffect(() => {
     if (!sdkLoaded || followUser) return;
     if (!routeLine || routeLine.length < 2) return;
     const maps = window.naver?.maps as NMaps | undefined;
-    const map = mapInstanceRef.current as undefined | { fitBounds?: (b: unknown, o?: unknown) => void };
-    if (!maps?.LatLng || !maps.LatLngBounds || !map?.fitBounds) return;
+    const map = mapInstanceRef.current as undefined | {
+      panTo?: (ll: unknown, o?: unknown) => void;
+      setCenter?: (ll: unknown) => void;
+    };
+    if (!maps?.LatLng || !map) return;
     const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
-    const BoundsCtor = maps.LatLngBounds as unknown as new () => { extend(ll: unknown): void };
     try {
-      const bounds = new BoundsCtor();
-      for (const p of routeLine) bounds.extend(new LatLngCtor(p.lat, p.lng));
-      // 데스크톱은 좌측 패널만큼 여백. 화면을 크게 움직이지 않고 살짝 멀리서 보이게 한다.
-      const isMobile =
-        typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches;
-      const margin = isMobile
-        ? { top: 64, right: 40, bottom: 64, left: 40 }
-        : { top: 70, right: 70, bottom: 70, left: 380 };
-      // 출발/도착 선택 시 화면을 확대하지 않는다.
-      // 현재 줌보다 더 당기지 않고, 경로가 화면 밖으로 클 때만 멀리서(줌아웃) 보여준다.
-      const m = map as unknown as { getZoom?: () => number; setZoom?: (z: number) => void };
-      const prevZoom = m.getZoom?.() ?? 16;
-      map.fitBounds(bounds, margin);
-      requestAnimationFrame(() => {
-        const fitZoom = m.getZoom?.();
-        if (fitZoom != null && m.setZoom) m.setZoom(Math.min(fitZoom, prevZoom, 16));
-      });
+      // 경로 좌표의 중심점을 계산 (줌 변경 없이 이 지점으로만 살짝 이동)
+      let minLat = Infinity;
+      let maxLat = -Infinity;
+      let minLng = Infinity;
+      let maxLng = -Infinity;
+      for (const p of routeLine) {
+        if (p.lat < minLat) minLat = p.lat;
+        if (p.lat > maxLat) maxLat = p.lat;
+        if (p.lng < minLng) minLng = p.lng;
+        if (p.lng > maxLng) maxLng = p.lng;
+      }
+      const center = new LatLngCtor((minLat + maxLat) / 2, (minLng + maxLng) / 2);
+      if (map.panTo) map.panTo(center, { duration: 300 });
+      else map.setCenter?.(center);
     } catch {
       /* ignore */
     }
