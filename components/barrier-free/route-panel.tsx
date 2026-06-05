@@ -28,7 +28,9 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAppSettings } from "@/components/app-settings-provider";
 import type { BarrierBuilding } from "@/lib/building-types";
+import { remainingDistanceLabel } from "@/lib/i18n/navigation";
 import { formatDistance } from "@/lib/routing/geo";
 import { ROUTE_LEGEND } from "@/lib/routing/style";
 import type { ComputedRoute, ManeuverKind, RoutePoint, RouteStep } from "@/lib/routing/types";
@@ -245,7 +247,7 @@ export function RoutePanel(props: RoutePanelProps) {
     onToggleVoice,
   } = props;
 
-  // 모바일 하단 시트 높이(vh). 데스크톱에서는 무시됨.
+  const { locale } = useAppSettings();
   const SNAP_PEEK = 32;
   const SNAP_HALF = 54;
   const SNAP_FULL = 86;
@@ -420,7 +422,8 @@ export function RoutePanel(props: RoutePanelProps) {
                   <span className="ml-1 text-sm font-medium text-muted-foreground">분</span>
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  총 {formatDistance(route.distance)} · 도보
+                  {locale === "en" ? "Total" : "총"} {formatDistance(route.distance, locale)} ·{" "}
+                  {locale === "en" ? "Walking" : "도보"}
                 </p>
               </div>
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -481,7 +484,7 @@ export function RoutePanel(props: RoutePanelProps) {
 
             {navigating && remaining != null && (
               <p className="mt-2 text-center text-xs text-muted-foreground">
-                남은 거리 {formatDistance(remaining)}
+                {remainingDistanceLabel(locale)} {formatDistance(remaining, locale)}
               </p>
             )}
           </div>

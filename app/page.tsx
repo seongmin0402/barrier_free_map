@@ -7,17 +7,11 @@ import { CampusMap } from "@/components/barrier-free/campus-map";
 import { BuildingDetail } from "@/components/barrier-free/building-detail";
 import { SettingsPanel } from "@/components/barrier-free/settings-panel";
 import { MobileSidebarToggle } from "@/components/barrier-free/mobile-sidebar-toggle";
+import { useAppSettings } from "@/components/app-settings-provider";
 import { Button } from "@/components/ui/button";
 import { Navigation } from "lucide-react";
 import Link from "next/link";
 import type { BarrierBuilding } from "@/lib/building-types";
-
-const SETTINGS_STORAGE_KEY = "barrier-free-map-settings";
-
-type BarrierMapSettings = {
-  highContrast: boolean;
-  fontSize: number;
-};
 
 const facilitySearchTerms: Record<string, string[]> = {
   elevator: ["elevator", "엘리베이터", "승강기"],
@@ -27,28 +21,8 @@ const facilitySearchTerms: Record<string, string[]> = {
   "auto-door": ["auto-door", "자동문", "자동 문"],
 };
 
-function loadSettingsFromStorage(): BarrierMapSettings {
-  if (typeof window === "undefined") {
-    return { highContrast: false, fontSize: 100 };
-  }
-  try {
-    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
-    if (!raw) return { highContrast: false, fontSize: 100 };
-    const p = JSON.parse(raw) as Partial<BarrierMapSettings>;
-    const fontSize =
-      typeof p.fontSize === "number" && Number.isFinite(p.fontSize)
-        ? Math.min(150, Math.max(80, Math.round(p.fontSize / 10) * 10))
-        : 100;
-    return {
-      highContrast: typeof p.highContrast === "boolean" ? p.highContrast : false,
-      fontSize,
-    };
-  } catch {
-    return { highContrast: false, fontSize: 100 };
-  }
-}
-
 export default function BarrierFreeMapPage() {
+  const { settings, updateSettings } = useAppSettings();
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState<string[]>([]);
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null);
@@ -56,23 +30,7 @@ export default function BarrierFreeMapPage() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [buildings, setBuildings] = useState<BarrierBuilding[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [settings, setSettingsState] = useState<BarrierMapSettings>({
-    highContrast: false,
-    fontSize: 100,
-  });
 
-  useEffect(() => {
-    setSettingsState(loadSettingsFromStorage());
-  }, []);
-
-  const updateSettings = useCallback((next: BarrierMapSettings) => {
-    setSettingsState(next);
-    try {
-      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      /* ignore quota / private mode */
-    }
-  }, []);
   useEffect(() => {
     let cancelled = false;
     fetch("/data/buildings.json")

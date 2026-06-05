@@ -1,6 +1,8 @@
 "use client";
 
-/** 클로바 보이스 TTS 재생기 — 동시 재생 방지 큐 */
+import type { AppLocale } from "@/lib/app-settings";
+
+/** Google Cloud TTS 재생기 — 동시 재생 방지 */
 export class SpeechGuide {
   private audio: HTMLAudioElement | null = null;
   private lastText = "";
@@ -24,7 +26,7 @@ export class SpeechGuide {
   }
 
   /** 같은 문구가 짧은 시간 안에 반복되면 무시 */
-  speak(text: string, opts?: { force?: boolean }) {
+  speak(text: string, opts?: { force?: boolean; locale?: AppLocale }) {
     if (!this.enabled || typeof window === "undefined") return;
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -34,7 +36,8 @@ export class SpeechGuide {
     this.lastAt = now;
 
     this.stop();
-    const url = `/api/tts?text=${encodeURIComponent(trimmed)}`;
+    const lang = opts?.locale ?? "ko";
+    const url = `/api/tts?text=${encodeURIComponent(trimmed)}&lang=${lang}`;
     const audio = new Audio(url);
     this.audio = audio;
     audio.play().catch(() => {

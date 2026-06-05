@@ -1,26 +1,29 @@
 "use client";
 
-import { X, Moon, Sun, Type } from "lucide-react";
+import { X, Moon, Sun, Type, Languages } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
+import type { AppLocale, AppSettings } from "@/lib/app-settings";
+import { cn } from "@/lib/utils";
 
 interface SettingsPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  settings: {
-    highContrast: boolean;
-    fontSize: number;
-  };
-  onSettingsChange: (settings: {
-    highContrast: boolean;
-    fontSize: number;
-  }) => void;
+  settings: AppSettings;
+  onSettingsChange: (settings: AppSettings) => void;
 }
+
+const LOCALE_OPTIONS: Array<{ value: AppLocale; labelKo: string; labelEn: string }> = [
+  { value: "ko", labelKo: "한국어", labelEn: "Korean" },
+  { value: "en", labelKo: "English", labelEn: "English" },
+];
 
 export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange }: SettingsPanelProps) {
   if (!isOpen) return null;
+
+  const isEn = settings.locale === "en";
 
   return (
     <>
@@ -33,7 +36,9 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange }: S
       {/* 패널 */}
       <div className="fixed right-0 top-0 h-full w-full max-w-sm bg-card border-l border-border shadow-xl z-50 animate-in slide-in-from-right duration-300">
         <div className="flex items-center justify-between p-4 border-b border-border">
-          <h2 className="text-lg font-bold text-foreground">접근성 설정</h2>
+          <h2 className="text-lg font-bold text-foreground">
+            {isEn ? "Accessibility Settings" : "접근성 설정"}
+          </h2>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="w-5 h-5" />
             <span className="sr-only">닫기</span>
@@ -41,6 +46,40 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange }: S
         </div>
 
         <div className="p-4 space-y-6">
+          {/* 언어 — 길안내·음성 안내 언어 */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-secondary">
+                <Languages className="w-5 h-5 text-foreground" />
+              </div>
+              <div>
+                <Label className="text-sm font-medium">{isEn ? "Language" : "언어"}</Label>
+                <p className="text-xs text-muted-foreground">
+                  {isEn
+                    ? "Route guidance and voice navigation language"
+                    : "길안내 문장 및 음성 안내 언어"}
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 pl-13">
+              {LOCALE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => onSettingsChange({ ...settings, locale: opt.value })}
+                  className={cn(
+                    "rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+                    settings.locale === opt.value
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-background text-foreground hover:bg-accent",
+                  )}
+                >
+                  {isEn ? opt.labelEn : opt.labelKo}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* 고대비 모드 */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -53,10 +92,10 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange }: S
               </div>
               <div>
                 <Label htmlFor="high-contrast" className="text-sm font-medium">
-                  고대비 모드
+                  {isEn ? "High contrast" : "고대비 모드"}
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  시각적 대비를 높여 가독성 향상
+                  {isEn ? "Increase visual contrast for readability" : "시각적 대비를 높여 가독성 향상"}
                 </p>
               </div>
             </div>
@@ -76,14 +115,14 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange }: S
                 <Type className="w-5 h-5 text-foreground" />
               </div>
               <div>
-                <Label className="text-sm font-medium">글꼴 크기</Label>
+                <Label className="text-sm font-medium">{isEn ? "Font size" : "글꼴 크기"}</Label>
                 <p className="text-xs text-muted-foreground">
-                  텍스트 크기 조절 ({settings.fontSize}%)
+                  {isEn ? `Adjust text size (${settings.fontSize}%)` : `텍스트 크기 조절 (${settings.fontSize}%)`}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-4 pl-13">
-              <span className="text-xs text-muted-foreground w-6">작게</span>
+              <span className="text-xs text-muted-foreground w-6">{isEn ? "Sm" : "작게"}</span>
               <Slider
                 value={[settings.fontSize]}
                 onValueChange={([value]) =>
@@ -95,20 +134,24 @@ export function SettingsPanel({ isOpen, onClose, settings, onSettingsChange }: S
                 className="flex-1"
                 aria-label="글꼴 크기 조절"
               />
-              <span className="text-xs text-muted-foreground w-6">크게</span>
+              <span className="text-xs text-muted-foreground w-6">{isEn ? "Lg" : "크게"}</span>
             </div>
             <div 
               className="p-3 rounded-lg bg-secondary text-center"
               style={{ fontSize: `${settings.fontSize}%` }}
             >
-              <p className="text-foreground">미리보기 텍스트입니다</p>
+              <p className="text-foreground">
+                {isEn ? "Preview text sample" : "미리보기 텍스트입니다"}
+              </p>
             </div>
           </div>
 
           {/* 안내 메시지 */}
           <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
             <p className="text-sm text-foreground">
-              설정은 자동으로 저장되며, 다음 방문 시에도 유지됩니다.
+              {isEn
+                ? "Settings are saved automatically and kept on your next visit."
+                : "설정은 자동으로 저장되며, 다음 방문 시에도 유지됩니다."}
             </p>
           </div>
         </div>

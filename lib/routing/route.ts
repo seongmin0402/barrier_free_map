@@ -6,6 +6,16 @@ import {
   type LatLng,
 } from "./geo";
 import { nearestNode } from "./graph";
+import type { AppLocale } from "@/lib/app-settings";
+import {
+  aheadTurnText,
+  arriveMessage,
+  continueStraightPlaceholder,
+  departStraightText,
+  hazardText,
+  maneuverLabel,
+  turnThenContinueText,
+} from "@/lib/i18n/navigation";
 import type {
   ComputedRoute,
   GraphEdge,
@@ -89,17 +99,8 @@ function edgeTypeBetween(graph: WalkwayGraph, from: string, to: string): Walkway
   return e?.type ?? "path";
 }
 
-function hazardFor(type: WalkwayType): string | null {
-  switch (type) {
-    case "stairs":
-      return "계단이 있습니다";
-    case "crosswalk":
-      return "횡단보도를 건너세요";
-    case "ramp":
-      return "경사로가 있습니다";
-    default:
-      return null;
-  }
+function hazardFor(type: WalkwayType, locale: AppLocale): string | null {
+  return hazardText(type, locale);
 }
 
 function maneuverFromDelta(delta: number): ManeuverKind {
@@ -110,43 +111,21 @@ function maneuverFromDelta(delta: number): ManeuverKind {
   return delta > 0 ? "right" : "left";
 }
 
-function maneuverLabel(maneuver: ManeuverKind): string {
-  switch (maneuver) {
-    case "left":
-      return "좌회전";
-    case "slight-left":
-      return "왼쪽 방향";
-    case "right":
-      return "우회전";
-    case "slight-right":
-      return "오른쪽 방향";
-    case "uturn":
-      return "유턴";
-    case "straight":
-      return "직진";
-    case "arrive":
-      return "도착";
-    default:
-      return "출발";
-  }
-}
-
 /**
  * 좌표열 + 구간 type으로 턴바이턴 안내 생성.
  * coords[i]→coords[i+1] 의 type은 segs[i].
  */
-function buildSteps(coords: LatLng[], segs: SegmentInfo[]): RouteStep[] {
+function buildSteps(coords: LatLng[], segs: SegmentInfo[], locale: AppLocale): RouteStep[] {
   const steps: RouteStep[] = [];
   if (coords.length < 2) return steps;
 
   // 누적 직진 거리 단위로 단계 묶기
   let pendingDist = 0;
   let pendingType: WalkwayType = segs[0]?.type ?? "path";
-  let pendingHazard: string | null = hazardFor(pendingType);
+  let pendingHazard: string | null = hazardFor(pendingType, locale);
 
-  // 출발
   steps.push({
-    text: "경로를 따라 직진하세요",
+    text: continueStraightPlaceholder(locale),
     distance: 0,
     at: coords[0],
     maneuver: "depart",
@@ -158,7 +137,7 @@ function buildSteps(coords: LatLng[], segs: SegmentInfo[]): RouteStep[] {
     const segLen = haversineMeters(coords[i], coords[i + 1]);
     const segType = segs[i]?.type ?? "path";
     pendingDist += segLen;
-    if (hazardFor(segType)) pendingHazard = hazardFor(segType);
+    if (hazardFor(segType, locale)) pendingHazard = hazardFor(segType, locale);
 
     // 다음 꼭짓점에서의 회전 판단
     const isLastVertex = i + 1 >= coords.length - 1;
@@ -168,7 +147,7 @@ function buildSteps(coords: LatLng[], segs: SegmentInfo[]): RouteStep[] {
       last.distance += pendingDist;
       if (pendingHazard && !last.hazard) last.hazard = pendingHazard;
       steps.push({
-        text: "목적지에 도착했습니다",
+        text: arriveMessage(locale),
         distance: 0,
         at: coords[coords.length - 1],
         maneuver: "arrive",
@@ -196,9 +175,9 @@ function buildSteps(coords: LatLng[], segs: SegmentInfo[]): RouteStep[] {
     if (pendingHazard && !last.hazard) last.hazard = pendingHazard;
 
     const turnPoint = coords[i + 1];
-    const label = maneuverLabel(maneuver);
+    const label = maneuverLabel(maneuver, locale);
     steps.push({
-      text: `${label} 후 계속 이동`,
+      text: turnThenContinueText(label, locale),
       distance: 0,
       at: turnPoint,
       maneuver,
@@ -212,16 +191,17 @@ function buildSteps(coords: LatLng[], segs: SegmentInfo[]): RouteStep[] {
 
   // 안내 문구에 거리 부여
   for (const step of steps) {
+    const dist = formatDistance(step.distance, locale);
     if (step.maneuver === "depart") {
-      step.text = `경로를 따라 ${formatDistance(step.distance)} 직진하세요`;
+      step.text = departStraightText(dist, locale);
     } else if (step.maneuver === "arrive") {
-      step.text = "목적지에 도착했습니다";
+      step.text = arriveMessage(locale);
     } else {
-      const label = maneuverLabel(step.maneuver);
-      step.text = `${formatDistance(step.distance)} 앞에서 ${label}`;
+      const label = maneuverLabel(step.maneuver, locale);
+      step.text = aheadTurnText(dist, label, locale);
     }
     if (step.hazard) {
-      step.text += ` (${step.hazard})`;
+      step.text += locale === "en" ? ` (${step.hazard})` : ` (${step.hazard})`;
     }
   }
 
@@ -236,6 +216,7 @@ export function computeRoute(
   graph: WalkwayGraph,
   from: LatLng,
   to: LatLng,
+  locale: AppLocale = "ko",
 ): ComputedRoute | null {
   if (!graph.nodes.size) return null;
   const startSnap = nearestNode(graph, from);
@@ -279,7 +260,7 @@ export function computeRoute(
     distance += haversineMeters(coords[i], coords[i + 1]);
   }
 
-  const steps = buildSteps(coords, fullSegs);
+  const steps = buildSteps(coords, fullSegs, locale);
   const segmentTypes = fullSegs.map((s) => s.type);
   const hasStairs = segs.some((s) => s.type === "stairs");
   const hasCrosswalk = segs.some((s) => s.type === "crosswalk");

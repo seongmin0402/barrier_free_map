@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAppSettings } from "@/components/app-settings-provider";
 import type { BarrierBuilding } from "@/lib/building-types";
+import { arriveMessage, navSpeechText } from "@/lib/i18n/navigation";
 import type { LatLng } from "@/lib/routing/geo";
 import { formatDistance } from "@/lib/routing/geo";
 import {
@@ -24,6 +26,7 @@ import type {
 type WhichPoint = "origin" | "destination";
 
 export function useNavigation(buildings: BarrierBuilding[]) {
+  const { locale } = useAppSettings();
   const [open, setOpen] = useState(false);
   const [walkways, setWalkways] = useState<FeatureCollection<WalkwayFeature> | null>(null);
   const [entranceList, setEntranceList] = useState<BuildingEntrance[]>([]);
@@ -72,8 +75,8 @@ export function useNavigation(buildings: BarrierBuilding[]) {
 
   const route: ComputedRoute | null = useMemo(() => {
     if (!origin || !destination || !graph.nodes.size) return null;
-    return computeRoute(graph, origin.point, destination.point);
-  }, [graph, origin, destination]);
+    return computeRoute(graph, origin.point, destination.point, locale);
+  }, [graph, origin, destination, locale]);
 
   const routeError = useMemo(() => {
     if (!origin || !destination) return null;
@@ -191,7 +194,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
 
     // 시작 안내
     if (route.steps[0]) {
-      getSpeechGuide().speak(route.steps[0].text, { force: true });
+      getSpeechGuide().speak(route.steps[0].text, { force: true, locale });
       lastSpokenStepRef.current = 0;
     }
 
@@ -207,7 +210,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       },
       { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 },
     );
-  }, [route]);
+  }, [route, locale]);
 
   // GPS 갱신 → 진행 상황 계산 + 음성 안내
   useEffect(() => {
@@ -225,19 +228,22 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     if (progress.stepIndex !== lastSpokenStepRef.current) {
       lastSpokenStepRef.current = progress.stepIndex;
       if (step.maneuver === "arrive") {
-        getSpeechGuide().speak("목적지에 도착했습니다", { force: true });
+        getSpeechGuide().speak(arriveMessage(locale), { force: true, locale });
       } else {
-        const dist = formatDistance(progress.distanceToNext);
-        getSpeechGuide().speak(`${dist} 앞 ${step.text.replace(/^.*앞에서\s*/, "")}`);
+        const distLabel = formatDistance(progress.distanceToNext, locale);
+        getSpeechGuide().speak(
+          navSpeechText(locale, progress.distanceToNext, distLabel, step.maneuver),
+          { force: true, locale },
+        );
       }
     }
 
     // 도착 처리
     if (progress.remaining < 8) {
-      getSpeechGuide().speak("목적지에 도착했습니다", { force: true });
+      getSpeechGuide().speak(arriveMessage(locale), { force: true, locale });
       stopNav();
     }
-  }, [navigating, route, userPos, stopNav]);
+  }, [navigating, route, userPos, stopNav, locale]);
 
   // 패널 닫으면 정리
   const close = useCallback(() => {

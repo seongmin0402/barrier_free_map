@@ -47,10 +47,16 @@ export function angleDelta(fromBearing: number, toBearing: number): number {
 }
 
 /** 거리(m)를 사람이 읽기 좋은 문자열로 */
-export function formatDistance(meters: number): string {
-  if (meters < 1) return "0m";
-  if (meters < 1000) return `${Math.round(meters)}m`;
-  return `${(meters / 1000).toFixed(meters < 10000 ? 1 : 0)}km`;
+export function formatDistance(meters: number, locale: "ko" | "en" = "ko"): string {
+  if (meters < 1) return locale === "en" ? "0 m" : "0m";
+  if (meters < 1000) {
+    const n = Math.round(meters);
+    return locale === "en" ? `${n} m` : `${n}m`;
+  }
+  const km = meters / 1000;
+  const formatted =
+    km < 10 ? km.toFixed(1) : km.toFixed(0);
+  return locale === "en" ? `${formatted} km` : `${formatted}km`;
 }
 
 /**

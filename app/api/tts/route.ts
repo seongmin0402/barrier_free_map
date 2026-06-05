@@ -4,13 +4,16 @@ export const runtime = "nodejs";
 
 const GOOGLE_TTS_URL = "https://texttospeech.googleapis.com/v1/text:synthesize";
 
-/** 한국어 / 여성 보이스 (Google Cloud Text-to-Speech) */
-const DEFAULT_VOICE = "ko-KR-Neural2-A";
-const LANGUAGE_CODE = "ko-KR";
+const VOICES: Record<string, { languageCode: string; name: string }> = {
+  ko: { languageCode: "ko-KR", name: "ko-KR-Neural2-A" },
+  en: { languageCode: "en-US", name: "en-US-Neural2-F" },
+};
 
 export async function GET(req: NextRequest) {
   const text = req.nextUrl.searchParams.get("text")?.trim();
-  const voiceName = req.nextUrl.searchParams.get("voice")?.trim() || DEFAULT_VOICE;
+  const lang = req.nextUrl.searchParams.get("lang")?.trim() || "ko";
+  const voiceConfig = VOICES[lang] ?? VOICES.ko;
+  const voiceName = req.nextUrl.searchParams.get("voice")?.trim() || voiceConfig.name;
 
   if (!text) {
     return new Response(JSON.stringify({ error: "text 파라미터가 필요합니다." }), {
@@ -32,7 +35,7 @@ export async function GET(req: NextRequest) {
   const body = {
     input: { text },
     voice: {
-      languageCode: LANGUAGE_CODE,
+      languageCode: voiceConfig.languageCode,
       name: voiceName,
       ssmlGender: "FEMALE",
     },

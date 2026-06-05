@@ -3,14 +3,17 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Navigation } from "lucide-react";
+import { useAppSettings } from "@/components/app-settings-provider";
 import { CampusMap } from "@/components/barrier-free/campus-map";
 import { RoutePanel } from "@/components/barrier-free/route-panel";
 import { useNavigation } from "@/hooks/use-navigation";
+import { arriveMessage, maneuverLabel, remainingDistanceLabel } from "@/lib/i18n/navigation";
 import { formatDistance } from "@/lib/routing/geo";
 import type { BarrierBuilding } from "@/lib/building-types";
 
 export default function RoutePage() {
   const router = useRouter();
+  const { locale } = useAppSettings();
   const [buildings, setBuildings] = useState<BarrierBuilding[]>([]);
 
   useEffect(() => {
@@ -43,7 +46,11 @@ export default function RoutePage() {
 
   const currentStep = nav.route?.steps[nav.currentStepIndex] ?? null;
   const isArrive = currentStep?.maneuver === "arrive";
-  const stepLabel = currentStep ? currentStep.text.replace(/^.*?앞에서\s*/, "") : "";
+  const stepLabel = currentStep
+    ? currentStep.maneuver === "depart" || currentStep.maneuver === "arrive"
+      ? currentStep.text
+      : maneuverLabel(currentStep.maneuver, locale)
+    : "";
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
@@ -55,18 +62,18 @@ export default function RoutePage() {
               <Navigation className="mt-0.5 h-6 w-6 shrink-0" />
               <div className="min-w-0">
                 {isArrive ? (
-                  <p className="text-lg font-bold leading-tight">목적지에 도착했습니다</p>
+                  <p className="text-lg font-bold leading-tight">{arriveMessage(locale)}</p>
                 ) : (
                   <>
                     <p className="text-2xl font-extrabold leading-none">
-                      {formatDistance(nav.distanceToNext ?? 0)}
+                      {formatDistance(nav.distanceToNext ?? 0, locale)}
                     </p>
                     <p className="mt-1 truncate text-sm font-medium leading-snug">{stepLabel}</p>
                   </>
                 )}
                 {nav.remaining != null && !isArrive && (
                   <p className="mt-1 text-xs text-blue-100">
-                    남은 거리 {formatDistance(nav.remaining)}
+                    {remainingDistanceLabel(locale)} {formatDistance(nav.remaining, locale)}
                   </p>
                 )}
               </div>

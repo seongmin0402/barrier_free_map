@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+import { AppSettingsProvider } from '@/components/app-settings-provider'
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
@@ -95,7 +96,7 @@ export default function RootLayout({
   return (
     <html lang="ko" className="bg-background">
       <body className="font-sans antialiased">
-        {children}
+        <AppSettingsProvider>{children}</AppSettingsProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
