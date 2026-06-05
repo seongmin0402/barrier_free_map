@@ -222,21 +222,30 @@ export function RoutePanel(props: RoutePanelProps) {
 
   if (!open) return null;
 
+  // 모바일: 하단 시트 / 데스크톱: 좌측 컬럼. 지도 선택 중에는 시트를 줄여 지도를 탭할 수 있게.
+  const mobileHeight = pickMode ? "max-h-[32vh]" : "max-h-[80vh]";
+
   return (
-    <div className="absolute inset-y-0 left-0 z-30 flex w-[min(92vw,22rem)] flex-col border-r border-border bg-background shadow-xl">
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+    <div
+      className={`absolute inset-x-0 bottom-0 z-30 flex ${mobileHeight} flex-col rounded-t-2xl border-t border-border bg-background shadow-xl transition-[max-height] duration-200 sm:inset-y-0 sm:left-0 sm:right-auto sm:max-h-none sm:w-[22rem] sm:rounded-none sm:border-r sm:border-t-0`}
+    >
+      {/* 모바일 드래그 핸들 */}
+      <div className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-muted sm:hidden" />
+
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2.5 sm:py-3">
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+          aria-label="지도로 돌아가기"
+        >
+          <ArrowLeft className="h-5 w-5" />
+          <span>뒤로</span>
+        </button>
         <div className="flex items-center gap-2">
           <Navigation className="h-5 w-5 text-blue-600" />
           <h2 className="text-base font-semibold">길찾기</h2>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-          aria-label="길찾기 닫기"
-        >
-          <X className="h-5 w-5" />
-        </button>
       </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto p-3">
