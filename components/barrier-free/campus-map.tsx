@@ -738,19 +738,18 @@ export function CampusMap({
     try {
       const bounds = new BoundsCtor();
       for (const p of routeLine) bounds.extend(new LatLngCtor(p.lat, p.lng));
-      // 모바일: 하단 시트, 데스크톱: 좌측 패널 영역만큼 여백을 줘서 경로가 안 가리게.
-      // 모바일은 화면 절반 높이를 시트 몫으로 비워 경로가 위쪽에 한눈에 보이게 한다.
+      // 데스크톱은 좌측 패널만큼 여백. 화면을 크게 움직이지 않고 살짝 멀리서 보이게 한다.
       const isMobile =
         typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches;
-      const vh = typeof window !== "undefined" ? window.innerHeight : 800;
       const margin = isMobile
-        ? { top: 80, right: 32, bottom: Math.round(vh * 0.5), left: 32 }
+        ? { top: 64, right: 40, bottom: 64, left: 40 }
         : { top: 70, right: 70, bottom: 70, left: 380 };
       map.fitBounds(bounds, margin);
-      // 짧은 경로에서 과도한 확대 방지
+      // 확대(줌인) 대신 한 단계 멀리서 보는 느낌으로 줌 상한을 둔다.
       requestAnimationFrame(() => {
         const m = map as unknown as { getZoom?: () => number; setZoom?: (z: number) => void };
-        if (m.getZoom && m.setZoom && m.getZoom() > 18) m.setZoom(18);
+        const z = m.getZoom?.();
+        if (z != null && m.setZoom) m.setZoom(Math.min(z, 16));
       });
     } catch {
       /* ignore */

@@ -1,14 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   ArrowUp,
   ArrowUpRight,
   ArrowUpLeft,
   ArrowRight,
   ArrowLeft,
-  ChevronUp,
-  ChevronDown,
   RotateCcw,
   MapPin,
   LocateFixed,
@@ -236,41 +241,87 @@ export function RoutePanel(props: RoutePanelProps) {
     onToggleVoice,
   } = props;
 
-  // 모바일 하단 시트 접힘 상태 (데스크톱에서는 무시됨)
-  const [collapsed, setCollapsed] = useState(false);
+  // 모바일 하단 시트 높이(vh). 데스크톱에서는 무시됨.
+  const SNAP_PEEK = 32;
+  const SNAP_HALF = 54;
+  const SNAP_FULL = 86;
+  const [isMobile, setIsMobile] = useState(false);
+  const [sheetVh, setSheetVh] = useState<number>(SNAP_FULL);
+  const [dragging, setDragging] = useState(false);
+  const dragRef = useRef<{ startY: number; startVh: number; moved: boolean } | null>(null);
 
-  // 경로가 생기거나 안내가 시작되면 시트를 접어 지도가 한눈에 보이게
   useEffect(() => {
-    setCollapsed(Boolean(route) || navigating);
-  }, [route, navigating]);
+    const mq = window.matchMedia("(max-width: 639px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  // 상태에 따라 기본 높이 자동 조정 (지도가 보이게 낮춤). 이후 드래그로 자유 조절 가능.
+  useEffect(() => {
+    if (pickMode || navigating) setSheetVh(SNAP_PEEK);
+    else if (route) setSheetVh(SNAP_HALF);
+    else setSheetVh(SNAP_FULL);
+  }, [route, navigating, pickMode]);
+
+  const onHandleDown = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (!isMobile) return;
+      dragRef.current = { startY: e.clientY, startVh: sheetVh, moved: false };
+      setDragging(true);
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+    },
+    [isMobile, sheetVh],
+  );
+
+  const onHandleMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    const d = dragRef.current;
+    if (!d) return;
+    const dyPx = d.startY - e.clientY; // 위로 끌면 +
+    if (Math.abs(dyPx) > 4) d.moved = true;
+    const dyVh = (dyPx / window.innerHeight) * 100;
+    setSheetVh(Math.min(92, Math.max(12, d.startVh + dyVh)));
+  }, []);
+
+  const onHandleUp = useCallback(() => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    setDragging(false);
+    if (!d) return;
+    if (!d.moved) {
+      // 단순 탭: 미리보기 ↔ 전체 토글
+      setSheetVh((v) => (v > SNAP_HALF ? SNAP_PEEK : SNAP_FULL));
+      return;
+    }
+    // 가장 가까운 스냅 지점으로 정렬
+    const points = [SNAP_PEEK, SNAP_HALF, SNAP_FULL];
+    setSheetVh((v) => points.reduce((a, b) => (Math.abs(b - v) < Math.abs(a - v) ? b : a)));
+  }, []);
 
   if (!open) return null;
 
-  // 모바일: 하단 시트 / 데스크톱: 좌측 컬럼.
-  const mobileHeight = pickMode
-    ? "max-h-[30vh]"
-    : collapsed
-      ? "max-h-[46vh]"
-      : "max-h-[82vh]";
-
   return (
     <div
-      className={`absolute inset-x-0 bottom-0 z-30 flex ${mobileHeight} flex-col rounded-t-2xl border-t border-border bg-background shadow-xl transition-[max-height] duration-300 sm:inset-y-0 sm:left-0 sm:right-auto sm:max-h-none sm:w-[22rem] sm:rounded-none sm:border-r sm:border-t-0`}
+      className="absolute inset-x-0 bottom-0 z-30 flex max-h-[92vh] flex-col rounded-t-2xl border-t border-border bg-background shadow-xl sm:inset-y-0 sm:left-0 sm:right-auto sm:h-auto sm:max-h-none sm:w-[22rem] sm:rounded-none sm:border-r sm:border-t-0"
+      style={
+        isMobile
+          ? { height: `${sheetVh}vh`, transition: dragging ? "none" : "height 250ms ease" }
+          : undefined
+      }
     >
-      {/* 모바일 드래그 핸들 — 탭하면 시트 접기/펼치기 */}
-      <button
-        type="button"
-        onClick={() => setCollapsed((v) => !v)}
-        className="flex shrink-0 flex-col items-center gap-0.5 py-2 sm:hidden"
-        aria-label={collapsed ? "길찾기 펼치기" : "길찾기 접기"}
+      {/* 모바일 드래그 핸들 — 손으로 끌어 높이 조절, 탭하면 토글 */}
+      <div
+        onPointerDown={onHandleDown}
+        onPointerMove={onHandleMove}
+        onPointerUp={onHandleUp}
+        onPointerCancel={onHandleUp}
+        className="flex shrink-0 cursor-grab touch-none flex-col items-center justify-center py-3 active:cursor-grabbing sm:hidden"
+        role="separator"
+        aria-label="길찾기 창 높이 조절"
       >
-        <span className="h-1.5 w-10 rounded-full bg-muted" />
-        {collapsed ? (
-          <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
-        ) : (
-          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-        )}
-      </button>
+        <span className="h-1.5 w-12 rounded-full bg-muted-foreground/40" />
+      </div>
 
       <div className="flex items-center gap-2 border-b border-border px-3 py-2.5 sm:py-3">
         <button
