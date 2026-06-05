@@ -37,6 +37,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
   const [userPos, setUserPos] = useState<LatLng | null>(null);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [remaining, setRemaining] = useState<number | null>(null);
+  const [distanceToNext, setDistanceToNext] = useState<number | null>(null);
   const [geoError, setGeoError] = useState<string | null>(null);
 
   const watchIdRef = useRef<number | null>(null);
@@ -174,6 +175,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     }
     getSpeechGuide().stop();
     setRemaining(null);
+    setDistanceToNext(null);
   }, []);
 
   const startNav = useCallback(() => {
@@ -214,6 +216,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     if (!progress) return;
     setCurrentStepIndex(progress.stepIndex);
     setRemaining(progress.remaining);
+    setDistanceToNext(progress.distanceToNext);
 
     const step = route.steps[progress.stepIndex];
     if (!step) return;
@@ -267,6 +270,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     userPos,
     currentStepIndex,
     remaining,
+    distanceToNext,
     // handlers
     selectBuilding,
     startPickOnMap,

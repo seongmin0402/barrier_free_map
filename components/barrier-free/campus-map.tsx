@@ -738,7 +738,18 @@ export function CampusMap({
     try {
       const bounds = new BoundsCtor();
       for (const p of routeLine) bounds.extend(new LatLngCtor(p.lat, p.lng));
-      map.fitBounds(bounds, { padding: 90, maxZoom: 18 });
+      // 모바일: 하단 시트, 데스크톱: 좌측 패널 영역만큼 여백을 줘서 경로가 안 가리게
+      const isMobile =
+        typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches;
+      const margin = isMobile
+        ? { top: 90, right: 36, bottom: 300, left: 36 }
+        : { top: 70, right: 70, bottom: 70, left: 380 };
+      map.fitBounds(bounds, margin);
+      // 짧은 경로에서 과도한 확대 방지
+      requestAnimationFrame(() => {
+        const m = map as unknown as { getZoom?: () => number; setZoom?: (z: number) => void };
+        if (m.getZoom && m.setZoom && m.getZoom() > 18) m.setZoom(18);
+      });
     } catch {
       /* ignore */
     }

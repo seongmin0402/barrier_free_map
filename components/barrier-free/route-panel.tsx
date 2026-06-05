@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowUp,
   ArrowUpRight,
   ArrowUpLeft,
   ArrowRight,
   ArrowLeft,
+  ChevronUp,
+  ChevronDown,
   RotateCcw,
   MapPin,
   LocateFixed,
@@ -70,8 +72,8 @@ function maneuverIcon(maneuver: ManeuverKind) {
   }
 }
 
-/** 접근성을 고려한 여유 보행 속도 (약 0.9 m/s) */
-const WALK_SPEED_MPS = 0.9;
+/** 접근성을 고려한 여유 보행 속도 (약 0.7 m/s) */
+const WALK_SPEED_MPS = 0.7;
 
 function estimateMinutes(route: ComputedRoute): number {
   let seconds = route.distance / WALK_SPEED_MPS;
@@ -234,17 +236,41 @@ export function RoutePanel(props: RoutePanelProps) {
     onToggleVoice,
   } = props;
 
+  // 모바일 하단 시트 접힘 상태 (데스크톱에서는 무시됨)
+  const [collapsed, setCollapsed] = useState(false);
+
+  // 경로가 생기거나 안내가 시작되면 시트를 접어 지도가 한눈에 보이게
+  useEffect(() => {
+    setCollapsed(Boolean(route) || navigating);
+  }, [route, navigating]);
+
   if (!open) return null;
 
-  // 모바일: 하단 시트 / 데스크톱: 좌측 컬럼. 지도 선택 중에는 시트를 줄여 지도를 탭할 수 있게.
-  const mobileHeight = pickMode ? "max-h-[32vh]" : "max-h-[80vh]";
+  // 모바일: 하단 시트 / 데스크톱: 좌측 컬럼.
+  const mobileHeight = pickMode
+    ? "max-h-[30vh]"
+    : collapsed
+      ? "max-h-[46vh]"
+      : "max-h-[82vh]";
 
   return (
     <div
-      className={`absolute inset-x-0 bottom-0 z-30 flex ${mobileHeight} flex-col rounded-t-2xl border-t border-border bg-background shadow-xl transition-[max-height] duration-200 sm:inset-y-0 sm:left-0 sm:right-auto sm:max-h-none sm:w-[22rem] sm:rounded-none sm:border-r sm:border-t-0`}
+      className={`absolute inset-x-0 bottom-0 z-30 flex ${mobileHeight} flex-col rounded-t-2xl border-t border-border bg-background shadow-xl transition-[max-height] duration-300 sm:inset-y-0 sm:left-0 sm:right-auto sm:max-h-none sm:w-[22rem] sm:rounded-none sm:border-r sm:border-t-0`}
     >
-      {/* 모바일 드래그 핸들 */}
-      <div className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-muted sm:hidden" />
+      {/* 모바일 드래그 핸들 — 탭하면 시트 접기/펼치기 */}
+      <button
+        type="button"
+        onClick={() => setCollapsed((v) => !v)}
+        className="flex shrink-0 flex-col items-center gap-0.5 py-2 sm:hidden"
+        aria-label={collapsed ? "길찾기 펼치기" : "길찾기 접기"}
+      >
+        <span className="h-1.5 w-10 rounded-full bg-muted" />
+        {collapsed ? (
+          <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+        ) : (
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+        )}
+      </button>
 
       <div className="flex items-center gap-2 border-b border-border px-3 py-2.5 sm:py-3">
         <button
