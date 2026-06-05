@@ -199,7 +199,7 @@ const ko: UiText = {
   },
   gradeUnsurveyed: "미조사",
   map: {
-    loading: "네이버 지도를 불러오는 중…",
+    loading: "베리어프리맵을 불러오는 중…",
     scriptError: "지도 스크립트를 불러오지 못했습니다.",
     scriptErrorHint:
       "네이버 클라우드에서 이 도메인을 허용했는지, NEXT_PUBLIC_NAVER_MAP_CLIENT_ID가 빌드에 포함됐는지 확인한 뒤 새로고침 해 주세요.",
@@ -380,7 +380,7 @@ const en: UiText = {
   },
   gradeUnsurveyed: "Not surveyed",
   map: {
-    loading: "Loading Naver Map…",
+    loading: "Loading barrier-free map…",
     scriptError: "Failed to load map script.",
     scriptErrorHint:
       "Check that this domain is allowed in Naver Cloud and NEXT_PUBLIC_NAVER_MAP_CLIENT_ID is included in the build, then refresh.",

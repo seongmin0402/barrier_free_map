@@ -65,23 +65,37 @@ export function computeProgress(
     return cum[bi];
   };
 
-  // 현재 위치 이후의 첫 단계
-  let stepIndex = steps.length - 1;
+  // 현재 위치 기준 안내 단계 — 지나지 않은 다음 단계, 기본은 출발(0)
+  let stepIndex = 0;
   for (let i = 0; i < steps.length; i++) {
     const along = stepAlong(steps[i]);
-    if (along > bestAlong + 1) {
+    if (along > bestAlong + 8) {
       stepIndex = i;
       break;
     }
+    stepIndex = i;
   }
 
   const nextAlong = stepAlong(steps[stepIndex]);
   const distanceToNext = Math.max(0, nextAlong - bestAlong);
   const remaining = Math.max(0, total - bestAlong);
 
+  // GPS가 경로 끝에 붙었지만 실제로는 멀리 있는 경우 arrive 단계로 점프하지 않음
+  const arriveIdx = steps.length - 1;
+  if (
+    stepIndex === arriveIdx &&
+    steps[arriveIdx]?.maneuver === "arrive" &&
+    remaining > 25
+  ) {
+    stepIndex = Math.max(0, arriveIdx - 1);
+  }
+
+  const adjustedNextAlong = stepAlong(steps[stepIndex]);
+  const adjustedDistanceToNext = Math.max(0, adjustedNextAlong - bestAlong);
+
   return {
     stepIndex,
-    distanceToNext,
+    distanceToNext: adjustedDistanceToNext,
     remaining,
     offRoute: bestDist,
     snapped: bestSnap,

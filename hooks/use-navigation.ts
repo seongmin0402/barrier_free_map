@@ -6,7 +6,7 @@ import type { BarrierBuilding } from "@/lib/building-types";
 import { arriveMessage, navSpeechText } from "@/lib/i18n/navigation";
 import { getUi } from "@/lib/i18n/ui";
 import type { LatLng } from "@/lib/routing/geo";
-import { formatDistance } from "@/lib/routing/geo";
+import { formatDistance, haversineMeters } from "@/lib/routing/geo";
 import {
   buildWalkwayGraph,
   mainEntranceForBuilding,
@@ -52,6 +52,29 @@ export function useNavigation(buildings: BarrierBuilding[]) {
   const watchIdRef = useRef<number | null>(null);
   const lastSpokenStepRef = useRef<number>(-1);
   const navigationStartedAtRef = useRef<number>(0);
+  const firstGpsFixRef = useRef<LatLng | null>(null);
+
+  /** 목적지까지 실제 거리 + 최소 안내 시간을 만족할 때만 도착 처리 */
+  const hasArrived = useCallback(
+    (activeRoute: ComputedRoute, pos: LatLng, offRoute: number) => {
+      const sinceStartMs = Date.now() - navigationStartedAtRef.current;
+      if (sinceStartMs < 8000) return false;
+
+      const dest = activeRoute.coords[activeRoute.coords.length - 1];
+      const distToDest = haversineMeters(pos, dest);
+      if (distToDest > 22) return false;
+      if (offRoute > 45) return false;
+
+      // 첫 GPS와 거의 같으면 캐시된 좌표로 즉시 도착 처리하지 않음
+      if (firstGpsFixRef.current) {
+        const moved = haversineMeters(firstGpsFixRef.current, pos);
+        if (moved < 8 && sinceStartMs < 15000) return false;
+      }
+
+      return true;
+    },
+    [],
+  );
 
   // 데이터 로드 (패널을 처음 열 때)
   useEffect(() => {
@@ -195,6 +218,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     setRemaining(null);
     setDistanceToNext(null);
     navigationStartedAtRef.current = 0;
+    firstGpsFixRef.current = null;
   }, [clearWatch]);
 
   const startNav = useCallback(() => {
@@ -210,6 +234,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     setGeoError(null);
     setCurrentStepIndex(0);
     lastSpokenStepRef.current = -1;
+    firstGpsFixRef.current = null;
     navigationStartedAtRef.current = Date.now();
     setNavigationRoute(route);
     setNavigating(true);
@@ -218,15 +243,18 @@ export function useNavigation(buildings: BarrierBuilding[]) {
 
     const navLocale = localeRef.current;
 
-    // 시작 안내
-    if (route.steps[0]) {
-      getSpeechGuide().speak(route.steps[0].text, { force: true, locale: navLocale });
-      lastSpokenStepRef.current = 0;
+    // 출발 안내 (depart 단계만 — arrive 문구는 실제 도착 시에만)
+    const departStep = route.steps.find((s) => s.maneuver === "depart") ?? route.steps[0];
+    if (departStep) {
+      getSpeechGuide().speak(departStep.text, { force: true, locale: navLocale });
+      lastSpokenStepRef.current = route.steps.indexOf(departStep);
     }
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
-        setUserPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        const here = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        if (!firstGpsFixRef.current) firstGpsFixRef.current = here;
+        setUserPos(here);
       },
       (err) => {
         const te = getUi(localeRef.current).route.errors;
@@ -234,7 +262,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
         if (err.code === 1) msg = te.geoDenied;
         setGeoError(msg);
       },
-      { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 25000 },
     );
   }, [route, clearWatch]);
 
@@ -254,35 +282,27 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     if (!step) return;
 
     const navLocale = localeRef.current;
-    const sinceStartMs = Date.now() - navigationStartedAtRef.current;
-    const canAutoArrive = sinceStartMs > 4000;
+    const arrived = hasArrived(activeRoute, userPos, progress.offRoute);
 
-    // 새 단계 진입 시 안내
-    if (progress.stepIndex !== lastSpokenStepRef.current) {
+    // 회전·직진 단계만 음성 안내 (도착은 hasArrived일 때 한 번만)
+    if (
+      progress.stepIndex !== lastSpokenStepRef.current &&
+      step.maneuver !== "arrive" &&
+      step.maneuver !== "depart"
+    ) {
       lastSpokenStepRef.current = progress.stepIndex;
-      if (step.maneuver === "arrive") {
-        getSpeechGuide().speak(arriveMessage(navLocale), { force: true, locale: navLocale });
-      } else {
-        const distLabel = formatDistance(progress.distanceToNext, navLocale);
-        getSpeechGuide().speak(
-          navSpeechText(navLocale, progress.distanceToNext, distLabel, step.maneuver),
-          { force: true, locale: navLocale },
-        );
-      }
+      const distLabel = formatDistance(progress.distanceToNext, navLocale);
+      getSpeechGuide().speak(
+        navSpeechText(navLocale, progress.distanceToNext, distLabel, step.maneuver),
+        { force: true, locale: navLocale },
+      );
     }
 
-    // 도착 처리 — 안내 직후 GPS 오차로 즉시 종료되지 않도록 유예 + arrive 단계 확인
-    const atDestination =
-      step.maneuver === "arrive" ||
-      (canAutoArrive &&
-        progress.stepIndex >= activeRoute.steps.length - 1 &&
-        progress.remaining < 12);
-
-    if (atDestination) {
+    if (arrived) {
       getSpeechGuide().speak(arriveMessage(navLocale), { force: true, locale: navLocale });
       stopNav();
     }
-  }, [navigating, navigationRoute, userPos, stopNav]);
+  }, [navigating, navigationRoute, userPos, stopNav, hasArrived]);
 
   // 패널 닫으면 정리
   const close = useCallback(() => {
