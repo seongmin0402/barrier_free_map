@@ -53,6 +53,8 @@ export function useNavigation(buildings: BarrierBuilding[]) {
   const lastSpokenStepRef = useRef<number>(-1);
   const navigationStartedAtRef = useRef<number>(0);
   const firstGpsFixRef = useRef<LatLng | null>(null);
+  /** 출발 안내 직후 GPS 단계 안내 음성과 겹치지 않도록 */
+  const navSpeechBlockedUntilRef = useRef(0);
 
   /** 목적지까지 실제 거리 + 최소 안내 시간을 만족할 때만 도착 처리 */
   const hasArrived = useCallback(
@@ -219,6 +221,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     setDistanceToNext(null);
     navigationStartedAtRef.current = 0;
     firstGpsFixRef.current = null;
+    navSpeechBlockedUntilRef.current = 0;
   }, [clearWatch]);
 
   const startNav = useCallback(() => {
@@ -246,6 +249,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     // 출발 안내 (depart 단계만 — arrive 문구는 실제 도착 시에만)
     const departStep = route.steps.find((s) => s.maneuver === "depart") ?? route.steps[0];
     if (departStep) {
+      navSpeechBlockedUntilRef.current = Date.now() + 5500;
       getSpeechGuide().speak(departStep.text, { force: true, locale: navLocale });
       lastSpokenStepRef.current = route.steps.indexOf(departStep);
     }
@@ -283,9 +287,11 @@ export function useNavigation(buildings: BarrierBuilding[]) {
 
     const navLocale = localeRef.current;
     const arrived = hasArrived(activeRoute, userPos, progress.offRoute);
+    const speechAllowed = Date.now() >= navSpeechBlockedUntilRef.current;
 
     // 회전·직진 단계만 음성 안내 (도착은 hasArrived일 때 한 번만)
     if (
+      speechAllowed &&
       progress.stepIndex !== lastSpokenStepRef.current &&
       step.maneuver !== "arrive" &&
       step.maneuver !== "depart"
@@ -294,7 +300,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       const distLabel = formatDistance(progress.distanceToNext, navLocale);
       getSpeechGuide().speak(
         navSpeechText(navLocale, progress.distanceToNext, distLabel, step.maneuver),
-        { force: true, locale: navLocale },
+        { locale: navLocale },
       );
     }
 
