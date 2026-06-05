@@ -70,9 +70,23 @@ function maneuverIcon(maneuver: ManeuverKind) {
   }
 }
 
-function estimateMinutes(meters: number): number {
-  // 보행 속도 ~1.2 m/s
-  return Math.max(1, Math.round(meters / 1.2 / 60));
+/** 접근성을 고려한 여유 보행 속도 (약 0.9 m/s) */
+const WALK_SPEED_MPS = 0.9;
+
+function estimateMinutes(route: ComputedRoute): number {
+  let seconds = route.distance / WALK_SPEED_MPS;
+  // 횡단보도 대기, 계단/경사로 통과에 따른 추가 시간(여유분)
+  for (const t of route.segmentTypes) {
+    if (t === "crosswalk") seconds += 25;
+    else if (t === "stairs") seconds += 20;
+    else if (t === "ramp") seconds += 8;
+  }
+  // 회전이 많을수록 여유 시간 추가
+  const turns = route.steps.filter(
+    (s) => s.maneuver !== "depart" && s.maneuver !== "arrive" && s.maneuver !== "straight",
+  ).length;
+  seconds += turns * 5;
+  return Math.max(1, Math.ceil(seconds / 60));
 }
 
 function PointField({
@@ -302,7 +316,7 @@ export function RoutePanel(props: RoutePanelProps) {
             <div className="flex items-end justify-between">
               <div>
                 <p className="text-2xl font-bold leading-none">
-                  {estimateMinutes(route.distance)}
+                  약 {estimateMinutes(route)}
                   <span className="ml-1 text-sm font-medium text-muted-foreground">분</span>
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
