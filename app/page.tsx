@@ -176,10 +176,12 @@ export default function BarrierFreeMapPage() {
             showFacilityPins={filters.length > 0}
           />
 
-          <Button asChild className="absolute right-4 top-4 z-20 gap-1.5 shadow-lg">
+          <Button asChild className="absolute right-3 top-3 z-30 gap-1.5 shadow-lg sm:right-4 sm:top-4">
             <Link href="/route">
               <Navigation className="h-4 w-4" />
-              길찾기
+              <span className={selectedBuildingId ? "sr-only sm:not-sr-only" : undefined}>
+                길찾기
+              </span>
             </Link>
           </Button>
 

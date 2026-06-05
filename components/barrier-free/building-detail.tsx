@@ -226,11 +226,12 @@ export function BuildingDetail({ building, onClose }: BuildingDetailProps) {
 
   return (
     <>
-      {/* 요약 카드 — 지도를 덮지 않도록 한쪽에 작게 */}
+      {/* 요약 카드 — 모바일: 하단 좌측(등급 범례·줌 버튼과 겹치지 않게), 데스크톱: 우하단 */}
       <div
         className={cn(
           "animate-in fade-in slide-in-from-bottom-2 absolute z-20 duration-200",
-          "bottom-3 left-3 right-3 sm:left-auto sm:right-4 sm:w-[min(100%,20rem)]",
+          "bottom-[5.5rem] left-3 right-14 max-w-[calc(100%-3.5rem)]",
+          "sm:bottom-3 sm:left-auto sm:right-4 sm:w-[min(100%,20rem)] sm:max-w-none",
         )}
       >
         <div className="rounded-xl border-2 border-primary bg-card/95 p-3 shadow-lg ring-2 ring-primary/30 backdrop-blur-sm">

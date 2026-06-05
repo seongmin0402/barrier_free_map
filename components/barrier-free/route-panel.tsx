@@ -106,6 +106,7 @@ function PointField({
   onPickOnMap,
   onUseCurrentLocation,
   onClear,
+  showDot = true,
 }: {
   which: WhichPoint;
   label: string;
@@ -116,6 +117,7 @@ function PointField({
   onPickOnMap: () => void;
   onUseCurrentLocation: () => void;
   onClear: () => void;
+  showDot?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [openList, setOpenList] = useState(false);
@@ -133,7 +135,9 @@ function PointField({
   return (
     <div className="rounded-lg border border-border bg-card p-3">
       <div className="mb-2 flex items-center gap-2">
-        <span className={`inline-block h-2.5 w-2.5 rounded-full ${dotColor}`} />
+        {showDot ? (
+          <span className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${dotColor}`} />
+        ) : null}
         <span className="text-xs font-medium text-muted-foreground">{label}</span>
         {value && (
           <button
@@ -343,26 +347,26 @@ export function RoutePanel(props: RoutePanelProps) {
         className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 pb-[max(1rem,env(safe-area-inset-bottom))]"
         style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
       >
-        {/* 출발/도착 입력 */}
-        <div className="space-y-2">
-          <PointField
-            which="origin"
-            label="출발지"
-            value={origin}
-            buildings={buildings}
-            pickActive={pickMode === "origin"}
-            onSelectBuilding={(b) => onSelectBuilding("origin", b)}
-            onPickOnMap={() => onPickOnMap("origin")}
-            onUseCurrentLocation={() => onUseCurrentLocation("origin")}
-            onClear={() => onClearPoint("origin")}
-          />
-
-          <div className="flex justify-center">
+        {/* 출발/도착 입력 — 좌측 점·점선으로 구간 연결 */}
+        <div className="flex gap-3">
+          <div className="relative flex w-4 shrink-0 flex-col items-center pt-5 pb-5">
+            <span
+              className="h-3 w-3 shrink-0 rounded-full bg-green-600 ring-2 ring-green-600/25"
+              aria-hidden
+            />
+            <div
+              className="my-1 min-h-6 w-0 flex-1 border-l-2 border-dashed border-muted-foreground/40"
+              aria-hidden
+            />
+            <span
+              className="h-3 w-3 shrink-0 rounded-full bg-red-600 ring-2 ring-red-600/25"
+              aria-hidden
+            />
             <Button
               type="button"
               size="icon"
               variant="outline"
-              className="h-7 w-7 rounded-full"
+              className="absolute left-1/2 top-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full bg-background shadow-sm"
               onClick={onSwap}
               aria-label="출발지와 도착지 교환"
             >
@@ -370,17 +374,33 @@ export function RoutePanel(props: RoutePanelProps) {
             </Button>
           </div>
 
-          <PointField
-            which="destination"
-            label="도착지"
-            value={destination}
-            buildings={buildings}
-            pickActive={pickMode === "destination"}
-            onSelectBuilding={(b) => onSelectBuilding("destination", b)}
-            onPickOnMap={() => onPickOnMap("destination")}
-            onUseCurrentLocation={() => onUseCurrentLocation("destination")}
-            onClear={() => onClearPoint("destination")}
-          />
+          <div className="min-w-0 flex-1 space-y-2">
+            <PointField
+              which="origin"
+              label="출발지"
+              value={origin}
+              buildings={buildings}
+              pickActive={pickMode === "origin"}
+              onSelectBuilding={(b) => onSelectBuilding("origin", b)}
+              onPickOnMap={() => onPickOnMap("origin")}
+              onUseCurrentLocation={() => onUseCurrentLocation("origin")}
+              onClear={() => onClearPoint("origin")}
+              showDot={false}
+            />
+
+            <PointField
+              which="destination"
+              label="도착지"
+              value={destination}
+              buildings={buildings}
+              pickActive={pickMode === "destination"}
+              onSelectBuilding={(b) => onSelectBuilding("destination", b)}
+              onPickOnMap={() => onPickOnMap("destination")}
+              onUseCurrentLocation={() => onUseCurrentLocation("destination")}
+              onClear={() => onClearPoint("destination")}
+              showDot={false}
+            />
+          </div>
         </div>
 
         {routeError && (
