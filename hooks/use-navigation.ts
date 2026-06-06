@@ -18,6 +18,8 @@ import {
   headingAlongRoute,
   resolveNavigationHeading,
 } from "@/lib/routing/nav-camera";
+import { useDeviceHeading } from "@/hooks/use-device-heading";
+import type { NavMotionSnapshot } from "@/lib/device-orientation";
 import { getSpeechGuide } from "@/lib/routing/tts";
 import type {
   BuildingEntrance,
@@ -70,8 +72,16 @@ export function useNavigation(buildings: BarrierBuilding[]) {
   const prevGpsRef = useRef<LatLng | null>(null);
   const lastGpsHeadingRef = useRef<number | null>(null);
   const routeHeadingNavRef = useRef<number | null>(null);
+  const navMotionRef = useRef<NavMotionSnapshot>({
+    gpsHeading: null,
+    speedMps: null,
+    movedMeters: 0,
+    movementBearing: null,
+  });
   userPosRef.current = userPos;
   routeHeadingNavRef.current = routeHeading;
+
+  const { deviceHeadingRef, requestPermission: requestCompassPermission } = useDeviceHeading(navigating);
 
   const OFF_ROUTE_THRESHOLD_M = 40;
   const REROUTE_COOLDOWN_MS = 8000;
@@ -264,7 +274,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     setRerouteNotice(false);
   }, [clearWatch]);
 
-  const startNav = useCallback(() => {
+  const startNav = useCallback(async () => {
     if (!route) return;
     const t = getUi(localeRef.current).route.errors;
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -272,12 +282,20 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       return;
     }
 
+    await requestCompassPermission();
+
     clearWatch();
     setUserPos(null);
     setUserHeading(null);
     setRouteHeading(null);
     prevGpsRef.current = null;
     lastGpsHeadingRef.current = null;
+    navMotionRef.current = {
+      gpsHeading: null,
+      speedMps: null,
+      movedMeters: 0,
+      movementBearing: null,
+    };
     setGeoError(null);
     setCurrentStepIndex(0);
     lastSpokenStepRef.current = -1;
@@ -309,8 +327,26 @@ export function useNavigation(buildings: BarrierBuilding[]) {
         const here = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         if (!firstGpsFixRef.current) firstGpsFixRef.current = here;
 
+        const prev = prevGpsRef.current;
+        const movedM = prev ? haversineMeters(prev, here) : 0;
+        const movementBearing =
+          prev && movedM > 0.4 ? bearingDeg(prev, here) : null;
+
+        navMotionRef.current = {
+          gpsHeading:
+            pos.coords.heading != null && Number.isFinite(pos.coords.heading) && pos.coords.heading >= 0
+              ? pos.coords.heading
+              : null,
+          speedMps:
+            pos.coords.speed != null && Number.isFinite(pos.coords.speed) && pos.coords.speed >= 0
+              ? pos.coords.speed
+              : null,
+          movedMeters: movedM,
+          movementBearing,
+        };
+
         const heading = resolveNavigationHeading(
-          prevGpsRef.current,
+          prev,
           here,
           pos.coords.heading,
           routeHeadingNavRef.current,
@@ -330,7 +366,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       },
       { enableHighAccuracy: true, maximumAge: 800, timeout: 25000 },
     );
-  }, [route, clearWatch]);
+  }, [route, clearWatch, requestCompassPermission]);
 
   // GPS 갱신 → 진행 상황 계산 + 음성 안내 + 경로 이탈 재탐색
   useEffect(() => {
@@ -450,6 +486,8 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     userPos,
     userHeading,
     routeHeading,
+    deviceHeadingRef,
+    navMotionRef,
     currentStepIndex,
     remaining,
     distanceToNext,

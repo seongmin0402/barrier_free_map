@@ -66,6 +66,74 @@ export function resolveNavigationHeading(
   return routeHeading;
 }
 
+export type FuseHeadingInput = {
+  /** 기기 나침반 (DeviceOrientation) */
+  compassHeading: number | null;
+  compassAgeMs: number;
+  /** Geolocation coords.heading */
+  gpsHeading: number | null | undefined;
+  /** 이전→현재 GPS 좌표 이동 방향 */
+  movementBearing: number | null;
+  /** 경로 진행 방향 */
+  routeHeading: number | null;
+  /** GPS speed (m/s). null이면 이동 거리로 추정 */
+  speedMps: number | null;
+  /** 직전 GPS와의 거리(m) */
+  movedMeters: number;
+};
+
+const COMPASS_MAX_AGE_MS = 800;
+const COMPASS_STALE_MS = 2500;
+
+/**
+ * 나침반 · GPS · 이동 · 경로 방향을 상황에 맞게 융합.
+ * - 정지/저속: 나침반 우선 (바라보는 방향)
+ * - 보행 중: 나침반 + GPS/이동 방향 블렌드
+ * - 나침반 없음: GPS heading → 이동 → 경로
+ */
+export function fuseNavigationHeading(input: FuseHeadingInput): number | null {
+  const {
+    compassHeading,
+    compassAgeMs,
+    gpsHeading,
+    movementBearing,
+    routeHeading,
+    speedMps,
+    movedMeters,
+  } = input;
+
+  const compassOk =
+    compassHeading != null &&
+    Number.isFinite(compassHeading) &&
+    compassAgeMs <= COMPASS_STALE_MS;
+  const compassFresh = compassOk && compassAgeMs <= COMPASS_MAX_AGE_MS;
+
+  const gpsOk = gpsHeading != null && Number.isFinite(gpsHeading) && gpsHeading >= 0;
+  const moving =
+    (speedMps != null && speedMps > 0.6) ||
+    movedMeters > 1.5 ||
+    movementBearing != null;
+
+  let speed = speedMps ?? 0;
+  if (speedMps == null && movedMeters > 0) {
+    speed = Math.min(movedMeters * 2, 2.5);
+  }
+
+  if (compassOk && moving && (gpsOk || movementBearing != null)) {
+    const course = gpsOk ? gpsHeading! : movementBearing!;
+    const motionWeight = Math.min(1, Math.max(0, (speed - 0.4) / 2.2));
+    const freshnessBoost = compassFresh ? 0 : 0.25;
+    const compassWeight = Math.max(0.2, 0.75 - motionWeight * 0.55 - freshnessBoost);
+    return lerpAngleDeg(compassHeading!, course, 1 - compassWeight);
+  }
+
+  if (compassOk) return compassHeading!;
+
+  if (gpsOk && moving) return gpsHeading!;
+  if (movementBearing != null && movedMeters > 0.8) return movementBearing;
+  return routeHeading;
+}
+
 /** 경로상 스냅 지점 기준 앞쪽 구간 방향 */
 export function headingAlongRoute(route: ComputedRoute, progress: RouteProgress): number | null {
   const { coords } = route;
@@ -97,7 +165,7 @@ export const NAV_MAP_ROTATION_SCALE = 1.38;
 
 /** rAF 추적 보간 (60fps 기준) */
 export const NAV_POS_LERP = 0.28;
-export const NAV_HEADING_LERP = 0.17;
+export const NAV_HEADING_LERP = 0.22;
 
 export type NavigationCameraMap = {
   setCenter?: (ll: unknown) => void;

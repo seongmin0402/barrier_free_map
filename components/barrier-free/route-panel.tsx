@@ -54,7 +54,7 @@ interface RoutePanelProps {
   route: ComputedRoute | null;
   routeError: string | null;
   navigating: boolean;
-  onStartNav: () => void;
+  onStartNav: () => void | Promise<void>;
   onStopNav: () => void;
   currentStepIndex: number;
   remaining: number | null;

@@ -111,6 +111,8 @@ export default function RoutePage() {
           navigationMode={nav.navigating}
           userHeading={nav.userHeading}
           routeHeading={nav.routeHeading}
+          deviceHeadingRef={nav.deviceHeadingRef}
+          navMotionRef={nav.navMotionRef}
           mapLayout="route"
           mobileSheetVh={sheetVh}
         />

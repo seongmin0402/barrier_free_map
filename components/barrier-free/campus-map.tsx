@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useMemo, useState } from "react";
+import { useEffect, useRef, useCallback, useMemo, useState, type RefObject } from "react";
 import Script from "next/script";
 import { Plus, Minus, Locate, Maximize2, SlidersHorizontal, Route, Crosshair, Navigation } from "lucide-react";
 import Link from "next/link";
@@ -18,6 +18,7 @@ import type { BarrierBuilding } from "@/lib/building-types";
 import type { LatLng } from "@/lib/routing/geo";
 import {
   applyNavigationCamera,
+  fuseNavigationHeading,
   lerpAngleDeg,
   lerpLatLng,
   NAV_FOLLOW_ZOOM,
@@ -25,6 +26,8 @@ import {
   NAV_MAP_ROTATION_SCALE,
   NAV_POS_LERP,
 } from "@/lib/routing/nav-camera";
+import type { DeviceHeadingSnapshot, NavMotionSnapshot } from "@/lib/device-orientation";
+import { compassAgeMs } from "@/lib/device-orientation";
 import { segmentColor } from "@/lib/routing/style";
 import { useUi } from "@/hooks/use-ui";
 import {
@@ -60,6 +63,10 @@ interface CampusMapProps {
   userHeading?: number | null;
   /** 경로 진행 방향 (deg) */
   routeHeading?: number | null;
+  /** 기기 나침반 (DeviceOrientation) — rAF에서 직접 읽음 */
+  deviceHeadingRef?: RefObject<DeviceHeadingSnapshot>;
+  /** GPS 속도·이동 방향 스냅샷 */
+  navMotionRef?: RefObject<NavMotionSnapshot>;
   /** explore: 메인 지도 · route: 길찾기 페이지 */
   mapLayout?: "explore" | "route";
   /** 모바일 길찾기 패널 높이(vh) — 컨트롤 버튼 겹침 방지 */
@@ -261,6 +268,8 @@ export function CampusMap({
   navigationMode = false,
   userHeading = null,
   routeHeading = null,
+  deviceHeadingRef,
+  navMotionRef,
   mapLayout = "explore",
   mobileSheetVh = 54,
   directionsHref,
@@ -304,6 +313,23 @@ export function CampusMap({
   const routeHeadingRef = useRef(routeHeading);
   userHeadingRef.current = userHeading;
   routeHeadingRef.current = routeHeading;
+
+  const resolveFusedHeading = useCallback((): number => {
+    const now = Date.now();
+    const compass = deviceHeadingRef?.current;
+    const motion = navMotionRef?.current;
+    const fused = fuseNavigationHeading({
+      compassHeading: compass?.heading ?? null,
+      compassAgeMs: compass ? compassAgeMs(compass, now) : Infinity,
+      gpsHeading: motion?.gpsHeading ?? userHeadingRef.current,
+      movementBearing: motion?.movementBearing ?? null,
+      routeHeading: routeHeadingRef.current,
+      speedMps: motion?.speedMps ?? null,
+      movedMeters: motion?.movedMeters ?? 0,
+    });
+    if (fused != null) return fused;
+    return routeHeadingRef.current ?? userHeadingRef.current ?? displayHeadingRef.current;
+  }, [deviceHeadingRef, navMotionRef]);
   const [geoHintMessage, setGeoHintMessage] = useState<string | null>(null);
   const [locationTracking, setLocationTracking] = useState(false);
   const [scriptError, setScriptError] = useState(false);
@@ -832,9 +858,9 @@ export function CampusMap({
   }, [liveUserPosition]);
 
   useEffect(() => {
-    const h = userHeading ?? routeHeading;
-    if (h != null) targetHeadingRef.current = h;
-  }, [userHeading, routeHeading]);
+    const h = resolveFusedHeading();
+    if (Number.isFinite(h)) targetHeadingRef.current = h;
+  }, [userHeading, routeHeading, resolveFusedHeading]);
 
   /** 안내 시작/종료 시 추적 상태 초기화 */
   useEffect(() => {
@@ -844,11 +870,14 @@ export function CampusMap({
       navSnapPendingRef.current = true;
       hasNavCenteredRef.current = false;
       displayPosRef.current = null;
+      const seedHeading = routeHeading ?? userHeading ?? 0;
+      displayHeadingRef.current = seedHeading;
+      targetHeadingRef.current = seedHeading;
     } else if (mapRotateRef.current) {
       mapRotateRef.current.style.transform = "";
       mapRotateRef.current.style.transformOrigin = "";
     }
-  }, [followUser, navigationMode]);
+  }, [followUser, navigationMode, routeHeading, userHeading]);
 
   /** GPS 수신 전 출발점·경로 시작점으로 미리 맞춤 */
   useEffect(() => {
@@ -877,7 +906,7 @@ export function CampusMap({
 
     const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
     const PointCtor = maps.Point as new (x: number, y: number) => unknown;
-    const heading = userHeading ?? routeHeading ?? 0;
+    const heading = resolveFusedHeading();
     const bottomObstructionVh =
       mapLayout === "route" &&
       typeof window !== "undefined" &&
@@ -1023,13 +1052,13 @@ export function CampusMap({
       }
       displayPosRef.current = display;
 
-      const tHeading = targetHeadingRef.current ?? userHeadingRef.current ?? routeHeadingRef.current;
-      if (tHeading != null) {
+      const tHeading = resolveFusedHeading();
+      if (Number.isFinite(tHeading)) {
         const headT = 1 - (1 - NAV_HEADING_LERP) ** dt;
         displayHeadingRef.current = lerpAngleDeg(displayHeadingRef.current, tHeading, headT);
       }
 
-      const headingForCam = tHeading ?? displayHeadingRef.current;
+      const headingForCam = displayHeadingRef.current;
       const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
       const PointCtor = maps.Point as (new (x: number, y: number) => unknown) | undefined;
       const ll = new LatLngCtor(display.lat, display.lng);
