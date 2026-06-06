@@ -306,6 +306,8 @@ export function CampusMap({
   const navZoomSetRef = useRef(false);
   const navSnapPendingRef = useRef(false);
   const hasNavCenteredRef = useRef(false);
+  const viewportAdjustedRef = useRef(false);
+  const lastSheetVhForViewportRef = useRef(mobileSheetVh);
   const mobileSheetVhRef = useRef(mobileSheetVh);
   const programmaticCameraRef = useRef(false);
   mobileSheetVhRef.current = mobileSheetVh;
@@ -854,8 +856,20 @@ export function CampusMap({
 
   /** GPS 목표 위치·방향 갱신 */
   useEffect(() => {
-    if (liveUserPosition) targetPosRef.current = liveUserPosition;
+    if (liveUserPosition) {
+      targetPosRef.current = liveUserPosition;
+    }
   }, [liveUserPosition]);
+
+  /** 하단 시트 높이 변경 시 뷰포트 보정 1회 재적용 */
+  useEffect(() => {
+    if (lastSheetVhForViewportRef.current !== mobileSheetVh) {
+      lastSheetVhForViewportRef.current = mobileSheetVh;
+      if (followUser && navigationMode) {
+        viewportAdjustedRef.current = false;
+      }
+    }
+  }, [mobileSheetVh, followUser, navigationMode]);
 
   useEffect(() => {
     const h = resolveFusedHeading();
@@ -869,10 +883,16 @@ export function CampusMap({
       navZoomSetRef.current = false;
       navSnapPendingRef.current = true;
       hasNavCenteredRef.current = false;
+      viewportAdjustedRef.current = false;
       displayPosRef.current = null;
+      targetPosRef.current = null;
       const seedHeading = routeHeading ?? userHeading ?? 0;
       displayHeadingRef.current = seedHeading;
       targetHeadingRef.current = seedHeading;
+      if (mapRotateRef.current) {
+        mapRotateRef.current.style.transform = "";
+        mapRotateRef.current.style.transformOrigin = "";
+      }
     } else if (mapRotateRef.current) {
       mapRotateRef.current.style.transform = "";
       mapRotateRef.current.style.transformOrigin = "";
@@ -890,9 +910,16 @@ export function CampusMap({
     if (!seed) return;
 
     const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
-    const m = map as { setCenter?: (ll: unknown) => void; setZoom?: (z: number) => void };
+    const m = map as { setCenter?: (ll: unknown) => void; setZoom?: (z: number) => void; relayout?: () => void };
     m.setCenter?.(new LatLngCtor(seed.lat, seed.lng));
     m.setZoom?.(NAV_FOLLOW_ZOOM);
+    requestAnimationFrame(() => {
+      try {
+        m.relayout?.();
+      } catch {
+        /* ignore */
+      }
+    });
   }, [sdkLoaded, followUser, navigationMode, liveUserPosition, followPaused, originPoint, routeLine, mapReadyEpoch]);
 
   /** 첫 GPS 수신 시 즉시 사용자 위치로 맞춤 */
@@ -925,13 +952,19 @@ export function CampusMap({
         (x, y) => new PointCtor(x, y),
         liveUserPosition,
         heading,
-        { snap: true, bottomObstructionVh },
+        { snap: true, bottomObstructionVh, adjustViewport: true },
       );
       if (origin && mapRotateRef.current) {
         const el = mapRotateRef.current;
         const w = el.clientWidth || 1;
         const h = el.clientHeight || 1;
         mapRotateRef.current.style.transformOrigin = `${(origin.originX / w) * 100}% ${(origin.originY / h) * 100}%`;
+      }
+      viewportAdjustedRef.current = true;
+      try {
+        (map as { relayout?: () => void }).relayout?.();
+      } catch {
+        /* ignore */
       }
       navZoomSetRef.current = true;
       navSnapPendingRef.current = false;
@@ -951,6 +984,7 @@ export function CampusMap({
     routeHeading,
     mapLayout,
     mapReadyEpoch,
+    resolveFusedHeading,
   ]);
 
   /** 안내 중 지도 드래그 → 추적 일시 중지 */
@@ -1073,7 +1107,8 @@ export function CampusMap({
           ? mobileSheetVhRef.current
           : 0;
 
-      const m = map as Parameters<typeof applyNavigationCamera>[0];
+      const needsViewportAdjust = !viewportAdjustedRef.current;
+      const m = map as Parameters<typeof applyNavigationCamera>[0] & { relayout?: () => void };
 
       try {
         programmaticCameraRef.current = true;
@@ -1085,18 +1120,38 @@ export function CampusMap({
                 (x, y) => new PointCtor(x, y),
                 display,
                 headingForCam,
-                { snap: shouldSnap, bottomObstructionVh },
+                {
+                  snap: shouldSnap,
+                  bottomObstructionVh,
+                  adjustViewport: needsViewportAdjust,
+                },
               )
             : null;
 
-        if (mapRotateRef.current) {
+        if (needsViewportAdjust && origin) {
+          viewportAdjustedRef.current = true;
+        }
+
+        if (origin && !hasNavCenteredRef.current) {
+          hasNavCenteredRef.current = true;
+        }
+
+        if (hasNavCenteredRef.current && mapRotateRef.current && origin) {
           const el = mapRotateRef.current;
           const w = el.clientWidth || 1;
           const h = el.clientHeight || 1;
-          const ox = origin?.originX ?? w / 2;
-          const oy = origin?.originY ?? h / 2;
+          const ox = origin.originX;
+          const oy = origin.originY;
           mapRotateRef.current.style.transformOrigin = `${(ox / w) * 100}% ${(oy / h) * 100}%`;
           mapRotateRef.current.style.transform = `rotate(${-displayHeadingRef.current}deg) scale(${NAV_MAP_ROTATION_SCALE})`;
+        }
+
+        if (shouldSnap || needsViewportAdjust) {
+          try {
+            m.relayout?.();
+          } catch {
+            /* ignore */
+          }
         }
         navZoomSetRef.current = true;
       } catch {

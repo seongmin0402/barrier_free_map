@@ -184,10 +184,21 @@ export type NavigationCameraOptions = {
   bottomObstructionVh?: number;
   /** 첫 GPS 등 즉시 줌·중심 맞춤 */
   snap?: boolean;
+  /** true일 때만 panBy로 하단 패널 보정 (매 프레임 panBy는 지도 타일 깨짐 유발) */
+  adjustViewport?: boolean;
 };
 
+function isValidLatLng(user: LatLng): boolean {
+  return (
+    Number.isFinite(user.lat) &&
+    Number.isFinite(user.lng) &&
+    Math.abs(user.lat) <= 90 &&
+    Math.abs(user.lng) <= 180
+  );
+}
+
 /**
- * 길안내 카메라 — 사용자 위치가 화면(및 하단 패널 위)에 보이도록 중심·panBy 조정.
+ * 길안내 카메라 — setCenter(look-ahead) + (snap 시 1회) panBy 뷰포트 보정.
  * 반환값은 지도 회전 transform-origin(픽셀)입니다.
  */
 export function applyNavigationCamera(
@@ -198,6 +209,8 @@ export function applyNavigationCamera(
   headingDeg: number,
   options: NavigationCameraOptions = {},
 ): { originX: number; originY: number } | null {
+  if (!isValidLatLng(user)) return null;
+
   const zoom = options.zoom ?? NAV_FOLLOW_ZOOM;
   const curZoom = map.getZoom?.() ?? 0;
   if (options.snap || curZoom < zoom) {
@@ -211,26 +224,27 @@ export function applyNavigationCamera(
 
   const projection = map.getProjection?.();
   const size = map.getSize?.();
-  if (!projection?.fromCoordToOffset || !size?.width || !size?.height || !map.panBy) {
+  if (!projection?.fromCoordToOffset || !size?.width || !size?.height) {
     return size ? { originX: size.width / 2, originY: size.height / 2 } : null;
   }
 
   const userLl = createLatLng(user.lat, user.lng);
   let userOffset = projection.fromCoordToOffset(userLl);
 
-  const obstructionVh = Math.max(0, options.bottomObstructionVh ?? 0);
-  const obstructionPx = (obstructionVh / 100) * size.height;
-  const visibleH = Math.max(size.height * 0.22, size.height - obstructionPx);
-  /** 보이는 영역 하단 쪽(약 70%) — 하단 시트에 가리지 않게 */
-  const targetUserY = obstructionPx + visibleH * 0.7;
-  const targetUserX = size.width * 0.5;
+  if (options.adjustViewport && map.panBy) {
+    const obstructionVh = Math.max(0, options.bottomObstructionVh ?? 0);
+    const obstructionPx = (obstructionVh / 100) * size.height;
+    const visibleH = Math.max(size.height * 0.22, size.height - obstructionPx);
+    const targetUserY = obstructionPx + visibleH * 0.7;
+    const targetUserX = size.width * 0.5;
 
-  const panX = targetUserX - userOffset.x;
-  const panY = targetUserY - userOffset.y;
+    const panX = targetUserX - userOffset.x;
+    const panY = targetUserY - userOffset.y;
 
-  if (Math.abs(panX) > 0.5 || Math.abs(panY) > 0.5) {
-    map.panBy(createPoint(panX, panY));
-    userOffset = projection.fromCoordToOffset(userLl);
+    if (Math.abs(panX) > 0.5 || Math.abs(panY) > 0.5) {
+      map.panBy(createPoint(panX, panY));
+      userOffset = projection.fromCoordToOffset(userLl);
+    }
   }
 
   return { originX: userOffset.x, originY: userOffset.y };

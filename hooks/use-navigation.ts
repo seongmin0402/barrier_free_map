@@ -274,7 +274,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     setRerouteNotice(false);
   }, [clearWatch]);
 
-  const startNav = useCallback(async () => {
+  const startNav = useCallback(() => {
     if (!route) return;
     const t = getUi(localeRef.current).route.errors;
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -282,12 +282,9 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       return;
     }
 
-    await requestCompassPermission();
-
     clearWatch();
     setUserPos(null);
     setUserHeading(null);
-    setRouteHeading(null);
     prevGpsRef.current = null;
     lastGpsHeadingRef.current = null;
     navMotionRef.current = {
@@ -311,6 +308,8 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       routeHeadingNavRef.current = initialHeading;
       setRouteHeading(initialHeading);
     }
+
+    void requestCompassPermission();
 
     const navLocale = localeRef.current;
 
