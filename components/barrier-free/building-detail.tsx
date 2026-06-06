@@ -1,9 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Image from "next/image";
-import { X, Navigation } from "lucide-react";
-import { FacilityPictogram, PictogramDisabledParking } from "@/components/barrier-free/facility-pictograms";
+import { Accessibility, Check, Navigation } from "lucide-react";
+import {
+  FacilityPictogram,
+  PictogramDisabledParking,
+} from "@/components/barrier-free/facility-pictograms";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -35,21 +38,42 @@ const gradeColors = {
   C: "bg-[#DC3545] text-white",
 } as const;
 
-function BoolLine({
+function FacilityStatusCard({
   label,
-  value,
-  yes,
-  no,
+  available,
+  statusLabel,
+  icon,
 }: {
   label: string;
-  value: boolean;
-  yes: string;
-  no: string;
+  available: boolean;
+  statusLabel: string;
+  icon: ReactNode;
 }) {
   return (
-    <div className="flex justify-between gap-4 text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium text-foreground">{value ? yes : no}</span>
+    <div
+      className={cn(
+        "flex flex-col items-center rounded-xl border p-3 text-center",
+        available ? "border-sky-200 bg-sky-50/80" : "border-border bg-muted/40",
+      )}
+    >
+      <div
+        className={cn(
+          "mb-2 flex h-11 w-11 items-center justify-center rounded-lg",
+          available ? "bg-white text-foreground shadow-sm" : "bg-muted text-muted-foreground",
+        )}
+      >
+        {icon}
+      </div>
+      <p className="mb-2 text-xs font-medium leading-tight text-foreground">{label}</p>
+      <span
+        className={cn(
+          "inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+          available ? "bg-sky-100 text-sky-700" : "bg-muted text-muted-foreground",
+        )}
+      >
+        {available ? <Check className="h-3 w-3" aria-hidden /> : null}
+        {statusLabel}
+      </span>
     </div>
   );
 }
@@ -58,17 +82,20 @@ function BuildingFullSections({
   building,
   onPhotoClick,
   ui,
+  onClose,
 }: {
   building: BarrierBuilding;
   onPhotoClick: (url: string, alt: string) => void;
   ui: UiText;
+  onClose: () => void;
 }) {
-  const grade = ui.grade[building.accessibilityLevel];
   const floorsSorted = sortFloorPhotoGroups(building.floorPhotoGroups ?? []);
   const floorsWithPhotos = floorsSorted.filter((g) => g.images?.length);
   const floorSummarySorted = building.floorPhotoSummary
     ? sortFloorPhotoSummary(building.floorPhotoSummary)
     : "";
+
+  const parkingAvailable = building.parkingCapacity > 0;
 
   const naverSearchUrl =
     Number.isFinite(building.lat) && Number.isFinite(building.lng)
@@ -93,7 +120,6 @@ function BuildingFullSections({
     const appName = encodeURIComponent("barrier-free-map");
     const routeScheme = `nmap://route/walk?dlat=${building.lat}&dlng=${building.lng}&dname=${destinationName}&appname=${appName}`;
 
-    // 모바일에서는 앱 스킴 우선 시도 후, 열리지 않으면 웹 링크로 폴백
     const fallbackTimer = window.setTimeout(() => {
       window.open(naverSearchUrl, "_blank", "noopener,noreferrer");
     }, 1200);
@@ -109,56 +135,88 @@ function BuildingFullSections({
     window.addEventListener("pagehide", clearFallback, { once: true });
   }, [building.lat, building.lng, building.name, naverSearchUrl]);
 
-  return (
-    <div className="space-y-4 pr-1">
-      {building.description ? (
-        <p className="whitespace-pre-line text-sm text-foreground">{building.description}</p>
-      ) : null}
+  const statusPositive = (value: boolean, useExists = false) =>
+    value ? (useExists ? ui.building.statusExists : ui.building.statusAvailable) : ui.building.statusNone;
 
-      <div className="grid gap-2 rounded-lg border border-border bg-muted/30 p-3">
-        <BoolLine label={ui.building.elevator} value={building.elevatorAvailable} yes={ui.building.yes} no={ui.building.no} />
-        <BoolLine label={ui.building.toilet} value={building.toiletAvailable} yes={ui.building.yes} no={ui.building.no} />
-        <BoolLine label={ui.building.braille} value={building.brailleAvailable} yes={ui.building.yes} no={ui.building.no} />
-        <BoolLine label={ui.building.autoDoor} value={building.autoDoorAvailable} yes={ui.building.yes} no={ui.building.no} />
-        <BoolLine label={ui.building.threshold} value={building.thresholdPresent} yes={ui.building.yes} no={ui.building.no} />
-        <BoolLine label={ui.building.ramp} value={building.rampAvailable} yes={ui.building.yes} no={ui.building.no} />
-        <div className="flex justify-between gap-4 border-t border-border pt-2 text-sm">
-          <span className="flex items-center gap-1.5 text-muted-foreground">
-            <PictogramDisabledParking className="h-4 w-4 shrink-0" />
-            {ui.building.parking}
-          </span>
-          <span className="text-right font-medium text-foreground">
-            {building.parkingCapacity > 0
+  const hasExtra =
+    building.description ||
+    floorSummarySorted ||
+    floorsWithPhotos.length > 0 ||
+    building.thresholdPresent;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-2.5">
+        <FacilityStatusCard
+          label={ui.building.wheelchairAccess}
+          available={building.wheelchairAccess}
+          statusLabel={statusPositive(building.wheelchairAccess)}
+          icon={<Accessibility className="h-6 w-6" aria-hidden />}
+        />
+        <FacilityStatusCard
+          label={ui.building.elevator}
+          available={building.elevatorAvailable}
+          statusLabel={statusPositive(building.elevatorAvailable, true)}
+          icon={<FacilityPictogram facilityId="elevator" className="h-6 w-6" />}
+        />
+        <FacilityStatusCard
+          label={ui.building.ramp}
+          available={building.rampAvailable}
+          statusLabel={statusPositive(building.rampAvailable, true)}
+          icon={<FacilityPictogram facilityId="ramp" className="h-6 w-6" />}
+        />
+        <FacilityStatusCard
+          label={ui.building.braille}
+          available={building.brailleAvailable}
+          statusLabel={statusPositive(building.brailleAvailable)}
+          icon={<FacilityPictogram facilityId="braille" className="h-6 w-6" />}
+        />
+        <FacilityStatusCard
+          label={ui.building.toilet}
+          available={building.toiletAvailable}
+          statusLabel={statusPositive(building.toiletAvailable, true)}
+          icon={<FacilityPictogram facilityId="toilet" className="h-6 w-6" />}
+        />
+        <FacilityStatusCard
+          label={ui.building.autoDoor}
+          available={building.autoDoorAvailable}
+          statusLabel={statusPositive(building.autoDoorAvailable, true)}
+          icon={<FacilityPictogram facilityId="auto-door" className="h-6 w-6" />}
+        />
+        <FacilityStatusCard
+          label={ui.building.parking}
+          available={parkingAvailable}
+          statusLabel={
+            parkingAvailable
               ? ui.building.parkingAvailable(building.parkingCapacity, building.parkingDistanceEntranceM)
-              : ui.building.parkingNone}
-          </span>
-        </div>
+              : ui.building.parkingNone
+          }
+          icon={<PictogramDisabledParking className="h-6 w-6" />}
+        />
+        {building.thresholdPresent ? (
+          <FacilityStatusCard
+            label={ui.building.threshold}
+            available={false}
+            statusLabel={ui.building.statusExists}
+            icon={<span className="text-lg font-bold leading-none" aria-hidden>▲</span>}
+          />
+        ) : null}
       </div>
 
-      {building.facilities.filter((f) => f !== "charging").length > 0 ? (
-        <div>
-          <h3 className="mb-2 text-sm font-semibold text-foreground">{ui.building.facilitiesSection}</h3>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {building.facilities
-              .filter((f) => f !== "charging")
-              .map((facility) => (
-              <div key={facility} className="flex items-center gap-2 rounded-lg bg-secondary p-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10">
-                  <FacilityPictogram facilityId={facility} className="h-5 w-5 text-primary" />
-                </div>
-                <span className="text-sm text-foreground">
-                  {ui.facilities[facility as keyof typeof ui.facilities] ?? facility}
-                </span>
-              </div>
-            ))}
-          </div>
+      {hasExtra ? (
+        <div className="rounded-lg border border-border bg-muted/20 p-3">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {ui.building.moreDetails}
+          </h3>
+          {building.description ? (
+            <p className="mb-2 whitespace-pre-line text-sm text-foreground">{building.description}</p>
+          ) : null}
+          {floorSummarySorted ? (
+            <p className="text-xs text-muted-foreground">
+              {ui.building.photoSummary} {floorSummarySorted}
+            </p>
+          ) : null}
         </div>
-      ) : null}
-
-      {floorSummarySorted ? (
-        <p className="text-xs text-muted-foreground">
-          {ui.building.photoSummary} {floorSummarySorted}
-        </p>
       ) : null}
 
       {floorsWithPhotos.length > 0 ? (
@@ -201,23 +259,26 @@ function BuildingFullSections({
         </div>
       ) : null}
 
-      <Button className="w-full gap-2" size="lg" type="button" onClick={openNaverRoute}>
-        <Navigation className="h-5 w-5" />
-        {ui.building.naverMap}
-      </Button>
+      <div className="flex gap-2 pt-1">
+        <Button variant="outline" className="flex-1" type="button" onClick={onClose}>
+          {ui.building.close}
+        </Button>
+        <Button className="flex-1 gap-1.5" type="button" onClick={openNaverRoute}>
+          <Navigation className="h-4 w-4" />
+          {ui.building.naverMap}
+        </Button>
+      </div>
     </div>
   );
 }
 
 export function BuildingDetail({ building, onClose }: BuildingDetailProps) {
   const ui = useUi();
-  const [fullOpen, setFullOpen] = useState(false);
   const [lightbox, setLightbox] = useState<{ url: string; alt: string } | null>(null);
 
   const buildingId = building?.id ?? null;
 
   useEffect(() => {
-    setFullOpen(false);
     setLightbox(null);
   }, [buildingId]);
 
@@ -237,61 +298,48 @@ export function BuildingDetail({ building, onClose }: BuildingDetailProps) {
 
   return (
     <>
-      {/* 요약 카드 — 모바일: 하단 좌측(등급 범례·줌 버튼과 겹치지 않게), 데스크톱: 우하단 */}
-      <div
-        className={cn(
-          "animate-in fade-in slide-in-from-bottom-2 absolute z-20 duration-200",
-          "bottom-[5.5rem] left-3 right-14 max-w-[calc(100%-3.5rem)]",
-          "sm:bottom-3 sm:left-auto sm:right-4 sm:w-[min(100%,20rem)] sm:max-w-none",
-        )}
+      <Dialog
+        open
+        onOpenChange={(open) => {
+          if (!open) onClose();
+        }}
       >
-        <div className="rounded-xl border-2 border-primary bg-card/95 p-3 shadow-lg ring-2 ring-primary/30 backdrop-blur-sm">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-primary">
-            {ui.building.selected}
-          </p>
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              <div className="mb-1 flex flex-wrap items-center gap-1.5">
-                <h2 className="truncate text-sm font-bold text-foreground">{building.name}</h2>
-                <Badge className={cn("shrink-0 px-1.5 py-0 text-[10px]", gradeColors[building.accessibilityLevel])}>
-                  {building.accessibilityLevel} {grade.label}
-                </Badge>
-              </div>
-              <p className="line-clamp-2 text-xs text-muted-foreground">
-                {sortedFloorLabel} · {grade.description}
-              </p>
-            </div>
-            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={onClose}>
-              <X className="h-4 w-4" />
-              <span className="sr-only">{ui.building.close}</span>
-            </Button>
-          </div>
-          <div className="mt-2 flex justify-end">
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setFullOpen(true)}>
-              {ui.building.viewDetails}
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      <Dialog open={fullOpen} onOpenChange={setFullOpen}>
         <DialogContent
-          className="flex max-h-[min(88vh,800px)] max-w-[calc(100%-1.5rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
+          className="flex max-h-[min(90vh,820px)] max-w-[calc(100%-1.5rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-md"
           showCloseButton
         >
           <DialogHeader className="shrink-0 border-b border-border px-4 py-3 pr-12 text-left">
-            <DialogTitle className="text-base leading-snug sm:text-lg">{building.name}</DialogTitle>
-            <p className="text-xs text-muted-foreground">
-              {ui.building.gradeLine(
-                sortedFloorLabel,
-                building.accessibilityLevel,
-                grade.label,
-                grade.description,
-              )}
-            </p>
+            <div className="flex items-center gap-3">
+              <div
+                className={cn(
+                  "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-base font-bold",
+                  gradeColors[building.accessibilityLevel],
+                )}
+                aria-hidden
+              >
+                {building.accessibilityLevel}
+              </div>
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-base leading-snug sm:text-lg">{building.name}</DialogTitle>
+                <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                  <Badge
+                    variant="secondary"
+                    className={cn("px-1.5 py-0 text-[10px]", gradeColors[building.accessibilityLevel])}
+                  >
+                    {building.accessibilityLevel} {grade.label}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">{sortedFloorLabel}</span>
+                </div>
+              </div>
+            </div>
           </DialogHeader>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-            <BuildingFullSections building={building} onPhotoClick={openLightbox} ui={ui} />
+            <BuildingFullSections
+              building={building}
+              onPhotoClick={openLightbox}
+              ui={ui}
+              onClose={onClose}
+            />
           </div>
         </DialogContent>
       </Dialog>
@@ -306,7 +354,6 @@ export function BuildingDetail({ building, onClose }: BuildingDetailProps) {
           </DialogHeader>
           {lightbox ? (
             <div className="flex max-h-[min(88vh,900px)] items-center justify-center pt-1">
-              {/* 원본 비율 유지·경로 제약 회피를 위해 img 사용 */}
               <img
                 src={lightbox.url}
                 alt={lightbox.alt}

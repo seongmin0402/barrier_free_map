@@ -79,6 +79,11 @@ export type UiText = {
     close: string;
     yes: string;
     no: string;
+    wheelchairAccess: string;
+    statusAvailable: string;
+    statusExists: string;
+    statusNone: string;
+    moreDetails: string;
     elevator: string;
     toilet: string;
     braille: string;
@@ -145,6 +150,11 @@ export type UiText = {
   page: {
     directions: string;
     loadError: string;
+  };
+  filterBar: {
+    ariaLabel: string;
+    all: string;
+    report: string;
   };
   settings: {
     title: string;
@@ -257,7 +267,12 @@ const ko: UiText = {
     close: "닫기",
     yes: "예",
     no: "아니오",
-    elevator: "엘리베이터",
+    wheelchairAccess: "휠체어 진입",
+    statusAvailable: "가능",
+    statusExists: "있음",
+    statusNone: "없음",
+    moreDetails: "추가 정보",
+    elevator: "승강기",
     toilet: "장애인 화장실",
     braille: "점자블록",
     autoDoor: "자동문",
@@ -329,6 +344,11 @@ const ko: UiText = {
     directions: "길찾기",
     loadError:
       "건물 데이터를 불러오지 못했습니다. 배포 후에도 발생하면 빌드 시 CSV 경로와 public/data/buildings.json 생성 여부를 확인해 주세요.",
+  },
+  filterBar: {
+    ariaLabel: "시설 필터",
+    all: "전체",
+    report: "불편신고",
   },
   settings: {
     title: "접근성 설정",
@@ -441,6 +461,11 @@ const en: UiText = {
     close: "Close",
     yes: "Yes",
     no: "No",
+    wheelchairAccess: "Wheelchair access",
+    statusAvailable: "Available",
+    statusExists: "Yes",
+    statusNone: "None",
+    moreDetails: "More details",
     elevator: "Elevator",
     toilet: "Accessible restroom",
     braille: "Tactile paving",
@@ -513,6 +538,11 @@ const en: UiText = {
     directions: "Directions",
     loadError:
       "Failed to load building data. If this persists after deploy, check CSV paths and public/data/buildings.json generation.",
+  },
+  filterBar: {
+    ariaLabel: "Facility filters",
+    all: "All",
+    report: "Report issue",
   },
   settings: {
     title: "Accessibility settings",
