@@ -20,7 +20,9 @@ import {
   lerpAngleDeg,
   lerpLatLng,
   NAV_FOLLOW_ZOOM,
+  NAV_HEADING_LERP,
   NAV_MAP_ROTATION_SCALE,
+  NAV_POS_LERP,
   navigationCenterForUser,
 } from "@/lib/routing/nav-camera";
 import { segmentColor } from "@/lib/routing/style";
@@ -28,8 +30,6 @@ import { useUi } from "@/hooks/use-ui";
 import {
   footprintPolygonPathGroups,
   footprintStrokeOptions,
-  FOOTPRINT_LEVEL_STROKE,
-  FOOTPRINT_STROKE_UNKNOWN,
   type FootprintAccessibilityLevel,
   type FootprintFeature,
   type FootprintFeatureCollection,
@@ -288,7 +288,6 @@ export function CampusMap({
   const [sdkLoaded, setSdkLoaded] = useState(false);
   const myLocationMarkerRef = useRef<{ setMap: (v: unknown) => void; setPosition?: (p: unknown) => void } | null>(null);
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
-  const [gradeGuideOpen, setGradeGuideOpen] = useState(false);
   const [followPaused, setFollowPaused] = useState(false);
   const displayPosRef = useRef<LatLng | null>(null);
   const displayHeadingRef = useRef(0);
@@ -688,7 +687,7 @@ export function CampusMap({
 
     const target = new Ll(b.lat, b.lng);
     map.setCenter?.(target);
-    map.panTo?.(target, { duration: 280 });
+    map.panTo?.(target, { duration: 400 });
     map.setZoom?.(17);
     requestAnimationFrame(() => {
       try {
@@ -913,7 +912,12 @@ export function CampusMap({
       return;
     }
 
-    const tick = () => {
+    let lastFrameTime = performance.now();
+
+    const tick = (now: number) => {
+      const dt = Math.min(48, now - lastFrameTime) / 16.67;
+      lastFrameTime = now;
+
       const map = mapInstanceRef.current;
       const maps = window.naver?.maps as NMaps | undefined;
       if (!map || !maps?.LatLng) {
@@ -931,13 +935,15 @@ export function CampusMap({
       if (!display) {
         display = { ...target };
       } else {
-        display = lerpLatLng(display, target, 0.2);
+        const posT = 1 - (1 - NAV_POS_LERP) ** dt;
+        display = lerpLatLng(display, target, posT);
       }
       displayPosRef.current = display;
 
       const tHeading = targetHeadingRef.current ?? userHeadingRef.current ?? routeHeadingRef.current;
       if (tHeading != null) {
-        displayHeadingRef.current = lerpAngleDeg(displayHeadingRef.current, tHeading, 0.14);
+        const headT = 1 - (1 - NAV_HEADING_LERP) ** dt;
+        displayHeadingRef.current = lerpAngleDeg(displayHeadingRef.current, tHeading, headT);
       }
 
       if (mapRotateRef.current) {
@@ -991,7 +997,7 @@ export function CampusMap({
     const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
     const pos = new LatLngCtor(liveUserPosition.lat, liveUserPosition.lng);
     if (followUser && !navigationMode) {
-      map.panTo?.(pos, { duration: 280 });
+      map.panTo?.(pos, { duration: 400 });
     }
   }, [sdkLoaded, mapReadyEpoch, liveUserPosition, followUser, navigationMode, followPaused]);
 
@@ -1225,6 +1231,7 @@ export function CampusMap({
   const scriptSrc = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${encodeURIComponent(clientId)}`;
 
   const overlayBottomClass = cn(
+    "transition-[bottom] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
     mapLayout === "route"
       ? "max-sm:bottom-[calc(var(--route-sheet-vh)*1vh+0.625rem)] sm:bottom-[max(0.75rem,env(safe-area-inset-bottom))]"
       : "bottom-[max(0.75rem,env(safe-area-inset-bottom))]",
@@ -1311,6 +1318,33 @@ export function CampusMap({
       </div>
 
       <div className="pointer-events-none absolute inset-0 z-10">
+        {/* 좌측: 줌 컨트롤 */}
+        <div className={cn("pointer-events-auto absolute left-3 sm:left-4", overlayBottomClass)}>
+          <div className="overflow-hidden rounded-lg border border-border bg-card/95 shadow-md backdrop-blur-sm">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => zoomDelta(1)}
+              className="h-9 w-9 rounded-none border-b border-border hover:bg-secondary"
+              aria-label={ui.map.zoomIn}
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => zoomDelta(-1)}
+              className="h-9 w-9 rounded-none hover:bg-secondary"
+              aria-label={ui.map.zoomOut}
+            >
+              <Minus className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* 우측: 지도 옵션·경로·길찾기 */}
         <div className={cn("pointer-events-auto absolute right-3 flex flex-col items-end gap-2 sm:right-4", overlayBottomClass)}>
           {geoHintMessage && (
             <div className="max-w-[14rem] rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive shadow-md">
@@ -1394,12 +1428,6 @@ export function CampusMap({
                 )}
               </>
             )}
-            <Button type="button" variant="secondary" size="icon" onClick={() => zoomDelta(1)} className="shadow-md" aria-label={ui.map.zoomIn}>
-              <Plus className="h-5 w-5" />
-            </Button>
-            <Button type="button" variant="secondary" size="icon" onClick={() => zoomDelta(-1)} className="shadow-md" aria-label={ui.map.zoomOut}>
-              <Minus className="h-5 w-5" />
-            </Button>
             <Button
               type="button"
               variant={controlsOpen ? "default" : "secondary"}
@@ -1424,48 +1452,6 @@ export function CampusMap({
             ) : null}
           </div>
         </div>
-
-        {!routeLine && (
-        <div
-          className={cn(
-            "pointer-events-auto absolute left-3 max-w-[min(11rem,calc(100%-4.5rem))] rounded-md border border-border bg-card/95 p-2 shadow-md backdrop-blur-sm sm:max-w-[13rem]",
-            overlayBottomClass,
-          )}
-        >
-          <div className="mb-1 flex items-center gap-1.5">
-            <h4 className="text-[11px] font-semibold text-foreground">{ui.map.footprintLegend}</h4>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="h-4 w-4 rounded-full p-0 text-[10px] font-bold"
-              onClick={() => setGradeGuideOpen(true)}
-              aria-label={ui.map.gradeGuideOpen}
-            >
-              ?
-            </Button>
-          </div>
-          <p className="mb-1.5 hidden text-[9px] text-muted-foreground sm:block">{ui.map.footprintHint}</p>
-          <div className="grid grid-cols-2 gap-x-2 gap-y-1 sm:space-y-1 sm:grid-cols-1">
-            <div className="flex items-center gap-1.5">
-              <span className="h-0 w-4 shrink-0 border-t-2" style={{ borderColor: FOOTPRINT_LEVEL_STROKE.A }} />
-              <span className="text-[11px] text-muted-foreground">{ui.sidebar.gradeA}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="h-0 w-4 shrink-0 border-t-2" style={{ borderColor: FOOTPRINT_LEVEL_STROKE.B }} />
-              <span className="text-[11px] text-muted-foreground">{ui.sidebar.gradeB}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="h-0 w-4 shrink-0 border-t-2" style={{ borderColor: FOOTPRINT_LEVEL_STROKE.C }} />
-              <span className="text-[11px] text-muted-foreground">{ui.sidebar.gradeC}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="h-0 w-4 shrink-0 border-t-2" style={{ borderColor: FOOTPRINT_STROKE_UNKNOWN }} />
-              <span className="text-[11px] text-muted-foreground">{ui.gradeUnsurveyed}</span>
-            </div>
-          </div>
-        </div>
-        )}
       </div>
 
       <AlertDialog open={locationDialogOpen} onOpenChange={setLocationDialogOpen}>
@@ -1486,26 +1472,6 @@ export function CampusMap({
               }}
             >
               {ui.map.locationDialogConfirm}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={gradeGuideOpen} onOpenChange={setGradeGuideOpen}>
-        <AlertDialogContent className="z-[100] max-w-md">
-          <AlertDialogHeader>
-            <AlertDialogTitle>{ui.map.gradeGuideTitle}</AlertDialogTitle>
-            <AlertDialogDescription className="text-left">{ui.map.gradeGuideIntro}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="space-y-2 text-sm text-foreground">
-            <p>{ui.map.gradeGuideA}</p>
-            <p>{ui.map.gradeGuideB}</p>
-            <p>{ui.map.gradeGuideC}</p>
-            <p>{ui.map.gradeGuideUnsurveyed}</p>
-          </div>
-          <AlertDialogFooter>
-            <Button type="button" onClick={() => setGradeGuideOpen(false)}>
-              {ui.map.gradeGuideClose}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

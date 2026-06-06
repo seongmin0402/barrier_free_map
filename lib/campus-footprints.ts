@@ -19,7 +19,7 @@ export interface FootprintFeatureCollection {
   features: FootprintFeature[];
 }
 
-/** 접근성 등급별 폴리곤 테두리 (CURSOR_PROMPT 색상) */
+/** 접근성 등급별 폴리곤 테두리 */
 export const FOOTPRINT_LEVEL_STROKE: Record<"A" | "B" | "C", string> = {
   A: "#22A557",
   B: "#F5A623",

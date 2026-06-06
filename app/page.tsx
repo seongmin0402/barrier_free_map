@@ -134,7 +134,7 @@ export default function BarrierFreeMapPage() {
             directionsLabel={ui.page.directions}
           />
 
-          {/* 모바일: 메뉴 + 필터 한 줄 */}
+          {/* 모바일: 메뉴 + 필터 한 줄 (목록 열리면 필터 숨김) */}
           <div className="pointer-events-none absolute inset-x-0 top-0 z-30 p-3 md:hidden">
             <div className="pointer-events-auto flex items-start gap-2">
               <MobileSidebarToggle
@@ -142,11 +142,14 @@ export default function BarrierFreeMapPage() {
                 isOpen={isSidebarOpen}
                 onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
               />
-              <FacilityFilterBar
-                embedded
-                filters={filters}
-                onFilterChange={setFilters}
-              />
+              {!isSidebarOpen ? (
+                <FacilityFilterBar
+                  embedded
+                  filters={filters}
+                  onFilterChange={setFilters}
+                  className="animate-in fade-in duration-200"
+                />
+              ) : null}
             </div>
           </div>
 

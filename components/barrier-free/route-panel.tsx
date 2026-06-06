@@ -340,7 +340,10 @@ export function RoutePanel(props: RoutePanelProps) {
       className="absolute inset-x-0 bottom-0 z-30 flex max-h-[92vh] flex-col rounded-t-2xl border-t border-border bg-background shadow-xl sm:inset-y-0 sm:left-0 sm:right-auto sm:h-auto sm:max-h-none sm:w-[22rem] sm:rounded-none sm:border-r sm:border-t-0"
       style={
         isMobile
-          ? { height: `${sheetVh}vh`, transition: dragging ? "none" : "height 250ms ease" }
+          ? {
+              height: `${sheetVh}vh`,
+              transition: dragging ? "none" : "height 320ms cubic-bezier(0.32, 0.72, 0, 1)",
+            }
           : undefined
       }
     >
@@ -386,7 +389,7 @@ export function RoutePanel(props: RoutePanelProps) {
       </div>
 
       <div
-        className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 pb-[max(1rem,env(safe-area-inset-bottom))]"
+        className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain scroll-smooth p-3 pb-[max(1rem,env(safe-area-inset-bottom))]"
         style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
       >
         {/* 출발/도착 입력 — 좌측 점·점선으로 구간 연결 */}

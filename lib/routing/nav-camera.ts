@@ -94,3 +94,7 @@ export function headingAlongRoute(route: ComputedRoute, progress: RouteProgress)
 
 export const NAV_FOLLOW_ZOOM = 17;
 export const NAV_MAP_ROTATION_SCALE = 1.38;
+
+/** rAF 추적 보간 (60fps 기준) */
+export const NAV_POS_LERP = 0.24;
+export const NAV_HEADING_LERP = 0.17;
