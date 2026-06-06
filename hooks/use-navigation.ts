@@ -6,7 +6,7 @@ import type { BarrierBuilding } from "@/lib/building-types";
 import { arriveMessage, navSpeechText, offRouteRerouteSpeech } from "@/lib/i18n/navigation";
 import { getUi } from "@/lib/i18n/ui";
 import type { LatLng } from "@/lib/routing/geo";
-import { formatDistance, haversineMeters } from "@/lib/routing/geo";
+import { formatDistance, haversineMeters, bearingDeg } from "@/lib/routing/geo";
 import {
   buildWalkwayGraph,
   mainEntranceForBuilding,
@@ -287,6 +287,12 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     setNavigating(true);
     setRemaining(route.distance);
     setDistanceToNext(null);
+
+    if (route.coords.length >= 2) {
+      const initialHeading = bearingDeg(route.coords[0], route.coords[1]);
+      routeHeadingNavRef.current = initialHeading;
+      setRouteHeading(initialHeading);
+    }
 
     const navLocale = localeRef.current;
 

@@ -17,13 +17,13 @@ import {
 import type { BarrierBuilding } from "@/lib/building-types";
 import type { LatLng } from "@/lib/routing/geo";
 import {
+  applyNavigationCamera,
   lerpAngleDeg,
   lerpLatLng,
   NAV_FOLLOW_ZOOM,
   NAV_HEADING_LERP,
   NAV_MAP_ROTATION_SCALE,
   NAV_POS_LERP,
-  navigationCenterForUser,
 } from "@/lib/routing/nav-camera";
 import { segmentColor } from "@/lib/routing/style";
 import { useUi } from "@/hooks/use-ui";
@@ -295,7 +295,11 @@ export function CampusMap({
   const targetHeadingRef = useRef<number | null>(null);
   const navAnimFrameRef = useRef<number | null>(null);
   const navZoomSetRef = useRef(false);
+  const navSnapPendingRef = useRef(false);
+  const hasNavCenteredRef = useRef(false);
+  const mobileSheetVhRef = useRef(mobileSheetVh);
   const programmaticCameraRef = useRef(false);
+  mobileSheetVhRef.current = mobileSheetVh;
   const userHeadingRef = useRef(userHeading);
   const routeHeadingRef = useRef(routeHeading);
   userHeadingRef.current = userHeading;
@@ -837,11 +841,88 @@ export function CampusMap({
     if (followUser && navigationMode) {
       setFollowPaused(false);
       navZoomSetRef.current = false;
+      navSnapPendingRef.current = true;
+      hasNavCenteredRef.current = false;
       displayPosRef.current = null;
     } else if (mapRotateRef.current) {
       mapRotateRef.current.style.transform = "";
+      mapRotateRef.current.style.transformOrigin = "";
     }
   }, [followUser, navigationMode]);
+
+  /** GPS 수신 전 출발점·경로 시작점으로 미리 맞춤 */
+  useEffect(() => {
+    if (!sdkLoaded || !followUser || !navigationMode || liveUserPosition || followPaused) return;
+    const map = mapInstanceRef.current;
+    const maps = window.naver?.maps as NMaps | undefined;
+    if (!map || !maps?.LatLng) return;
+
+    const seed = originPoint ?? (routeLine && routeLine.length > 0 ? routeLine[0] : null);
+    if (!seed) return;
+
+    const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
+    const m = map as { setCenter?: (ll: unknown) => void; setZoom?: (z: number) => void };
+    m.setCenter?.(new LatLngCtor(seed.lat, seed.lng));
+    m.setZoom?.(NAV_FOLLOW_ZOOM);
+  }, [sdkLoaded, followUser, navigationMode, liveUserPosition, followPaused, originPoint, routeLine, mapReadyEpoch]);
+
+  /** 첫 GPS 수신 시 즉시 사용자 위치로 맞춤 */
+  useEffect(() => {
+    if (!sdkLoaded || !followUser || !navigationMode || followPaused || !liveUserPosition) return;
+    if (hasNavCenteredRef.current) return;
+
+    const map = mapInstanceRef.current;
+    const maps = window.naver?.maps as NMaps | undefined;
+    if (!map || !maps?.LatLng || !maps?.Point) return;
+
+    const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
+    const PointCtor = maps.Point as new (x: number, y: number) => unknown;
+    const heading = userHeading ?? routeHeading ?? 0;
+    const bottomObstructionVh =
+      mapLayout === "route" &&
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 639px)").matches
+        ? mobileSheetVhRef.current
+        : 0;
+
+    displayPosRef.current = { ...liveUserPosition };
+    targetPosRef.current = liveUserPosition;
+
+    try {
+      programmaticCameraRef.current = true;
+      const origin = applyNavigationCamera(
+        map as Parameters<typeof applyNavigationCamera>[0],
+        (lat, lng) => new LatLngCtor(lat, lng),
+        (x, y) => new PointCtor(x, y),
+        liveUserPosition,
+        heading,
+        { snap: true, bottomObstructionVh },
+      );
+      if (origin && mapRotateRef.current) {
+        const el = mapRotateRef.current;
+        const w = el.clientWidth || 1;
+        const h = el.clientHeight || 1;
+        mapRotateRef.current.style.transformOrigin = `${(origin.originX / w) * 100}% ${(origin.originY / h) * 100}%`;
+      }
+      navZoomSetRef.current = true;
+      navSnapPendingRef.current = false;
+      hasNavCenteredRef.current = true;
+    } catch {
+      /* ignore */
+    } finally {
+      programmaticCameraRef.current = false;
+    }
+  }, [
+    sdkLoaded,
+    followUser,
+    navigationMode,
+    followPaused,
+    liveUserPosition,
+    userHeading,
+    routeHeading,
+    mapLayout,
+    mapReadyEpoch,
+  ]);
 
   /** 안내 중 지도 드래그 → 추적 일시 중지 */
   useEffect(() => {
@@ -932,8 +1013,10 @@ export function CampusMap({
       }
 
       let display = displayPosRef.current;
-      if (!display) {
+      const shouldSnap = navSnapPendingRef.current || !display;
+      if (shouldSnap) {
         display = { ...target };
+        navSnapPendingRef.current = false;
       } else {
         const posT = 1 - (1 - NAV_POS_LERP) ** dt;
         display = lerpLatLng(display, target, posT);
@@ -946,29 +1029,47 @@ export function CampusMap({
         displayHeadingRef.current = lerpAngleDeg(displayHeadingRef.current, tHeading, headT);
       }
 
-      if (mapRotateRef.current) {
-        mapRotateRef.current.style.transform = `rotate(${-displayHeadingRef.current}deg) scale(${NAV_MAP_ROTATION_SCALE})`;
-      }
-
+      const headingForCam = tHeading ?? displayHeadingRef.current;
       const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
+      const PointCtor = maps.Point as (new (x: number, y: number) => unknown) | undefined;
       const ll = new LatLngCtor(display.lat, display.lng);
       if (navUserMarkerRef.current?.setPosition) {
         navUserMarkerRef.current.setPosition(ll);
       }
 
-      const headingForCam = tHeading ?? displayHeadingRef.current;
-      const camCenter = navigationCenterForUser(display, headingForCam);
-      const camLl = new LatLngCtor(camCenter.lat, camCenter.lng);
-      const m = map as { setCenter?: (ll: unknown) => void; setZoom?: (z: number) => void; getZoom?: () => number };
+      const bottomObstructionVh =
+        mapLayout === "route" &&
+        typeof window !== "undefined" &&
+        window.matchMedia("(max-width: 639px)").matches
+          ? mobileSheetVhRef.current
+          : 0;
+
+      const m = map as Parameters<typeof applyNavigationCamera>[0];
 
       try {
         programmaticCameraRef.current = true;
-        m.setCenter?.(camLl);
-        if (!navZoomSetRef.current) {
-          const cur = m.getZoom?.() ?? 16;
-          if (cur < NAV_FOLLOW_ZOOM) m.setZoom?.(NAV_FOLLOW_ZOOM);
-          navZoomSetRef.current = true;
+        const origin =
+          PointCtor != null
+            ? applyNavigationCamera(
+                m,
+                (lat, lng) => new LatLngCtor(lat, lng),
+                (x, y) => new PointCtor(x, y),
+                display,
+                headingForCam,
+                { snap: shouldSnap, bottomObstructionVh },
+              )
+            : null;
+
+        if (mapRotateRef.current) {
+          const el = mapRotateRef.current;
+          const w = el.clientWidth || 1;
+          const h = el.clientHeight || 1;
+          const ox = origin?.originX ?? w / 2;
+          const oy = origin?.originY ?? h / 2;
+          mapRotateRef.current.style.transformOrigin = `${(ox / w) * 100}% ${(oy / h) * 100}%`;
+          mapRotateRef.current.style.transform = `rotate(${-displayHeadingRef.current}deg) scale(${NAV_MAP_ROTATION_SCALE})`;
         }
+        navZoomSetRef.current = true;
       } catch {
         /* ignore */
       } finally {
@@ -983,7 +1084,7 @@ export function CampusMap({
       if (navAnimFrameRef.current != null) cancelAnimationFrame(navAnimFrameRef.current);
       navAnimFrameRef.current = null;
     };
-  }, [sdkLoaded, followUser, navigationMode, followPaused, mapReadyEpoch]);
+  }, [sdkLoaded, followUser, navigationMode, followPaused, mapReadyEpoch, mapLayout]);
 
   /** 추적 중이 아닐 때 GPS 위치만 표시 */
   useEffect(() => {
@@ -1052,6 +1153,8 @@ export function CampusMap({
   const resumeNavigationFollow = useCallback(() => {
     displayPosRef.current = targetPosRef.current ? { ...targetPosRef.current } : null;
     navZoomSetRef.current = false;
+    navSnapPendingRef.current = true;
+    hasNavCenteredRef.current = false;
     setFollowPaused(false);
   }, []);
 
