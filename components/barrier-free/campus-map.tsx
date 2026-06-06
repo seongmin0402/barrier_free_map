@@ -23,7 +23,6 @@ import {
   lerpLatLng,
   NAV_FOLLOW_ZOOM,
   NAV_HEADING_LERP,
-  NAV_MAP_ROTATION_SCALE,
   NAV_POS_LERP,
 } from "@/lib/routing/nav-camera";
 import type { DeviceHeadingSnapshot, NavMotionSnapshot } from "@/lib/device-orientation";
@@ -242,8 +241,9 @@ function markerPinHtml(color: string, label: string) {
   </div>`;
 }
 
-function navArrowHtml() {
-  return `<div aria-hidden="true" style="width:28px;height:28px;transform:translate(-50%,-50%);filter:drop-shadow(0 1px 2px rgba(0,0,0,.35));">
+function navArrowHtml(headingDeg = 0) {
+  const deg = Number.isFinite(headingDeg) ? headingDeg : 0;
+  return `<div aria-hidden="true" style="width:28px;height:28px;transform:translate(-50%,-50%) rotate(${deg}deg);filter:drop-shadow(0 1px 2px rgba(0,0,0,.35));">
     <svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
       <circle cx="14" cy="14" r="11" fill="#2563eb" stroke="#ffffff" stroke-width="2.5"/>
       <path fill="#ffffff" d="M14 6.5 L19.5 20 H14 V15.5 H9 L14 6.5 Z"/>
@@ -278,11 +278,14 @@ export function CampusMap({
   const ui = useUi();
   const clientId = process.env.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID ?? "";
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRotateRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<unknown>(null);
   const routePolylineRef = useRef<Array<{ setMap: (t: unknown) => void }>>([]);
   const routeMarkersRef = useRef<Array<{ setMap: (t: unknown) => void }>>([]);
-  const navUserMarkerRef = useRef<{ setMap: (t: unknown) => void; setPosition?: (p: unknown) => void } | null>(null);
+  const navUserMarkerRef = useRef<{
+    setMap: (t: unknown) => void;
+    setPosition?: (p: unknown) => void;
+    setIcon?: (icon: unknown) => void;
+  } | null>(null);
   const pickListenerRef = useRef<unknown>(null);
   const onMapPickRef = useRef(onMapPick);
   onMapPickRef.current = onMapPick;
@@ -307,6 +310,7 @@ export function CampusMap({
   const navSnapPendingRef = useRef(false);
   const hasNavCenteredRef = useRef(false);
   const viewportAdjustedRef = useRef(false);
+  const lastMarkerHeadingRef = useRef<number | null>(null);
   const lastSheetVhForViewportRef = useRef(mobileSheetVh);
   const mobileSheetVhRef = useRef(mobileSheetVh);
   const programmaticCameraRef = useRef(false);
@@ -886,16 +890,10 @@ export function CampusMap({
       viewportAdjustedRef.current = false;
       displayPosRef.current = null;
       targetPosRef.current = null;
+      lastMarkerHeadingRef.current = null;
       const seedHeading = routeHeading ?? userHeading ?? 0;
       displayHeadingRef.current = seedHeading;
       targetHeadingRef.current = seedHeading;
-      if (mapRotateRef.current) {
-        mapRotateRef.current.style.transform = "";
-        mapRotateRef.current.style.transformOrigin = "";
-      }
-    } else if (mapRotateRef.current) {
-      mapRotateRef.current.style.transform = "";
-      mapRotateRef.current.style.transformOrigin = "";
     }
   }, [followUser, navigationMode, routeHeading, userHeading]);
 
@@ -907,12 +905,18 @@ export function CampusMap({
     if (!map || !maps?.LatLng) return;
 
     const seed = originPoint ?? (routeLine && routeLine.length > 0 ? routeLine[0] : null);
-    if (!seed) return;
-
-    const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
     const m = map as { setCenter?: (ll: unknown) => void; setZoom?: (z: number) => void; relayout?: () => void };
-    m.setCenter?.(new LatLngCtor(seed.lat, seed.lng));
-    m.setZoom?.(NAV_FOLLOW_ZOOM);
+
+    if (routeLine && routeLine.length >= 2) {
+      fitToPoints(maps as NMaps, map, routeLine, { padding: 70, maxZoom: 17 });
+    } else if (seed) {
+      const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
+      m.setCenter?.(new LatLngCtor(seed.lat, seed.lng));
+      m.setZoom?.(NAV_FOLLOW_ZOOM);
+    } else {
+      return;
+    }
+
     requestAnimationFrame(() => {
       try {
         m.relayout?.();
@@ -946,7 +950,7 @@ export function CampusMap({
 
     try {
       programmaticCameraRef.current = true;
-      const origin = applyNavigationCamera(
+      applyNavigationCamera(
         map as Parameters<typeof applyNavigationCamera>[0],
         (lat, lng) => new LatLngCtor(lat, lng),
         (x, y) => new PointCtor(x, y),
@@ -954,12 +958,6 @@ export function CampusMap({
         heading,
         { snap: true, bottomObstructionVh, adjustViewport: true },
       );
-      if (origin && mapRotateRef.current) {
-        const el = mapRotateRef.current;
-        const w = el.clientWidth || 1;
-        const h = el.clientHeight || 1;
-        mapRotateRef.current.style.transformOrigin = `${(origin.originX / w) * 100}% ${(origin.originY / h) * 100}%`;
-      }
       viewportAdjustedRef.current = true;
       try {
         (map as { relayout?: () => void }).relayout?.();
@@ -1034,6 +1032,7 @@ export function CampusMap({
 
     const pos = displayPosRef.current ?? liveUserPosition;
     const ll = new LatLngCtor(pos.lat, pos.lng);
+    const h = displayHeadingRef.current;
     if (navUserMarkerRef.current?.setPosition) {
       navUserMarkerRef.current.setPosition(ll);
     } else if (MarkerCtor && PointCtor) {
@@ -1041,8 +1040,8 @@ export function CampusMap({
         map,
         position: ll,
         zIndex: 500,
-        icon: { content: navArrowHtml(), anchor: new PointCtor(14, 14) },
-      }) as { setMap: (t: unknown) => void; setPosition?: (p: unknown) => void };
+        icon: { content: navArrowHtml(h), anchor: new PointCtor(14, 14) },
+      }) as typeof navUserMarkerRef.current;
     }
   }, [sdkLoaded, mapReadyEpoch, liveUserPosition]);
 
@@ -1100,6 +1099,17 @@ export function CampusMap({
         navUserMarkerRef.current.setPosition(ll);
       }
 
+      if (PointCtor != null && navUserMarkerRef.current?.setIcon) {
+        const prevH = lastMarkerHeadingRef.current;
+        if (prevH == null || Math.abs(((headingForCam - prevH + 540) % 360) - 180) > 2) {
+          lastMarkerHeadingRef.current = headingForCam;
+          navUserMarkerRef.current.setIcon({
+            content: navArrowHtml(headingForCam),
+            anchor: new PointCtor(14, 14),
+          });
+        }
+      }
+
       const bottomObstructionVh =
         mapLayout === "route" &&
         typeof window !== "undefined" &&
@@ -1134,16 +1144,6 @@ export function CampusMap({
 
         if (origin && !hasNavCenteredRef.current) {
           hasNavCenteredRef.current = true;
-        }
-
-        if (hasNavCenteredRef.current && mapRotateRef.current && origin) {
-          const el = mapRotateRef.current;
-          const w = el.clientWidth || 1;
-          const h = el.clientHeight || 1;
-          const ox = origin.originX;
-          const oy = origin.originY;
-          mapRotateRef.current.style.transformOrigin = `${(ox / w) * 100}% ${(oy / h) * 100}%`;
-          mapRotateRef.current.style.transform = `rotate(${-displayHeadingRef.current}deg) scale(${NAV_MAP_ROTATION_SCALE})`;
         }
 
         if (shouldSnap || needsViewportAdjust) {
@@ -1467,20 +1467,13 @@ export function CampusMap({
       )}
 
       <div className="relative min-h-0 flex-1 overflow-hidden">
-        {/* 네이버 지도 — 안내 중 방향 회전은 wrapper transform으로 처리 */}
         <div
-          ref={mapRotateRef}
-          className="absolute inset-0 origin-center"
-          style={{ willChange: navigationMode && followUser && !followPaused ? "transform" : undefined }}
-        >
-          <div
-            ref={containerRef}
-            id="map"
-            className="absolute inset-0 z-0 h-full w-full min-h-[1px]"
-            role="presentation"
-            style={pickMode ? { cursor: "crosshair" } : undefined}
-          />
-        </div>
+          ref={containerRef}
+          id="map"
+          className="absolute inset-0 z-0 h-full w-full min-h-[1px]"
+          role="presentation"
+          style={pickMode ? { cursor: "crosshair" } : undefined}
+        />
         {pickMode && (
           <div
             className={cn(
