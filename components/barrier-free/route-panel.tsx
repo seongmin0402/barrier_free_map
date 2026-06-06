@@ -59,6 +59,8 @@ interface RoutePanelProps {
   remaining: number | null;
   voiceEnabled: boolean;
   onToggleVoice: (v: boolean) => void;
+  offRouteM?: number | null;
+  rerouteNotice?: boolean;
 }
 
 function maneuverIcon(maneuver: ManeuverKind) {
@@ -247,6 +249,8 @@ export function RoutePanel(props: RoutePanelProps) {
     remaining,
     voiceEnabled,
     onToggleVoice,
+    offRouteM = null,
+    rerouteNotice = false,
   } = props;
 
   const { locale } = useAppSettings();
@@ -424,6 +428,20 @@ export function RoutePanel(props: RoutePanelProps) {
           <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
             <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
             <span>{routeError}</span>
+          </div>
+        )}
+
+        {navigating && offRouteM != null && offRouteM > 40 && !rerouteNotice && (
+          <div className="flex items-start gap-2 rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-100">
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{ui.route.offRouteWarning}</span>
+          </div>
+        )}
+
+        {rerouteNotice && (
+          <div className="flex items-start gap-2 rounded-md border border-green-500 bg-green-50 px-3 py-2 text-xs text-green-900 dark:border-green-800 dark:bg-green-950/50 dark:text-green-100">
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{ui.route.reroutedNotice}</span>
           </div>
         )}
 

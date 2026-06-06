@@ -117,6 +117,8 @@ export type UiText = {
     stopNav: string;
     acquiringGps: string;
     navActive: string;
+    offRouteWarning: string;
+    reroutedNotice: string;
     voiceOn: string;
     voiceOff: string;
     voiceOnTitle: string;
@@ -134,6 +136,7 @@ export type UiText = {
       geoTimeout: string;
       geoFailed: string;
       trackFailed: string;
+      rerouteFailed: string;
     };
     currentLocationLabel: string;
     mapPickLabel: (lat: number, lng: number) => string;
@@ -292,6 +295,8 @@ const ko: UiText = {
     stopNav: "안내 중지",
     acquiringGps: "GPS 위치를 확인하는 중…",
     navActive: "길안내 진행 중",
+    offRouteWarning: "경로에서 벗어났습니다. 새 경로를 찾는 중…",
+    reroutedNotice: "새 경로로 안내를 재시작했습니다.",
     voiceOn: "음성 안내 끄기",
     voiceOff: "음성 안내 켜기",
     voiceOnTitle: "음성 안내 켜짐",
@@ -309,6 +314,7 @@ const ko: UiText = {
       geoTimeout: "위치 확인 시간이 초과되었습니다.",
       geoFailed: "위치를 가져올 수 없습니다.",
       trackFailed: "위치 추적 실패",
+      rerouteFailed: "새 경로를 찾지 못했습니다. 보행로 근처로 이동해 주세요.",
     },
     currentLocationLabel: "현재 위치",
     mapPickLabel: (lat, lng) => `지도 선택 (${lat.toFixed(5)}, ${lng.toFixed(5)})`,
@@ -473,6 +479,8 @@ const en: UiText = {
     stopNav: "Stop guidance",
     acquiringGps: "Acquiring GPS location…",
     navActive: "Guidance active",
+    offRouteWarning: "Off route. Finding a new path…",
+    reroutedNotice: "Guidance restarted on a new route.",
     voiceOn: "Turn voice off",
     voiceOff: "Turn voice on",
     voiceOnTitle: "Voice guidance on",
@@ -490,6 +498,7 @@ const en: UiText = {
       geoTimeout: "Location request timed out.",
       geoFailed: "Could not get location.",
       trackFailed: "Location tracking failed",
+      rerouteFailed: "Could not find a new route. Move closer to a walkway.",
     },
     currentLocationLabel: "Current location",
     mapPickLabel: (lat, lng) => `Map pick (${lat.toFixed(5)}, ${lng.toFixed(5)})`,

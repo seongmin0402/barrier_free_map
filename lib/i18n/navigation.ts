@@ -82,3 +82,10 @@ export function navSpeechText(
 export function remainingDistanceLabel(locale: AppLocale): string {
   return locale === "en" ? "Remaining" : "남은 거리";
 }
+
+/** 경로 이탈 후 재탐색 시 음성 안내 (출발 문구 포함) */
+export function offRouteRerouteSpeech(locale: AppLocale, departText: string): string {
+  return locale === "en"
+    ? `You have left the route. ${departText}`
+    : `경로를 벗어났습니다. ${departText}`;
+}

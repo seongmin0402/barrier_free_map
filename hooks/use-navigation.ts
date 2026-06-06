@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppSettings } from "@/components/app-settings-provider";
 import type { BarrierBuilding } from "@/lib/building-types";
-import { arriveMessage, navSpeechText } from "@/lib/i18n/navigation";
+import { arriveMessage, navSpeechText, offRouteRerouteSpeech } from "@/lib/i18n/navigation";
 import { getUi } from "@/lib/i18n/ui";
 import type { LatLng } from "@/lib/routing/geo";
 import { formatDistance, haversineMeters } from "@/lib/routing/geo";
@@ -48,6 +48,8 @@ export function useNavigation(buildings: BarrierBuilding[]) {
   const [remaining, setRemaining] = useState<number | null>(null);
   const [distanceToNext, setDistanceToNext] = useState<number | null>(null);
   const [geoError, setGeoError] = useState<string | null>(null);
+  const [offRouteM, setOffRouteM] = useState<number | null>(null);
+  const [rerouteNotice, setRerouteNotice] = useState(false);
 
   const watchIdRef = useRef<number | null>(null);
   const lastSpokenStepRef = useRef<number>(-1);
@@ -55,6 +57,14 @@ export function useNavigation(buildings: BarrierBuilding[]) {
   const firstGpsFixRef = useRef<LatLng | null>(null);
   /** 출발 안내 직후 GPS 단계 안내 음성과 겹치지 않도록 */
   const navSpeechBlockedUntilRef = useRef(0);
+  const lastRerouteAtRef = useRef(0);
+  const graphRef = useRef<ReturnType<typeof buildWalkwayGraph> | null>(null);
+  const destinationRef = useRef<RoutePoint | null>(null);
+  const userPosRef = useRef<LatLng | null>(null);
+  userPosRef.current = userPos;
+
+  const OFF_ROUTE_THRESHOLD_M = 40;
+  const REROUTE_COOLDOWN_MS = 8000;
 
   /** 목적지까지 실제 거리 + 최소 안내 시간을 만족할 때만 도착 처리 */
   const hasArrived = useCallback(
@@ -104,6 +114,8 @@ export function useNavigation(buildings: BarrierBuilding[]) {
   }, [open, walkways]);
 
   const graph = useMemo(() => buildWalkwayGraph(walkways), [walkways]);
+  graphRef.current = graph;
+  destinationRef.current = destination;
 
   const route: ComputedRoute | null = useMemo(() => {
     if (!origin || !destination || !graph.nodes.size) return null;
@@ -117,6 +129,17 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     if (!route) return t.noRoute;
     return null;
   }, [origin, destination, graph, route, locale]);
+
+  // 언어 변경 시 안내 중이면 현재 위치 기준 경로 문장만 해당 언어로 갱신
+  useEffect(() => {
+    if (!navigating) return;
+    const dest = destinationRef.current;
+    const pos = userPosRef.current;
+    const g = graphRef.current;
+    if (!dest || !pos || !g?.nodes.size) return;
+    const refreshed = computeRoute(g, pos, dest.point, locale);
+    if (refreshed) setNavigationRoute(refreshed);
+  }, [locale, navigating]);
 
   // 음성 on/off 동기화
   useEffect(() => {
@@ -222,6 +245,9 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     navigationStartedAtRef.current = 0;
     firstGpsFixRef.current = null;
     navSpeechBlockedUntilRef.current = 0;
+    lastRerouteAtRef.current = 0;
+    setOffRouteM(null);
+    setRerouteNotice(false);
   }, [clearWatch]);
 
   const startNav = useCallback(() => {
@@ -270,13 +296,54 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     );
   }, [route, clearWatch]);
 
-  // GPS 갱신 → 진행 상황 계산 + 음성 안내
+  // GPS 갱신 → 진행 상황 계산 + 음성 안내 + 경로 이탈 재탐색
   useEffect(() => {
     const activeRoute = navigationRoute;
     if (!navigating || !activeRoute || !userPos) return;
 
     const progress = computeProgress(activeRoute, userPos);
     if (!progress) return;
+
+    setOffRouteM(progress.offRoute);
+
+    const navLocale = localeRef.current;
+    const arrived = hasArrived(activeRoute, userPos, progress.offRoute);
+    const sinceStartMs = Date.now() - navigationStartedAtRef.current;
+
+    // 경로 이탈 → 현재 위치에서 목적지까지 즉시 재탐색
+    if (
+      !arrived &&
+      sinceStartMs > 4000 &&
+      progress.offRoute > OFF_ROUTE_THRESHOLD_M &&
+      Date.now() - lastRerouteAtRef.current > REROUTE_COOLDOWN_MS
+    ) {
+      const dest = destinationRef.current;
+      const g = graphRef.current;
+      if (dest && g?.nodes.size) {
+        const newRoute = computeRoute(g, userPos, dest.point, navLocale);
+        if (newRoute) {
+          lastRerouteAtRef.current = Date.now();
+          setNavigationRoute(newRoute);
+          setCurrentStepIndex(0);
+          setRemaining(newRoute.distance);
+          setDistanceToNext(null);
+          setRerouteNotice(true);
+          navSpeechBlockedUntilRef.current = Date.now() + 5500;
+
+          const departStep =
+            newRoute.steps.find((s) => s.maneuver === "depart") ?? newRoute.steps[0];
+          if (departStep) {
+            getSpeechGuide().speak(
+              offRouteRerouteSpeech(navLocale, departStep.text),
+              { force: true, locale: navLocale },
+            );
+            lastSpokenStepRef.current = newRoute.steps.indexOf(departStep);
+          }
+          return;
+        }
+        setGeoError(getUi(navLocale).route.errors.rerouteFailed);
+      }
+    }
 
     setCurrentStepIndex(progress.stepIndex);
     setRemaining(progress.remaining);
@@ -285,11 +352,8 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     const step = activeRoute.steps[progress.stepIndex];
     if (!step) return;
 
-    const navLocale = localeRef.current;
-    const arrived = hasArrived(activeRoute, userPos, progress.offRoute);
     const speechAllowed = Date.now() >= navSpeechBlockedUntilRef.current;
 
-    // 회전·직진 단계만 음성 안내 (도착은 hasArrived일 때 한 번만)
     if (
       speechAllowed &&
       progress.stepIndex !== lastSpokenStepRef.current &&
@@ -309,6 +373,12 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       stopNav();
     }
   }, [navigating, navigationRoute, userPos, stopNav, hasArrived]);
+
+  useEffect(() => {
+    if (!rerouteNotice) return;
+    const t = window.setTimeout(() => setRerouteNotice(false), 4000);
+    return () => window.clearTimeout(t);
+  }, [rerouteNotice]);
 
   // 패널 닫으면 정리
   const close = useCallback(() => {
@@ -342,6 +412,8 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     currentStepIndex,
     remaining,
     distanceToNext,
+    offRouteM,
+    rerouteNotice,
     // handlers
     selectBuilding,
     startPickOnMap,
