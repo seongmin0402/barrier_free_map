@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Navigation } from "lucide-react";
 import Link from "next/link";
 import { useUi } from "@/hooks/use-ui";
+import { cn } from "@/lib/utils";
 import type { BarrierBuilding } from "@/lib/building-types";
 
 const facilitySearchTerms: Record<string, string[]> = {
@@ -139,12 +140,19 @@ export default function BarrierFreeMapPage() {
           <FacilityFilterBar
             filters={filters}
             onFilterChange={setFilters}
-            className="top-3 left-14 sm:left-3"
+            className="top-3 right-3 left-14 sm:left-3 sm:max-w-[calc(100%-1.5rem)]"
           />
 
-          <Button asChild className="absolute right-3 top-3 z-30 gap-1.5 shadow-lg sm:right-4 sm:top-4">
+          <Button
+            asChild
+            size="lg"
+            className={cn(
+              "absolute bottom-5 left-1/2 z-40 h-12 -translate-x-1/2 gap-2 rounded-full px-6 text-base font-semibold shadow-xl",
+              "ring-2 ring-primary/30 ring-offset-2 ring-offset-background",
+            )}
+          >
             <Link href="/route">
-              <Navigation className="h-4 w-4" />
+              <Navigation className="h-5 w-5" />
               {ui.page.directions}
             </Link>
           </Button>

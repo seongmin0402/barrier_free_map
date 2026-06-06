@@ -31,7 +31,7 @@ export function FacilityFilterBar({ filters, onFilterChange, className }: Facili
   return (
     <div
       className={cn(
-        "pointer-events-none absolute z-30 flex max-w-[calc(100%-7rem)] flex-col gap-1.5 sm:max-w-[calc(100%-5rem)]",
+        "pointer-events-none absolute z-30 flex max-w-[calc(100%-3.5rem)] flex-col gap-1.5 sm:max-w-none",
         className,
       )}
     >
