@@ -134,6 +134,9 @@ export default function RoutePage() {
           pickMode={nav.pickMode}
           onMapPick={nav.handleMapPick}
           followUser={nav.navigating}
+          navigationMode={nav.navigating}
+          userHeading={nav.userHeading}
+          routeHeading={nav.routeHeading}
         />
 
         <RoutePanel

@@ -131,6 +131,9 @@ export type UiText = {
     emptyHint1: string;
     emptyHint2: string;
     total: string;
+    fitRoute: string;
+    resumeFollow: string;
+    followPausedHint: string;
     errors: {
       loadingWalkways: string;
       noRoute: string;
@@ -319,6 +322,9 @@ const ko: UiText = {
     emptyHint1: "출발지와 도착지를 선택하면",
     emptyHint2: "보행로 기반 경로를 안내합니다.",
     total: "총",
+    fitRoute: "경로 맞춤",
+    resumeFollow: "추적 재개",
+    followPausedHint: "지도를 직접 이동 중 — 추적 재개를 누르면 다시 따라갑니다",
     errors: {
       loadingWalkways: "보행로 데이터를 불러오는 중입니다…",
       noRoute: "두 지점을 잇는 보행로 경로를 찾지 못했습니다. 다른 지점을 선택해 보세요.",
@@ -513,6 +519,9 @@ const en: UiText = {
     emptyHint1: "Select origin and destination",
     emptyHint2: "to get walkway-based directions.",
     total: "Total",
+    fitRoute: "Fit route",
+    resumeFollow: "Resume tracking",
+    followPausedHint: "Map moved manually — tap Resume tracking to follow again",
     errors: {
       loadingWalkways: "Loading walkway data…",
       noRoute: "No walkway route found between these points. Try different locations.",

@@ -14,6 +14,10 @@ import {
 } from "@/lib/routing/graph";
 import { computeRoute } from "@/lib/routing/route";
 import { computeProgress } from "@/lib/routing/progress";
+import {
+  headingAlongRoute,
+  resolveNavigationHeading,
+} from "@/lib/routing/nav-camera";
 import { getSpeechGuide } from "@/lib/routing/tts";
 import type {
   BuildingEntrance,
@@ -44,6 +48,8 @@ export function useNavigation(buildings: BarrierBuilding[]) {
   const [navigationRoute, setNavigationRoute] = useState<ComputedRoute | null>(null);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [userPos, setUserPos] = useState<LatLng | null>(null);
+  const [userHeading, setUserHeading] = useState<number | null>(null);
+  const [routeHeading, setRouteHeading] = useState<number | null>(null);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [remaining, setRemaining] = useState<number | null>(null);
   const [distanceToNext, setDistanceToNext] = useState<number | null>(null);
@@ -61,7 +67,11 @@ export function useNavigation(buildings: BarrierBuilding[]) {
   const graphRef = useRef<ReturnType<typeof buildWalkwayGraph> | null>(null);
   const destinationRef = useRef<RoutePoint | null>(null);
   const userPosRef = useRef<LatLng | null>(null);
+  const prevGpsRef = useRef<LatLng | null>(null);
+  const lastGpsHeadingRef = useRef<number | null>(null);
+  const routeHeadingNavRef = useRef<number | null>(null);
   userPosRef.current = userPos;
+  routeHeadingNavRef.current = routeHeading;
 
   const OFF_ROUTE_THRESHOLD_M = 40;
   const REROUTE_COOLDOWN_MS = 8000;
@@ -240,6 +250,10 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     clearWatch();
     getSpeechGuide().stop();
     setUserPos(null);
+    setUserHeading(null);
+    setRouteHeading(null);
+    prevGpsRef.current = null;
+    lastGpsHeadingRef.current = null;
     setRemaining(null);
     setDistanceToNext(null);
     navigationStartedAtRef.current = 0;
@@ -260,6 +274,10 @@ export function useNavigation(buildings: BarrierBuilding[]) {
 
     clearWatch();
     setUserPos(null);
+    setUserHeading(null);
+    setRouteHeading(null);
+    prevGpsRef.current = null;
+    lastGpsHeadingRef.current = null;
     setGeoError(null);
     setCurrentStepIndex(0);
     lastSpokenStepRef.current = -1;
@@ -284,6 +302,18 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       (pos) => {
         const here = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         if (!firstGpsFixRef.current) firstGpsFixRef.current = here;
+
+        const heading = resolveNavigationHeading(
+          prevGpsRef.current,
+          here,
+          pos.coords.heading,
+          routeHeadingNavRef.current,
+        );
+        if (heading != null) {
+          lastGpsHeadingRef.current = heading;
+          setUserHeading(heading);
+        }
+        prevGpsRef.current = here;
         setUserPos(here);
       },
       (err) => {
@@ -292,7 +322,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
         if (err.code === 1) msg = te.geoDenied;
         setGeoError(msg);
       },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 25000 },
+      { enableHighAccuracy: true, maximumAge: 800, timeout: 25000 },
     );
   }, [route, clearWatch]);
 
@@ -305,6 +335,9 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     if (!progress) return;
 
     setOffRouteM(progress.offRoute);
+
+    const alongRoute = headingAlongRoute(activeRoute, progress);
+    if (alongRoute != null) setRouteHeading(alongRoute);
 
     const navLocale = localeRef.current;
     const arrived = hasArrived(activeRoute, userPos, progress.offRoute);
@@ -409,6 +442,8 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     voiceEnabled,
     setVoiceEnabled,
     userPos,
+    userHeading,
+    routeHeading,
     currentStepIndex,
     remaining,
     distanceToNext,

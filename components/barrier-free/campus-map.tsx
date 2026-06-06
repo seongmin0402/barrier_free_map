@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import Script from "next/script";
-import { Plus, Minus, Locate, Maximize2, SlidersHorizontal } from "lucide-react";
+import { Plus, Minus, Locate, Maximize2, SlidersHorizontal, Route, Crosshair } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -14,6 +14,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { BarrierBuilding } from "@/lib/building-types";
 import type { LatLng } from "@/lib/routing/geo";
+import {
+  lerpAngleDeg,
+  lerpLatLng,
+  NAV_FOLLOW_ZOOM,
+  NAV_MAP_ROTATION_SCALE,
+  navigationCenterForUser,
+} from "@/lib/routing/nav-camera";
 import { segmentColor } from "@/lib/routing/style";
 import { useUi } from "@/hooks/use-ui";
 import {
@@ -45,6 +52,12 @@ interface CampusMapProps {
   onMapPick?: (point: LatLng) => void;
   /** 네비게이션 중 사용자 위치로 지도 추적 */
   followUser?: boolean;
+  /** 길안내 중 방향 회전·부드러운 추적 */
+  navigationMode?: boolean;
+  /** GPS/이동 방향 (deg) */
+  userHeading?: number | null;
+  /** 경로 진행 방향 (deg) */
+  routeHeading?: number | null;
 }
 
 function deriveCenter(items: BarrierBuilding[]) {
@@ -126,6 +139,42 @@ function facilityPinHtml() {
   </div>`;
 }
 
+function fitToPoints(
+  maps: NMaps,
+  map: unknown,
+  list: LatLng[],
+  options?: { padding?: number; maxZoom?: number },
+) {
+  const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
+  const BoundsCtor = maps.LatLngBounds as unknown as new (a?: unknown, b?: unknown) => {
+    extend(ll: unknown): void;
+  };
+  const pts = list.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+  const m = map as {
+    setCenter?: (c: unknown) => void;
+    setZoom?: (z: number) => void;
+    fitBounds?: (b: unknown, o?: Record<string, unknown>) => void;
+  };
+  if (!pts.length || !m?.fitBounds) return;
+
+  if (pts.length === 1) {
+    m.setCenter?.(new LatLngCtor(pts[0].lat, pts[0].lng));
+    m.setZoom?.(options?.maxZoom ?? NAV_FOLLOW_ZOOM);
+    return;
+  }
+
+  try {
+    const bounds = new BoundsCtor();
+    for (const p of pts) bounds.extend(new LatLngCtor(p.lat, p.lng));
+    m.fitBounds?.(bounds, {
+      padding: options?.padding ?? 70,
+      maxZoom: options?.maxZoom ?? 17,
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
 function fitToBuildings(
   maps: NMaps,
   map: unknown,
@@ -178,8 +227,11 @@ function markerPinHtml(color: string, label: string) {
 }
 
 function navArrowHtml() {
-  return `<div aria-hidden="true" style="width:24px;height:24px;transform:translate(-50%,-50%);">
-    <div style="width:18px;height:18px;margin:3px;border-radius:50%;background:#2563eb;border:3px solid #ffffff;box-shadow:0 0 0 2px rgba(37,99,235,.35),0 1px 3px rgba(0,0,0,.4);"></div>
+  return `<div aria-hidden="true" style="width:28px;height:28px;transform:translate(-50%,-50%);filter:drop-shadow(0 1px 2px rgba(0,0,0,.35));">
+    <svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="14" cy="14" r="11" fill="#2563eb" stroke="#ffffff" stroke-width="2.5"/>
+      <path fill="#ffffff" d="M14 6.5 L19.5 20 H14 V15.5 H9 L14 6.5 Z"/>
+    </svg>
   </div>`;
 }
 
@@ -197,10 +249,14 @@ export function CampusMap({
   pickMode = null,
   onMapPick,
   followUser = false,
+  navigationMode = false,
+  userHeading = null,
+  routeHeading = null,
 }: CampusMapProps) {
   const ui = useUi();
   const clientId = process.env.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID ?? "";
   const containerRef = useRef<HTMLDivElement>(null);
+  const mapRotateRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<unknown>(null);
   const routePolylineRef = useRef<Array<{ setMap: (t: unknown) => void }>>([]);
   const routeMarkersRef = useRef<Array<{ setMap: (t: unknown) => void }>>([]);
@@ -220,6 +276,18 @@ export function CampusMap({
   const myLocationMarkerRef = useRef<{ setMap: (v: unknown) => void; setPosition?: (p: unknown) => void } | null>(null);
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
   const [gradeGuideOpen, setGradeGuideOpen] = useState(false);
+  const [followPaused, setFollowPaused] = useState(false);
+  const displayPosRef = useRef<LatLng | null>(null);
+  const displayHeadingRef = useRef(0);
+  const targetPosRef = useRef<LatLng | null>(null);
+  const targetHeadingRef = useRef<number | null>(null);
+  const navAnimFrameRef = useRef<number | null>(null);
+  const navZoomSetRef = useRef(false);
+  const programmaticCameraRef = useRef(false);
+  const userHeadingRef = useRef(userHeading);
+  const routeHeadingRef = useRef(routeHeading);
+  userHeadingRef.current = userHeading;
+  routeHeadingRef.current = routeHeading;
   const [geoHintMessage, setGeoHintMessage] = useState<string | null>(null);
   const [locationTracking, setLocationTracking] = useState(false);
   const [scriptError, setScriptError] = useState(false);
@@ -732,38 +800,58 @@ export function CampusMap({
     };
   }, [sdkLoaded, mapReadyEpoch, routeLine, routeSegments, originPoint, destPoint, ui]);
 
-  /** 경로가 생기면 줌은 그대로 두고 경로 중심으로만 이동 (확대하지 않음) */
+  /** 경로가 생기면 경로 전체가 보이도록 맞춤 (안내 중에는 카메라 루프가 담당) */
   useEffect(() => {
     if (!sdkLoaded || followUser) return;
     if (!routeLine || routeLine.length < 2) return;
     const maps = window.naver?.maps as NMaps | undefined;
-    const map = mapInstanceRef.current as undefined | {
-      panTo?: (ll: unknown, o?: unknown) => void;
-      setCenter?: (ll: unknown) => void;
-    };
-    if (!maps?.LatLng || !map) return;
-    const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
-    try {
-      // 경로 좌표의 중심점을 계산 (줌 변경 없이 이 지점으로만 살짝 이동)
-      let minLat = Infinity;
-      let maxLat = -Infinity;
-      let minLng = Infinity;
-      let maxLng = -Infinity;
-      for (const p of routeLine) {
-        if (p.lat < minLat) minLat = p.lat;
-        if (p.lat > maxLat) maxLat = p.lat;
-        if (p.lng < minLng) minLng = p.lng;
-        if (p.lng > maxLng) maxLng = p.lng;
-      }
-      const center = new LatLngCtor((minLat + maxLat) / 2, (minLng + maxLng) / 2);
-      if (map.panTo) map.panTo(center, { duration: 300 });
-      else map.setCenter?.(center);
-    } catch {
-      /* ignore */
-    }
+    const map = mapInstanceRef.current;
+    if (!maps || !map) return;
+    fitToPoints(maps as NMaps, map, routeLine, { padding: 70, maxZoom: 17 });
   }, [sdkLoaded, mapReadyEpoch, routeLine, followUser]);
 
-  /** 실시간 GPS 위치 마커 + 추적 이동 */
+  /** GPS 목표 위치·방향 갱신 */
+  useEffect(() => {
+    if (liveUserPosition) targetPosRef.current = liveUserPosition;
+  }, [liveUserPosition]);
+
+  useEffect(() => {
+    const h = userHeading ?? routeHeading;
+    if (h != null) targetHeadingRef.current = h;
+  }, [userHeading, routeHeading]);
+
+  /** 안내 시작/종료 시 추적 상태 초기화 */
+  useEffect(() => {
+    if (followUser && navigationMode) {
+      setFollowPaused(false);
+      navZoomSetRef.current = false;
+      displayPosRef.current = null;
+    } else if (mapRotateRef.current) {
+      mapRotateRef.current.style.transform = "";
+    }
+  }, [followUser, navigationMode]);
+
+  /** 안내 중 지도 드래그 → 추적 일시 중지 */
+  useEffect(() => {
+    if (!sdkLoaded || !navigationMode) return;
+    const map = mapInstanceRef.current;
+    const maps = window.naver?.maps as NMaps | undefined;
+    if (!map || !maps?.Event?.addListener) return;
+
+    const dragListener = maps.Event.addListener(map, "dragstart", () => {
+      setFollowPaused(true);
+    });
+
+    return () => {
+      try {
+        (maps.Event as { removeListener?: (l: unknown) => void }).removeListener?.(dragListener);
+      } catch {
+        /* ignore */
+      }
+    };
+  }, [sdkLoaded, navigationMode, mapReadyEpoch]);
+
+  /** 실시간 GPS 마커 생성 */
   useEffect(() => {
     if (!sdkLoaded) return;
     const map = mapInstanceRef.current;
@@ -788,23 +876,111 @@ export function CampusMap({
       return;
     }
 
-    const pos = new LatLngCtor(liveUserPosition.lat, liveUserPosition.lng);
+    const pos = displayPosRef.current ?? liveUserPosition;
+    const ll = new LatLngCtor(pos.lat, pos.lng);
     if (navUserMarkerRef.current?.setPosition) {
-      navUserMarkerRef.current.setPosition(pos);
+      navUserMarkerRef.current.setPosition(ll);
     } else if (MarkerCtor && PointCtor) {
       navUserMarkerRef.current = new MarkerCtor({
         map,
-        position: pos,
+        position: ll,
         zIndex: 500,
-        icon: { content: navArrowHtml(), anchor: new PointCtor(12, 12) },
+        icon: { content: navArrowHtml(), anchor: new PointCtor(14, 14) },
       }) as { setMap: (t: unknown) => void; setPosition?: (p: unknown) => void };
     }
+  }, [sdkLoaded, mapReadyEpoch, liveUserPosition]);
 
-    if (followUser) {
-      const m = map as { panTo?: (ll: unknown, o?: unknown) => void; setCenter?: (ll: unknown) => void };
-      m.panTo?.(pos, { duration: 500 });
+  /** 부드러운 추적 + 방향 회전 (requestAnimationFrame) */
+  useEffect(() => {
+    if (!sdkLoaded || !followUser || !navigationMode || followPaused) {
+      if (navAnimFrameRef.current != null) {
+        cancelAnimationFrame(navAnimFrameRef.current);
+        navAnimFrameRef.current = null;
+      }
+      return;
     }
-  }, [sdkLoaded, mapReadyEpoch, liveUserPosition, followUser]);
+
+    const tick = () => {
+      const map = mapInstanceRef.current;
+      const maps = window.naver?.maps as NMaps | undefined;
+      if (!map || !maps?.LatLng) {
+        navAnimFrameRef.current = requestAnimationFrame(tick);
+        return;
+      }
+
+      const target = targetPosRef.current;
+      if (!target) {
+        navAnimFrameRef.current = requestAnimationFrame(tick);
+        return;
+      }
+
+      let display = displayPosRef.current;
+      if (!display) {
+        display = { ...target };
+      } else {
+        display = lerpLatLng(display, target, 0.2);
+      }
+      displayPosRef.current = display;
+
+      const tHeading = targetHeadingRef.current ?? userHeadingRef.current ?? routeHeadingRef.current;
+      if (tHeading != null) {
+        displayHeadingRef.current = lerpAngleDeg(displayHeadingRef.current, tHeading, 0.14);
+      }
+
+      if (mapRotateRef.current) {
+        mapRotateRef.current.style.transform = `rotate(${-displayHeadingRef.current}deg) scale(${NAV_MAP_ROTATION_SCALE})`;
+      }
+
+      const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
+      const ll = new LatLngCtor(display.lat, display.lng);
+      if (navUserMarkerRef.current?.setPosition) {
+        navUserMarkerRef.current.setPosition(ll);
+      }
+
+      const headingForCam = tHeading ?? displayHeadingRef.current;
+      const camCenter = navigationCenterForUser(display, headingForCam);
+      const camLl = new LatLngCtor(camCenter.lat, camCenter.lng);
+      const m = map as { setCenter?: (ll: unknown) => void; setZoom?: (z: number) => void; getZoom?: () => number };
+
+      try {
+        programmaticCameraRef.current = true;
+        m.setCenter?.(camLl);
+        if (!navZoomSetRef.current) {
+          const cur = m.getZoom?.() ?? 16;
+          if (cur < NAV_FOLLOW_ZOOM) m.setZoom?.(NAV_FOLLOW_ZOOM);
+          navZoomSetRef.current = true;
+        }
+      } catch {
+        /* ignore */
+      } finally {
+        programmaticCameraRef.current = false;
+      }
+
+      navAnimFrameRef.current = requestAnimationFrame(tick);
+    };
+
+    navAnimFrameRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (navAnimFrameRef.current != null) cancelAnimationFrame(navAnimFrameRef.current);
+      navAnimFrameRef.current = null;
+    };
+  }, [sdkLoaded, followUser, navigationMode, followPaused, mapReadyEpoch]);
+
+  /** 추적 중이 아닐 때 GPS 위치만 표시 */
+  useEffect(() => {
+    if (!sdkLoaded || !liveUserPosition || (followUser && navigationMode && !followPaused)) return;
+    const map = mapInstanceRef.current as undefined | {
+      panTo?: (ll: unknown, o?: unknown) => void;
+      setCenter?: (ll: unknown) => void;
+    };
+    const maps = window.naver?.maps as NMaps | undefined;
+    if (!map || !maps?.LatLng) return;
+    const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
+    const pos = new LatLngCtor(liveUserPosition.lat, liveUserPosition.lng);
+    if (followUser && !navigationMode) {
+      map.panTo?.(pos, { duration: 280 });
+    }
+  }, [sdkLoaded, mapReadyEpoch, liveUserPosition, followUser, navigationMode, followPaused]);
 
   /** 지도에서 출발/도착 지점 선택 */
   useEffect(() => {
@@ -835,11 +1011,29 @@ export function CampusMap({
     };
   }, [sdkLoaded, mapReadyEpoch, pickMode]);
 
-  const zoomDelta = useCallback((delta: number) => {
-    const map = mapInstanceRef.current as undefined | { getZoom: () => number; setZoom: (z: number) => void };
-    if (!map?.getZoom || !map?.setZoom) return;
-    const next = Math.min(19, Math.max(13, map.getZoom() + delta));
-    map.setZoom(next);
+  const zoomDelta = useCallback(
+    (delta: number) => {
+      const map = mapInstanceRef.current as undefined | { getZoom: () => number; setZoom: (z: number) => void };
+      if (!map?.getZoom || !map?.setZoom) return;
+      if (navigationMode) setFollowPaused(true);
+      const next = Math.min(19, Math.max(13, map.getZoom() + delta));
+      map.setZoom(next);
+    },
+    [navigationMode],
+  );
+
+  const fitRouteOnMap = useCallback(() => {
+    if (!routeLine || routeLine.length < 2) return;
+    setFollowPaused(true);
+    const maps = window.naver?.maps as NMaps | undefined;
+    if (!maps || !mapInstanceRef.current) return;
+    fitToPoints(maps as NMaps, mapInstanceRef.current, routeLine, { padding: 70, maxZoom: 17 });
+  }, [routeLine]);
+
+  const resumeNavigationFollow = useCallback(() => {
+    displayPosRef.current = targetPosRef.current ? { ...targetPosRef.current } : null;
+    navZoomSetRef.current = false;
+    setFollowPaused(false);
   }, []);
 
   const showCampusOverview = useCallback(() => {
@@ -1045,18 +1239,30 @@ export function CampusMap({
         </div>
       )}
 
-      <div className="relative min-h-0 flex-1">
-        {/* 네이버 지도: 부모 높이가 잡힌 뒤 relayout으로 타일 표시 */}
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        {/* 네이버 지도 — 안내 중 방향 회전은 wrapper transform으로 처리 */}
         <div
-          ref={containerRef}
-          id="map"
-          className="absolute inset-0 z-0 h-full w-full min-h-[1px]"
-          role="presentation"
-          style={pickMode ? { cursor: "crosshair" } : undefined}
-        />
+          ref={mapRotateRef}
+          className="absolute inset-0 origin-center"
+          style={{ willChange: navigationMode && followUser && !followPaused ? "transform" : undefined }}
+        >
+          <div
+            ref={containerRef}
+            id="map"
+            className="absolute inset-0 z-0 h-full w-full min-h-[1px]"
+            role="presentation"
+            style={pickMode ? { cursor: "crosshair" } : undefined}
+          />
+        </div>
         {pickMode && (
           <div className="pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full bg-blue-600/95 px-4 py-1.5 text-xs font-medium text-white shadow-lg">
             {pickMode === "origin" ? ui.map.pickOrigin : ui.map.pickDestination}
+          </div>
+        )}
+
+        {navigationMode && followPaused && (
+          <div className="pointer-events-none absolute left-1/2 top-3 z-20 max-w-[min(92vw,22rem)] -translate-x-1/2 rounded-lg border border-border bg-card/95 px-3 py-2 text-center text-xs text-muted-foreground shadow-md backdrop-blur-sm">
+            {ui.route.followPausedHint}
           </div>
         )}
       </div>
@@ -1117,6 +1323,34 @@ export function CampusMap({
             </div>
           )}
           <div className="flex flex-col gap-2">
+            {routeLine && routeLine.length >= 2 && (
+              <>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon"
+                  onClick={fitRouteOnMap}
+                  className="shadow-md"
+                  aria-label={ui.route.fitRoute}
+                  title={ui.route.fitRoute}
+                >
+                  <Route className="h-5 w-5" />
+                </Button>
+                {navigationMode && followPaused && (
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="icon"
+                    onClick={resumeNavigationFollow}
+                    className="shadow-md"
+                    aria-label={ui.route.resumeFollow}
+                    title={ui.route.resumeFollow}
+                  >
+                    <Crosshair className="h-5 w-5" />
+                  </Button>
+                )}
+              </>
+            )}
             <Button type="button" variant="secondary" size="icon" onClick={() => zoomDelta(1)} className="shadow-md" aria-label={ui.map.zoomIn}>
               <Plus className="h-5 w-5" />
             </Button>
@@ -1136,6 +1370,7 @@ export function CampusMap({
           </div>
         </div>
 
+        {!routeLine && (
         <div className="pointer-events-auto absolute left-3 bottom-3 rounded-md border border-border bg-card/95 p-2 shadow-md backdrop-blur-sm">
           <div className="mb-1 flex items-center gap-1.5">
             <h4 className="text-[11px] font-semibold text-foreground">{ui.map.footprintLegend}</h4>
@@ -1170,6 +1405,7 @@ export function CampusMap({
             </div>
           </div>
         </div>
+        )}
       </div>
 
       <AlertDialog open={locationDialogOpen} onOpenChange={setLocationDialogOpen}>
