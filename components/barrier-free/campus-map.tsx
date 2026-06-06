@@ -30,6 +30,8 @@ interface CampusMapProps {
   selectedBuilding: string | null;
   onBuildingSelect: (id: string) => void;
   showFacilityPins?: boolean;
+  /** true(기본): GeoJSON 전체 폴리곤 표시 · false: buildings 목록(필터 결과)에 있는 건물만 표시 */
+  showAllFootprints?: boolean;
   /** 길찾기 경로 좌표열 */
   routeLine?: LatLng[] | null;
   /** 경로 각 구간 종류 (routeLine 길이 - 1), 종류별 색상 표시용 */
@@ -186,6 +188,7 @@ export function CampusMap({
   selectedBuilding,
   onBuildingSelect,
   showFacilityPins = false,
+  showAllFootprints = true,
   routeLine = null,
   routeSegments = null,
   originPoint = null,
@@ -530,8 +533,11 @@ export function CampusMap({
 
     for (const feature of footprintCollection.features) {
       const buildingId = normalizeFootprintBuildingId(feature.properties?.id);
-      const level = footprintLevelForFeature(feature, buildingMap);
       const building = buildingId ? buildingMap.get(buildingId) : undefined;
+
+      if (!showAllFootprints && !building) continue;
+
+      const level = footprintLevelForFeature(feature, buildingMap);
       const isSelected = buildingId != null && buildingId === selectedIdRef.current;
       const stroke = footprintStrokeOptions(level, isSelected);
       const groups = footprintPolygonPathGroups(feature.geometry, LatLngCtor);
@@ -566,7 +572,7 @@ export function CampusMap({
       });
       footprintPolygonsRef.current = [];
     };
-  }, [sdkLoaded, footprintCollection, mapReadyEpoch, buildings, ui]);
+  }, [sdkLoaded, footprintCollection, mapReadyEpoch, buildings, showAllFootprints, ui]);
 
   /** 선택 변경 시 폴리곤 테두리만 갱신 */
   useEffect(() => {

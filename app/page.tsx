@@ -133,6 +133,7 @@ export default function BarrierFreeMapPage() {
             selectedBuilding={selectedBuildingId}
             onBuildingSelect={handleBuildingSelect}
             showFacilityPins={filters.length > 0}
+            showAllFootprints={filters.length === 0}
           />
 
           <FacilityFilterBar
