@@ -26,6 +26,7 @@ import {
   Navigation,
   Footprints,
   TriangleAlert,
+  Settings,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAppSettings } from "@/components/app-settings-provider";
@@ -61,6 +62,8 @@ interface RoutePanelProps {
   onToggleVoice: (v: boolean) => void;
   offRouteM?: number | null;
   rerouteNotice?: boolean;
+  onSettingsClick?: () => void;
+  onSheetVhChange?: (vh: number) => void;
 }
 
 function maneuverIcon(maneuver: ManeuverKind) {
@@ -251,6 +254,8 @@ export function RoutePanel(props: RoutePanelProps) {
     onToggleVoice,
     offRouteM = null,
     rerouteNotice = false,
+    onSettingsClick,
+    onSheetVhChange,
   } = props;
 
   const { locale } = useAppSettings();
@@ -278,6 +283,10 @@ export function RoutePanel(props: RoutePanelProps) {
     else if (route) setSheetVh(SNAP_HALF);
     else setSheetVh(SNAP_FULL);
   }, [route, navigating, pickMode]);
+
+  useEffect(() => {
+    onSheetVhChange?.(sheetVh);
+  }, [sheetVh, onSheetVhChange]);
 
   const routeSummaryRef = useRef<HTMLDivElement>(null);
 
@@ -358,10 +367,22 @@ export function RoutePanel(props: RoutePanelProps) {
           <ArrowLeft className="h-5 w-5" />
           <span>{ui.route.back}</span>
         </button>
-        <div className="flex items-center gap-2">
-          <Navigation className="h-5 w-5 text-blue-600" />
-          <h2 className="text-base font-semibold">{ui.route.title}</h2>
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <Navigation className="h-5 w-5 shrink-0 text-blue-600" />
+          <h2 className="truncate text-base font-semibold">{ui.route.title}</h2>
         </div>
+        {onSettingsClick ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-9 w-9 shrink-0"
+            onClick={onSettingsClick}
+            aria-label={ui.header.settingsAria}
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
+        ) : null}
       </div>
 
       <div

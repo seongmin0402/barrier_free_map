@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Navigation, Settings } from "lucide-react";
+import { Navigation } from "lucide-react";
 import { useAppSettings } from "@/components/app-settings-provider";
 import { CampusMap } from "@/components/barrier-free/campus-map";
 import { RoutePanel } from "@/components/barrier-free/route-panel";
@@ -11,10 +11,7 @@ import { useNavigation } from "@/hooks/use-navigation";
 import { useUi } from "@/hooks/use-ui";
 import { arriveMessage, maneuverLabel, remainingDistanceLabel } from "@/lib/i18n/navigation";
 import { formatDistance } from "@/lib/routing/geo";
-import { Button } from "@/components/ui/button";
 import type { BarrierBuilding } from "@/lib/building-types";
-
-const OFF_ROUTE_WARN_M = 40;
 
 export default function RoutePage() {
   const router = useRouter();
@@ -22,6 +19,7 @@ export default function RoutePage() {
   const ui = useUi();
   const [buildings, setBuildings] = useState<BarrierBuilding[]>([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [sheetVh, setSheetVh] = useState(86);
 
   useEffect(() => {
     let cancelled = false;
@@ -41,7 +39,6 @@ export default function RoutePage() {
   const nav = useNavigation(buildings);
   const setNavOpen = nav.setOpen;
 
-  // 전용 페이지에서는 패널을 항상 열어 둔다 (데이터 로딩 트리거)
   useEffect(() => {
     setNavOpen(true);
   }, [setNavOpen]);
@@ -66,32 +63,9 @@ export default function RoutePage() {
       data-high-contrast={settings.highContrast ? "true" : undefined}
     >
       <main className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col">
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          className="absolute right-3 top-3 z-40 shadow-md sm:right-4 sm:top-4"
-          onClick={() => setIsSettingsOpen(true)}
-          aria-label={ui.header.settingsAria}
-        >
-          <Settings className="h-5 w-5" />
-        </Button>
-
-        {nav.navigating && nav.offRouteM != null && nav.offRouteM > OFF_ROUTE_WARN_M && (
-          <div className="absolute left-1/2 top-14 z-40 max-w-[min(92vw,24rem)] -translate-x-1/2 rounded-lg border border-amber-400 bg-amber-50 px-3 py-2 text-center text-xs font-medium text-amber-950 shadow-md dark:border-amber-700 dark:bg-amber-950/90 dark:text-amber-100 sm:left-[23rem] sm:translate-x-0">
-            {ui.route.offRouteWarning}
-          </div>
-        )}
-
-        {nav.rerouteNotice && (
-          <div className="absolute left-1/2 top-14 z-40 max-w-[min(92vw,24rem)] -translate-x-1/2 rounded-lg border border-green-500 bg-green-50 px-3 py-2 text-center text-xs font-medium text-green-900 shadow-md dark:border-green-700 dark:bg-green-950/90 dark:text-green-100 sm:left-[23rem] sm:translate-x-0">
-            {ui.route.reroutedNotice}
-          </div>
-        )}
-
-        {/* 안내 중 좌상단 상태 배너 */}
+        {/* 데스크톱 안내 배너 — 모바일은 패널에서 표시 */}
         {nav.navigating && (
-          <div className="absolute left-3 top-3 z-40 max-w-[min(78vw,22rem)] rounded-xl bg-blue-600 px-4 py-3 text-white shadow-xl sm:left-[23rem]">
+          <div className="absolute left-[calc(22rem+0.75rem)] top-3 z-40 hidden max-w-xs rounded-xl bg-blue-600 px-4 py-3 text-white shadow-xl sm:block">
             <div className="flex items-start gap-3">
               <Navigation className="mt-0.5 h-6 w-6 shrink-0" />
               <div className="min-w-0">
@@ -137,6 +111,8 @@ export default function RoutePage() {
           navigationMode={nav.navigating}
           userHeading={nav.userHeading}
           routeHeading={nav.routeHeading}
+          mapLayout="route"
+          mobileSheetVh={sheetVh}
         />
 
         <RoutePanel
@@ -162,6 +138,8 @@ export default function RoutePage() {
           onToggleVoice={nav.setVoiceEnabled}
           offRouteM={nav.offRouteM}
           rerouteNotice={nav.rerouteNotice}
+          onSettingsClick={() => setIsSettingsOpen(true)}
+          onSheetVhChange={setSheetVh}
         />
 
         <SettingsPanel

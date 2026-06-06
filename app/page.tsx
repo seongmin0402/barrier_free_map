@@ -9,11 +9,7 @@ import { FacilityFilterBar } from "@/components/barrier-free/facility-filter-bar
 import { SettingsPanel } from "@/components/barrier-free/settings-panel";
 import { MobileSidebarToggle } from "@/components/barrier-free/mobile-sidebar-toggle";
 import { useAppSettings } from "@/components/app-settings-provider";
-import { Button } from "@/components/ui/button";
-import { Navigation } from "lucide-react";
-import Link from "next/link";
 import { useUi } from "@/hooks/use-ui";
-import { cn } from "@/lib/utils";
 import type { BarrierBuilding } from "@/lib/building-types";
 
 const facilitySearchTerms: Record<string, string[]> = {
@@ -117,8 +113,6 @@ export default function BarrierFreeMapPage() {
       )}
 
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
-        <MobileSidebarToggle isOpen={isSidebarOpen} onToggle={() => setIsSidebarOpen(!isSidebarOpen)} />
-
         <Sidebar
           buildings={filteredBuildings}
           totalBuildingCount={buildings.length}
@@ -135,27 +129,33 @@ export default function BarrierFreeMapPage() {
             onBuildingSelect={handleBuildingSelect}
             showFacilityPins={filters.length > 0}
             showAllFootprints={filters.length === 0}
+            mapLayout="explore"
+            directionsHref="/route"
+            directionsLabel={ui.page.directions}
           />
 
+          {/* 모바일: 메뉴 + 필터 한 줄 */}
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-30 p-3 md:hidden">
+            <div className="pointer-events-auto flex items-start gap-2">
+              <MobileSidebarToggle
+                embedded
+                isOpen={isSidebarOpen}
+                onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
+              />
+              <FacilityFilterBar
+                embedded
+                filters={filters}
+                onFilterChange={setFilters}
+              />
+            </div>
+          </div>
+
+          {/* 데스크톱: 필터만 상단 */}
           <FacilityFilterBar
             filters={filters}
             onFilterChange={setFilters}
-            className="top-3 right-3 left-14 sm:left-3 sm:max-w-[calc(100%-1.5rem)]"
+            className="top-3 right-3 left-3 hidden md:flex"
           />
-
-          <Button
-            asChild
-            size="lg"
-            className={cn(
-              "absolute bottom-5 left-1/2 z-40 h-12 -translate-x-1/2 gap-2 rounded-full px-6 text-base font-semibold shadow-xl",
-              "ring-2 ring-primary/30 ring-offset-2 ring-offset-background",
-            )}
-          >
-            <Link href="/route">
-              <Navigation className="h-5 w-5" />
-              {ui.page.directions}
-            </Link>
-          </Button>
 
           <BuildingDetail building={selectedBuilding} onClose={() => setSelectedBuildingId(null)} />
         </main>

@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import Script from "next/script";
-import { Plus, Minus, Locate, Maximize2, SlidersHorizontal, Route, Crosshair } from "lucide-react";
+import { Plus, Minus, Locate, Maximize2, SlidersHorizontal, Route, Crosshair, Navigation } from "lucide-react";
+import Link from "next/link";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -58,6 +60,13 @@ interface CampusMapProps {
   userHeading?: number | null;
   /** 경로 진행 방향 (deg) */
   routeHeading?: number | null;
+  /** explore: 메인 지도 · route: 길찾기 페이지 */
+  mapLayout?: "explore" | "route";
+  /** 모바일 길찾기 패널 높이(vh) — 컨트롤 버튼 겹침 방지 */
+  mobileSheetVh?: number;
+  /** 메인 지도 우측 컨트롤에 표시할 길찾기 링크 */
+  directionsHref?: string;
+  directionsLabel?: string;
 }
 
 function deriveCenter(items: BarrierBuilding[]) {
@@ -252,6 +261,10 @@ export function CampusMap({
   navigationMode = false,
   userHeading = null,
   routeHeading = null,
+  mapLayout = "explore",
+  mobileSheetVh = 54,
+  directionsHref,
+  directionsLabel,
 }: CampusMapProps) {
   const ui = useUi();
   const clientId = process.env.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID ?? "";
@@ -1211,8 +1224,28 @@ export function CampusMap({
 
   const scriptSrc = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${encodeURIComponent(clientId)}`;
 
+  const overlayBottomClass = cn(
+    mapLayout === "route"
+      ? "max-sm:bottom-[calc(var(--route-sheet-vh)*1vh+0.625rem)] sm:bottom-[max(0.75rem,env(safe-area-inset-bottom))]"
+      : "bottom-[max(0.75rem,env(safe-area-inset-bottom))]",
+  );
+
+  const mapBannerClass = cn(
+    "pointer-events-none absolute z-20 text-center text-xs shadow-md backdrop-blur-sm",
+    mapLayout === "route"
+      ? "top-3 left-3 right-14 sm:left-[calc(22rem+0.75rem)] sm:right-4 sm:max-w-md sm:text-left"
+      : "left-1/2 top-3 max-w-[min(calc(100%-1.5rem),24rem)] -translate-x-1/2",
+  );
+
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-muted/30">
+    <div
+      className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-muted/30"
+      style={
+        mapLayout === "route"
+          ? ({ "--route-sheet-vh": mobileSheetVh } as React.CSSProperties)
+          : undefined
+      }
+    >
       <Script
         id="naver-maps-sdk"
         strategy="afterInteractive"
@@ -1255,20 +1288,30 @@ export function CampusMap({
           />
         </div>
         {pickMode && (
-          <div className="pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full bg-blue-600/95 px-4 py-1.5 text-xs font-medium text-white shadow-lg">
+          <div
+            className={cn(
+              mapBannerClass,
+              "rounded-full bg-blue-600/95 px-4 py-1.5 font-medium text-white shadow-lg",
+            )}
+          >
             {pickMode === "origin" ? ui.map.pickOrigin : ui.map.pickDestination}
           </div>
         )}
 
         {navigationMode && followPaused && (
-          <div className="pointer-events-none absolute left-1/2 top-3 z-20 max-w-[min(92vw,22rem)] -translate-x-1/2 rounded-lg border border-border bg-card/95 px-3 py-2 text-center text-xs text-muted-foreground shadow-md backdrop-blur-sm">
+          <div
+            className={cn(
+              mapBannerClass,
+              "rounded-lg border border-border bg-card/95 px-3 py-2 text-muted-foreground",
+            )}
+          >
             {ui.route.followPausedHint}
           </div>
         )}
       </div>
 
       <div className="pointer-events-none absolute inset-0 z-10">
-        <div className="pointer-events-auto absolute right-4 bottom-4 flex flex-col items-end gap-2">
+        <div className={cn("pointer-events-auto absolute right-3 flex flex-col items-end gap-2 sm:right-4", overlayBottomClass)}>
           {geoHintMessage && (
             <div className="max-w-[14rem] rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive shadow-md">
               {geoHintMessage}
@@ -1367,11 +1410,28 @@ export function CampusMap({
             >
               <SlidersHorizontal className="h-5 w-5" />
             </Button>
+            {directionsHref && directionsLabel ? (
+              <Button
+                asChild
+                size="lg"
+                className="h-11 gap-2 rounded-full px-4 shadow-lg ring-2 ring-primary/25"
+              >
+                <Link href={directionsHref}>
+                  <Navigation className="h-4 w-4 shrink-0" />
+                  <span className="max-[380px]:sr-only text-sm font-semibold">{directionsLabel}</span>
+                </Link>
+              </Button>
+            ) : null}
           </div>
         </div>
 
         {!routeLine && (
-        <div className="pointer-events-auto absolute left-3 bottom-3 rounded-md border border-border bg-card/95 p-2 shadow-md backdrop-blur-sm">
+        <div
+          className={cn(
+            "pointer-events-auto absolute left-3 max-w-[min(11rem,calc(100%-4.5rem))] rounded-md border border-border bg-card/95 p-2 shadow-md backdrop-blur-sm sm:max-w-[13rem]",
+            overlayBottomClass,
+          )}
+        >
           <div className="mb-1 flex items-center gap-1.5">
             <h4 className="text-[11px] font-semibold text-foreground">{ui.map.footprintLegend}</h4>
             <Button
@@ -1385,8 +1445,8 @@ export function CampusMap({
               ?
             </Button>
           </div>
-          <p className="mb-1.5 text-[9px] text-muted-foreground">{ui.map.footprintHint}</p>
-          <div className="space-y-1">
+          <p className="mb-1.5 hidden text-[9px] text-muted-foreground sm:block">{ui.map.footprintHint}</p>
+          <div className="grid grid-cols-2 gap-x-2 gap-y-1 sm:space-y-1 sm:grid-cols-1">
             <div className="flex items-center gap-1.5">
               <span className="h-0 w-4 shrink-0 border-t-2" style={{ borderColor: FOOTPRINT_LEVEL_STROKE.A }} />
               <span className="text-[11px] text-muted-foreground">{ui.sidebar.gradeA}</span>

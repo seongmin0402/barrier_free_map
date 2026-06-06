@@ -13,10 +13,17 @@ const facilityIds = ["elevator", "ramp", "toilet", "braille", "auto-door"] as co
 interface FacilityFilterBarProps {
   filters: string[];
   onFilterChange: (filters: string[]) => void;
+  /** 지도 상단 절대 배치 대신 부모 flex 안에 넣을 때 */
+  embedded?: boolean;
   className?: string;
 }
 
-export function FacilityFilterBar({ filters, onFilterChange, className }: FacilityFilterBarProps) {
+export function FacilityFilterBar({
+  filters,
+  onFilterChange,
+  embedded = false,
+  className,
+}: FacilityFilterBarProps) {
   const ui = useUi();
   const allActive = filters.length === 0;
 
@@ -31,7 +38,9 @@ export function FacilityFilterBar({ filters, onFilterChange, className }: Facili
   return (
     <div
       className={cn(
-        "pointer-events-none absolute z-30 flex max-w-[calc(100%-3.5rem)] flex-col gap-1.5 sm:max-w-none",
+        embedded
+          ? "pointer-events-auto min-w-0 flex-1"
+          : "pointer-events-none absolute z-30 flex max-w-[calc(100%-1.5rem)] flex-col gap-1.5 sm:max-w-none",
         className,
       )}
     >
