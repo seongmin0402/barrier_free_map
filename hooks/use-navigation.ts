@@ -12,7 +12,7 @@ import {
   mainEntranceForBuilding,
   parseEntrances,
 } from "@/lib/routing/graph";
-import { parseElevators, type ElevatorRecord } from "@/lib/routing/elevators";
+import { elevatorIdsOnRoute, parseElevators, type ElevatorRecord } from "@/lib/routing/elevators";
 import { computeRoute } from "@/lib/routing/route";
 import { computeProgress } from "@/lib/routing/progress";
 import { createGpsSmoother } from "@/lib/routing/gps-smooth";
@@ -552,6 +552,11 @@ export function useNavigation(buildings: BarrierBuilding[]) {
 
   const displayRoute = navigating && navigationRoute ? navigationRoute : route;
 
+  const routeElevatorIds = useMemo(
+    () => elevatorIdsOnRoute(displayRoute, elevators),
+    [displayRoute, elevators],
+  );
+
   return {
     open,
     setOpen,
@@ -559,6 +564,8 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     origin,
     destination,
     pickMode,
+    elevators,
+    routeElevatorIds,
     route: displayRoute,
     routeError: routeError ?? geoError,
     navigating,

@@ -101,6 +101,8 @@ export default function RoutePage() {
           navMotionRef={nav.navMotionRef}
           mapLayout="route"
           mobileSheetVh={sheetVh}
+          elevators={nav.elevators}
+          routeElevatorIds={nav.routeElevatorIds}
         />
 
         <RoutePanel

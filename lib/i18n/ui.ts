@@ -53,6 +53,9 @@ export type UiText = {
     pickDestination: string;
     originMarker: string;
     destMarker: string;
+    elevatorPinLegend: string;
+    elevatorOnRouteLegend: string;
+    elevatorMarkerTitle: (name: string, floors: string) => string;
     myLocationTitle: string;
     noBarrierInfo: (name: string) => string;
     geoUnsupported: string;
@@ -256,6 +259,9 @@ const ko: UiText = {
     pickDestination: "지도에서 도착지를 터치하세요",
     originMarker: "출",
     destMarker: "도",
+    elevatorPinLegend: "승강기",
+    elevatorOnRouteLegend: "경로 승강기",
+    elevatorMarkerTitle: (name, floors) => (floors ? `${name} · ${floors}` : name),
     myLocationTitle: "내 위치",
     noBarrierInfo: (name) => `${name}: 베리어프리 조사 정보가 없습니다.`,
     geoUnsupported: "이 브라우저는 위치 정보를 지원하지 않습니다.",
@@ -470,6 +476,9 @@ const en: UiText = {
     pickDestination: "Tap the map to set destination",
     originMarker: "O",
     destMarker: "D",
+    elevatorPinLegend: "Elevator",
+    elevatorOnRouteLegend: "On route",
+    elevatorMarkerTitle: (name, floors) => (floors ? `${name} · ${floors}` : name),
     myLocationTitle: "My location",
     noBarrierInfo: (name) => `${name}: No barrier-free survey data.`,
     geoUnsupported: "This browser does not support location.",

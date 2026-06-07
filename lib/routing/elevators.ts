@@ -1,5 +1,6 @@
 import { normalizeBuildingId } from "./graph";
 import type { LatLng } from "./geo";
+import type { ComputedRoute } from "./types";
 
 export interface ElevatorRecord {
   id: string;
@@ -64,6 +65,21 @@ export function parseElevators(collection: { features?: ElevatorGeoFeature[] } |
     const floors = parseFloors(propString(props, "floor_served", "floor_served ", "floors"));
 
     out.push({ id, name, buildingId, floors, point: { lat, lng } });
+  }
+  return out;
+}
+
+/** 경로 안내 단계에 등장하는 승강기 id */
+export function elevatorIdsOnRoute(
+  route: ComputedRoute | null | undefined,
+  elevators: ElevatorRecord[],
+): Set<string> {
+  const out = new Set<string>();
+  if (!route?.steps.length || !elevators.length) return out;
+  const elevatorSteps = route.steps.filter((s) => s.maneuver === "elevator");
+  if (!elevatorSteps.length) return out;
+  for (const ev of elevators) {
+    if (elevatorSteps.some((s) => s.text.includes(ev.name))) out.add(ev.id);
   }
   return out;
 }

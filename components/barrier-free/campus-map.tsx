@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { BarrierBuilding } from "@/lib/building-types";
 import type { LatLng } from "@/lib/routing/geo";
+import type { ElevatorRecord } from "@/lib/routing/elevators";
 import { haversineMeters } from "@/lib/routing/geo";
 import {
   applyNavigationCamera,
@@ -74,6 +75,10 @@ interface CampusMapProps {
   mapLayout?: "explore" | "route";
   /** 모바일 길찾기 패널 높이(vh) — 컨트롤 버튼 겹침 방지 */
   mobileSheetVh?: number;
+  /** 길찾기 지도에 표시할 캠퍼스 승강기 */
+  elevators?: ElevatorRecord[];
+  /** 현재 경로에서 이용하는 승강기 id */
+  routeElevatorIds?: Set<string> | string[];
   /** 메인 지도 우측 컨트롤에 표시할 길찾기 링크 */
   directionsHref?: string;
   directionsLabel?: string;
@@ -235,6 +240,26 @@ function fitToBuildings(
   }
 }
 
+function shortElevatorLabel(name: string): string {
+  return name.replace(/^공주대학교\s*/, "").replace(/\s*승강기$/, "").trim() || name;
+}
+
+function elevatorMarkerHtml(label: string, onRoute: boolean) {
+  const safe = escapeHtml(label);
+  const bg = onRoute ? "#0d9488" : "#94a3b8";
+  const ring = onRoute
+    ? "box-shadow:0 0 0 3px rgba(13,148,136,.4),0 2px 8px rgba(0,0,0,.22);"
+    : "box-shadow:0 2px 6px rgba(0,0,0,.18);";
+  return `<div aria-hidden="true" style="display:flex;flex-direction:column;align-items:center;max-width:88px;">
+    <div style="width:30px;height:30px;border-radius:50%;background:${bg};border:2.5px solid #fff;${ring}display:flex;align-items:center;justify-content:center;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 19V5"/><path d="m5 12 7-7 7 7"/><path d="m5 19 7-7 7 7"/>
+      </svg>
+    </div>
+    <span style="margin-top:3px;padding:1px 5px;border-radius:4px;background:rgba(255,255,255,.92);font-size:10px;font-weight:600;line-height:1.2;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:88px;box-shadow:0 1px 3px rgba(0,0,0,.12);">${safe}</span>
+  </div>`;
+}
+
 function markerPinHtml(color: string, label: string) {
   const safe = escapeHtml(label);
   return `<div aria-hidden="true" style="position:relative;width:26px;height:34px;display:flex;align-items:flex-end;justify-content:center;">
@@ -277,6 +302,8 @@ export function CampusMap({
   navMotionRef,
   mapLayout = "explore",
   mobileSheetVh = 54,
+  elevators = [],
+  routeElevatorIds,
   directionsHref,
   directionsLabel,
 }: CampusMapProps) {
@@ -286,6 +313,7 @@ export function CampusMap({
   const mapInstanceRef = useRef<unknown>(null);
   const routePolylineRef = useRef<Array<{ setMap: (t: unknown) => void }>>([]);
   const routeMarkersRef = useRef<Array<{ setMap: (t: unknown) => void }>>([]);
+  const elevatorMarkersRef = useRef<Array<{ setMap: (t: unknown) => void }>>([]);
   const navUserMarkerRef = useRef<{
     setMap: (t: unknown) => void;
     setPosition?: (p: unknown) => void;
@@ -462,6 +490,14 @@ export function CampusMap({
       }
     });
     routeMarkersRef.current = [];
+    elevatorMarkersRef.current.forEach((m) => {
+      try {
+        m.setMap(null);
+      } catch {
+        /* ignore */
+      }
+    });
+    elevatorMarkersRef.current = [];
     try {
       navUserMarkerRef.current?.setMap(null);
     } catch {
@@ -874,6 +910,62 @@ export function CampusMap({
       routeMarkersRef.current = [];
     };
   }, [sdkLoaded, mapReadyEpoch, routeLine, routeSegments, originPoint, destPoint, ui]);
+
+  const routeElevatorIdSet = useMemo(() => {
+    if (!routeElevatorIds) return new Set<string>();
+    return routeElevatorIds instanceof Set ? routeElevatorIds : new Set(routeElevatorIds);
+  }, [routeElevatorIds]);
+
+  /** 길찾기 지도 — 캠퍼스 승강기 위치 */
+  useEffect(() => {
+    if (!sdkLoaded || mapLayout !== "route") return;
+    const map = mapInstanceRef.current;
+    const maps = window.naver?.maps as NMaps | undefined;
+    if (!map || !maps?.LatLng || !maps?.Marker || !maps?.Point) return;
+
+    const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
+    const PointCtor = maps.Point as new (x: number, y: number) => unknown;
+    const MarkerCtor = maps.Marker as unknown as new (opts: Record<string, unknown>) => {
+      setMap: (t: unknown) => void;
+    };
+
+    elevatorMarkersRef.current.forEach((m) => {
+      try {
+        m.setMap(null);
+      } catch {
+        /* ignore */
+      }
+    });
+    elevatorMarkersRef.current = [];
+
+    for (const ev of elevators) {
+      if (!Number.isFinite(ev.point.lat) || !Number.isFinite(ev.point.lng)) continue;
+      const onRoute = routeElevatorIdSet.has(ev.id);
+      const floorsLabel = ev.floors.join(", ");
+      const marker = new MarkerCtor({
+        map,
+        position: new LatLngCtor(ev.point.lat, ev.point.lng),
+        title: ui.map.elevatorMarkerTitle(ev.name, floorsLabel),
+        zIndex: onRoute ? 390 : 320,
+        icon: {
+          content: elevatorMarkerHtml(shortElevatorLabel(ev.name), onRoute),
+          anchor: new PointCtor(44, 15),
+        },
+      });
+      elevatorMarkersRef.current.push(marker);
+    }
+
+    return () => {
+      elevatorMarkersRef.current.forEach((m) => {
+        try {
+          m.setMap(null);
+        } catch {
+          /* ignore */
+        }
+      });
+      elevatorMarkersRef.current = [];
+    };
+  }, [sdkLoaded, mapReadyEpoch, mapLayout, elevators, routeElevatorIdSet, ui]);
 
   /** 경로가 생기면 경로 전체가 보이도록 맞춤 (안내 중에는 카메라 루프가 담당) */
   useEffect(() => {
@@ -1625,6 +1717,31 @@ export function CampusMap({
         <div className={cn("pointer-events-auto absolute left-3 flex flex-col gap-2 sm:left-4", overlayBottomClass)}>
           {routeLine && routeLine.length >= 2 && routeSegments && (
             <RouteLegend segmentTypes={routeSegments} variant="map" className="max-w-[min(calc(100vw-6rem),11rem)] sm:max-w-none" />
+          )}
+          {mapLayout === "route" && elevators.length > 0 && (
+            <div
+              className="max-w-[min(calc(100vw-6rem),11rem)] rounded-lg border border-border/80 bg-background/95 px-3 py-2 text-[11px] shadow-md backdrop-blur-sm sm:max-w-none sm:text-xs"
+              role="note"
+              aria-label={ui.map.elevatorPinLegend}
+            >
+              <p className="mb-1.5 font-semibold text-foreground">{ui.map.elevatorPinLegend}</p>
+              <ul className="space-y-1 text-muted-foreground">
+                <li className="flex items-center gap-1.5">
+                  <span
+                    className="inline-block h-3 w-3 shrink-0 rounded-full border-2 border-white bg-teal-600 shadow-sm ring-2 ring-teal-600/30"
+                    aria-hidden
+                  />
+                  <span className="text-foreground/90">{ui.map.elevatorOnRouteLegend}</span>
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <span
+                    className="inline-block h-3 w-3 shrink-0 rounded-full border-2 border-white bg-slate-400 shadow-sm"
+                    aria-hidden
+                  />
+                  <span className="text-foreground/90">{ui.map.elevatorPinLegend}</span>
+                </li>
+              </ul>
+            </div>
           )}
           <div className="overflow-hidden rounded-lg border border-border bg-card/95 shadow-md backdrop-blur-sm">
             <Button
