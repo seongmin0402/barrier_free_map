@@ -1,28 +1,34 @@
 import type { WalkwayType } from "./types";
 
-/** 보행로 종류별 경로 색상 */
+/** 보행로 종류별 경로 색상 — 실내·일반 보행은 동일 파랑, 시설별 4색만 사용 */
 export function segmentColor(type: WalkwayType): string {
   switch (type) {
     case "crosswalk":
       return "#16a34a";
     case "stairs":
-      return "#ef4444";
+      return "#dc2626";
     case "ramp":
-      return "#a855f7";
+      return "#ea580c";
     case "elevator":
-      return "#0d9488";
     case "indoor":
-      return "#0891b2";
+      return "#2563eb";
     default:
       return "#2563eb";
   }
 }
 
-/** 길찾기 범례 항목 (UI 표시용) */
+/** 길찾기 범례 항목 (UI·지도 공통) */
 export const ROUTE_LEGEND: Array<{ type: WalkwayType; label: string; color: string }> = [
   { type: "path", label: "보행로", color: segmentColor("path") },
   { type: "crosswalk", label: "횡단보도", color: segmentColor("crosswalk") },
-  { type: "stairs", label: "계단", color: segmentColor("stairs") },
   { type: "ramp", label: "경사로", color: segmentColor("ramp") },
-  { type: "elevator", label: "승강기", color: segmentColor("elevator") },
+  { type: "stairs", label: "계단", color: segmentColor("stairs") },
 ];
+
+/** 경로에 실제 등장하는 종류만 (실내=보행로 색, 승강기 구간=보행로) */
+export function legendItemsForRoute(segmentTypes: WalkwayType[]) {
+  const onRoute = new Set<WalkwayType>(segmentTypes);
+  return ROUTE_LEGEND.filter(
+    (l) => l.type === "path" || onRoute.has(l.type),
+  );
+}

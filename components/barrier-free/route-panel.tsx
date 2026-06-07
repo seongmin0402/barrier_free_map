@@ -34,9 +34,11 @@ import type { BarrierBuilding } from "@/lib/building-types";
 import { useUi } from "@/hooks/use-ui";
 import { remainingDistanceLabel } from "@/lib/i18n/navigation";
 import { formatDistance } from "@/lib/routing/geo";
-import { ROUTE_LEGEND } from "@/lib/routing/style";
+import { stepDisplayMeta, stepManeuverStyle } from "@/lib/routing/step-display";
 import { isUnsurveyedBuilding } from "@/lib/merge-campus-buildings";
+import { RouteLegend } from "@/components/barrier-free/route-legend";
 import type { ComputedRoute, ManeuverKind, RoutePoint, RouteStep } from "@/lib/routing/types";
+import { cn } from "@/lib/utils";
 
 type WhichPoint = "origin" | "destination";
 
@@ -67,32 +69,32 @@ interface RoutePanelProps {
   onSheetVhChange?: (vh: number) => void;
 }
 
-function maneuverIcon(maneuver: ManeuverKind) {
+function maneuverIcon(maneuver: ManeuverKind, iconClass = "h-5 w-5") {
   switch (maneuver) {
     case "left":
-      return <ArrowLeft className="h-4 w-4" />;
+      return <ArrowLeft className={iconClass} strokeWidth={2.25} />;
     case "slight-left":
-      return <ArrowUpLeft className="h-4 w-4" />;
+      return <ArrowUpLeft className={iconClass} strokeWidth={2.25} />;
     case "right":
-      return <ArrowRight className="h-4 w-4" />;
+      return <ArrowRight className={iconClass} strokeWidth={2.25} />;
     case "slight-right":
-      return <ArrowUpRight className="h-4 w-4" />;
+      return <ArrowUpRight className={iconClass} strokeWidth={2.25} />;
     case "uturn":
-      return <RotateCcw className="h-4 w-4" />;
+      return <RotateCcw className={iconClass} strokeWidth={2.25} />;
     case "elevator":
-      return <ArrowUpDown className="h-4 w-4" />;
+      return <ArrowUpDown className={iconClass} strokeWidth={2.25} />;
     case "crosswalk":
-      return <Footprints className="h-4 w-4" />;
+      return <Footprints className={iconClass} strokeWidth={2.25} />;
     case "ramp":
-      return <ArrowUpRight className="h-4 w-4" />;
+      return <ArrowUpRight className={iconClass} strokeWidth={2.25} />;
     case "stairs":
-      return <TriangleAlert className="h-4 w-4" />;
+      return <TriangleAlert className={iconClass} strokeWidth={2.25} />;
     case "straight":
-      return <ArrowUp className="h-4 w-4" />;
+      return <ArrowUp className={iconClass} strokeWidth={2.25} />;
     case "arrive":
-      return <Flag className="h-4 w-4" />;
+      return <Flag className={iconClass} strokeWidth={2.25} />;
     default:
-      return <ArrowUp className="h-4 w-4" />;
+      return <ArrowUp className={iconClass} strokeWidth={2.25} />;
   }
 }
 
@@ -504,20 +506,7 @@ export function RoutePanel(props: RoutePanelProps) {
                 {ui.route.walkwayBased}
               </div>
             </div>
-            {/* 색상 범례 — 경로에 실제 등장하는 종류만 표시 */}
-            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
-              {ROUTE_LEGEND.filter(
-                (l) => l.type === "path" || route.segmentTypes.includes(l.type),
-              ).map((l) => (
-                <span key={l.type} className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                  <span
-                    className="inline-block h-1 w-4 rounded-full"
-                    style={{ backgroundColor: l.color }}
-                  />
-                  {ui.route.legend[l.type]}
-                </span>
-              ))}
-            </div>
+            <RouteLegend segmentTypes={route.segmentTypes} variant="panel" className="mt-2" />
 
             {route.hasStairs && (
               <div className="mt-2 flex items-center gap-1.5 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
@@ -574,39 +563,50 @@ export function RoutePanel(props: RoutePanelProps) {
 
         {/* 턴바이턴 단계 */}
         {route && route.steps.length > 0 && (
-          <ol className="space-y-1">
+          <ol className="space-y-2">
             {route.steps.map((step: RouteStep, idx: number) => {
               const active = navigating && idx === currentStepIndex;
+              const { distanceLabel, instruction } = stepDisplayMeta(step, locale);
+              const visual = stepManeuverStyle(step.maneuver);
               return (
                 <li
                   key={idx}
-                  className={`flex items-start gap-2.5 rounded-md border px-2.5 py-2 text-sm ${
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg border px-2.5 py-2.5",
                     active
-                      ? "border-blue-500 bg-blue-50 dark:bg-blue-950/40"
-                      : "border-transparent"
-                  }`}
+                      ? "border-blue-500 bg-blue-50 ring-2 ring-blue-500/20 dark:bg-blue-950/40"
+                      : "border-border/60 bg-card",
+                  )}
                 >
+                  <div className="w-[3.25rem] shrink-0 text-center">
+                    {distanceLabel ? (
+                      <>
+                        <p className="text-lg font-bold tabular-nums leading-none tracking-tight text-foreground">
+                          {distanceLabel}
+                        </p>
+                        <p className="mt-0.5 text-[10px] font-medium text-muted-foreground">
+                          {ui.route.distanceAhead}
+                        </p>
+                      </>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </div>
                   <span
-                    className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
-                      step.maneuver === "arrive"
-                        ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300"
-                        : step.maneuver === "elevator"
-                          ? "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300"
-                          : step.maneuver === "crosswalk"
-                            ? "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-200"
-                            : step.maneuver === "ramp"
-                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
-                              : step.maneuver === "stairs"
-                                ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200"
-                                : "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
-                    }`}
+                    className={cn(
+                      "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-sm ring-2",
+                      visual.bg,
+                      visual.fg,
+                      active ? visual.ring : "ring-transparent",
+                    )}
+                    aria-hidden
                   >
                     {maneuverIcon(step.maneuver)}
                   </span>
-                  <div className="min-w-0">
-                    <p className="leading-snug">{step.text}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold leading-snug text-foreground">{instruction}</p>
                     {step.hazard && (
-                      <p className="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">
+                      <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">
                         ⚠ {step.hazard}
                       </p>
                     )}

@@ -28,6 +28,7 @@ import {
 import type { DeviceHeadingSnapshot, NavMotionSnapshot } from "@/lib/device-orientation";
 import { compassAgeMs } from "@/lib/device-orientation";
 import { segmentColor } from "@/lib/routing/style";
+import { RouteLegend } from "@/components/barrier-free/route-legend";
 import { useUi } from "@/hooks/use-ui";
 import {
   footprintPolygonPathGroups,
@@ -1498,8 +1499,11 @@ export function CampusMap({
       </div>
 
       <div className="pointer-events-none absolute inset-0 z-10">
-        {/* 좌측: 줌 컨트롤 */}
-        <div className={cn("pointer-events-auto absolute left-3 sm:left-4", overlayBottomClass)}>
+        {/* 좌측: 줌 + 경로 범례 */}
+        <div className={cn("pointer-events-auto absolute left-3 flex flex-col gap-2 sm:left-4", overlayBottomClass)}>
+          {routeLine && routeLine.length >= 2 && routeSegments && (
+            <RouteLegend segmentTypes={routeSegments} variant="map" className="max-w-[11rem] sm:max-w-none" />
+          )}
           <div className="overflow-hidden rounded-lg border border-border bg-card/95 shadow-md backdrop-blur-sm">
             <Button
               type="button"

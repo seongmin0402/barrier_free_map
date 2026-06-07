@@ -150,7 +150,9 @@ export type UiText = {
     };
     currentLocationLabel: string;
     mapPickLabel: (lat: number, lng: number) => string;
-    legend: Record<"path" | "crosswalk" | "stairs" | "ramp" | "elevator", string>;
+    legendTitle: string;
+    distanceAhead: string;
+    legend: Record<"path" | "crosswalk" | "stairs" | "ramp", string>;
   };
   page: {
     directions: string;
@@ -343,12 +345,13 @@ const ko: UiText = {
     },
     currentLocationLabel: "현재 위치",
     mapPickLabel: (lat, lng) => `지도 선택 (${lat.toFixed(5)}, ${lng.toFixed(5)})`,
+    legendTitle: "경로 색상",
+    distanceAhead: "앞",
     legend: {
       path: "보행로",
       crosswalk: "횡단보도",
       stairs: "계단",
       ramp: "경사로",
-      elevator: "승강기",
     },
   },
   page: {
@@ -544,12 +547,13 @@ const en: UiText = {
     },
     currentLocationLabel: "Current location",
     mapPickLabel: (lat, lng) => `Map pick (${lat.toFixed(5)}, ${lng.toFixed(5)})`,
+    legendTitle: "Route colors",
+    distanceAhead: "ahead",
     legend: {
       path: "Walkway",
       crosswalk: "Crosswalk",
       stairs: "Stairs",
       ramp: "Ramp",
-      elevator: "Elevator",
     },
   },
   page: {
