@@ -1,4 +1,4 @@
-import { haversineMeters, projectOnSegment, type LatLng } from "./geo";
+import { haversineMeters, indexOfCoord, projectOnSegment, type LatLng } from "./geo";
 import type { ComputedRoute, RouteStep } from "./types";
 
 export interface RouteProgress {
@@ -50,7 +50,7 @@ export function computeProgress(
 
   // 각 단계의 경로상 위치(누적거리)
   const stepAlong = (step: RouteStep): number => {
-    const idx = coords.indexOf(step.at);
+    const idx = indexOfCoord(coords, step.at);
     if (idx >= 0) return cum[idx];
     // 참조가 안 맞으면 좌표로 최근접 탐색
     let bi = 0;

@@ -3,6 +3,8 @@ import {
   bearingDeg,
   formatDistance,
   haversineMeters,
+  indexOfCoord,
+  pathLengthAlong,
   projectOnSegment,
   type LatLng,
 } from "./geo";
@@ -648,6 +650,120 @@ function consolidateStraightSteps(steps: RouteStep[], locale: AppLocale): RouteS
   return out;
 }
 
+function segmentTypeAt(segs: SegmentInfo[], segIdx: number): WalkwayType {
+  return segs[segIdx]?.type ?? "path";
+}
+
+/** coords[startIdx]부터 type 구간 끝 좌표 인덱스 */
+function endOfFeatureAt(
+  coords: LatLng[],
+  segs: SegmentInfo[],
+  startIdx: number,
+  type: WalkwayType,
+): number {
+  let i = startIdx;
+  while (i < coords.length - 1 && segmentTypeAt(segs, i) === type) {
+    i++;
+  }
+  return i;
+}
+
+/** type 구간 시작 좌표 인덱스 (endIdx가 구간 끝일 때) */
+function startOfFeatureAt(
+  coords: LatLng[],
+  segs: SegmentInfo[],
+  endIdx: number,
+  type: WalkwayType,
+): number {
+  let i = endIdx;
+  while (i > 0 && segmentTypeAt(segs, i - 1) === type) {
+    i--;
+  }
+  return i;
+}
+
+/** 지도 polyline 기준으로 단계별 거리 재계산 — 안내용 단순화 좌표 누적 오차 보정 */
+function recalibrateStepDistances(
+  fullCoords: LatLng[],
+  segs: SegmentInfo[],
+  steps: RouteStep[],
+  locale: AppLocale,
+): void {
+  if (fullCoords.length < 2) return;
+
+  let cursorIdx = 0;
+
+  for (const step of steps) {
+    const targetIdx = indexOfCoord(fullCoords, step.at, cursorIdx);
+
+    if (step.maneuver === "depart") {
+      if (targetIdx >= 0) cursorIdx = targetIdx;
+      step.distance = 0;
+      continue;
+    }
+
+    if (step.maneuver === "arrive") {
+      step.distance = 0;
+      cursorIdx = fullCoords.length - 1;
+      continue;
+    }
+
+    if (targetIdx < 0) continue;
+
+    if (step.maneuver === "crosswalk") {
+      step.distance = pathLengthAlong(fullCoords, cursorIdx, targetIdx);
+      cursorIdx = endOfFeatureAt(fullCoords, segs, targetIdx, "crosswalk");
+      continue;
+    }
+
+    if (isGuidanceManeuver(step.maneuver) && step.maneuver !== "crosswalk") {
+      const featureType = step.edgeType ?? step.maneuver;
+      const entryIdx = startOfFeatureAt(fullCoords, segs, targetIdx, featureType);
+      step.distance = pathLengthAlong(fullCoords, entryIdx, targetIdx);
+      cursorIdx = targetIdx;
+      continue;
+    }
+
+    step.distance = pathLengthAlong(fullCoords, cursorIdx, targetIdx);
+    cursorIdx = targetIdx;
+  }
+
+  for (const step of steps) {
+    formatStepText(step, locale);
+  }
+}
+
+function shouldAssignPendingToNewStep(last: RouteStep | undefined): boolean {
+  if (!last) return true;
+  return (
+    isGuidanceManeuver(last.maneuver) ||
+    last.maneuver === "elevator" ||
+    last.maneuver === "crosswalk" ||
+    last.maneuver === "ramp" ||
+    last.maneuver === "stairs"
+  );
+}
+
+function applyPendingToLastOrNext(
+  steps: RouteStep[],
+  pendingDist: number,
+  pendingHazard: string | null,
+  next: Omit<RouteStep, "text"> & { text?: string },
+): void {
+  const last = steps[steps.length - 1];
+  if (shouldAssignPendingToNewStep(last)) {
+    steps.push({
+      ...next,
+      distance: pendingDist,
+      hazard: next.hazard ?? pendingHazard,
+    } as RouteStep);
+    return;
+  }
+  last.distance += pendingDist;
+  if (pendingHazard && !last.hazard) last.hazard = pendingHazard;
+  steps.push({ ...next, distance: 0 } as RouteStep);
+}
+
 function buildSteps(
   coords: LatLng[],
   segs: SegmentInfo[],
@@ -708,8 +824,10 @@ function buildSteps(
           hazard: null,
         });
       } else {
-        last.distance += approach;
-        if (approachHazard && !last.hazard) last.hazard = approachHazard;
+        if (!shouldAssignPendingToNewStep(last)) {
+          last.distance += approach;
+          if (approachHazard && !last.hazard) last.hazard = approachHazard;
+        }
         steps.push({
           text:
             featureFollowText(featureRun.type, formatDistance(featureRun.distance, locale), locale) ??
@@ -748,12 +866,8 @@ function buildSteps(
 
     const elevatorText = elevatorTextAtCoord.get(i + 1);
     if (elevatorText) {
-      const last = steps[steps.length - 1];
-      last.distance += pendingDist;
-      if (pendingHazard && !last.hazard) last.hazard = pendingHazard;
-      steps.push({
+      applyPendingToLastOrNext(steps, pendingDist, pendingHazard, {
         text: elevatorText,
-        distance: 0,
         at: coords[i + 1],
         maneuver: "elevator",
         edgeType: "elevator",
@@ -768,8 +882,10 @@ function buildSteps(
     const isLastVertex = i + 1 >= coords.length - 1;
     if (isLastVertex) {
       const last = steps[steps.length - 1];
-      last.distance += pendingDist;
-      if (pendingHazard && !last.hazard) last.hazard = pendingHazard;
+      if (!shouldAssignPendingToNewStep(last)) {
+        last.distance += pendingDist;
+        if (pendingHazard && !last.hazard) last.hazard = pendingHazard;
+      }
       steps.push({
         text: arriveMessage(locale),
         distance: 0,
@@ -798,14 +914,9 @@ function buildSteps(
 
     if (maneuver === "straight") continue;
 
-    const last = steps[steps.length - 1];
-    last.distance += pendingDist;
-    if (pendingHazard && !last.hazard) last.hazard = pendingHazard;
-
     const label = maneuverLabel(maneuver, locale);
-    steps.push({
+    applyPendingToLastOrNext(steps, pendingDist, pendingHazard, {
       text: turnThenContinueText(label, locale),
-      distance: 0,
       at: coords[i + 1],
       maneuver,
       edgeType: segType,
@@ -816,11 +927,10 @@ function buildSteps(
     pendingHazard = null;
   }
 
-  for (const step of steps) {
-    formatStepText(step, locale);
-  }
-
-  return consolidateStraightSteps(consolidateMicroTurns(consolidateFeatureSteps(steps, locale), locale), locale);
+  return consolidateStraightSteps(
+    consolidateMicroTurns(consolidateFeatureSteps(steps, locale), locale),
+    locale,
+  );
 }
 
 function nodePathToRoute(
@@ -868,6 +978,7 @@ function nodePathToRoute(
   const elevatorTextAtCoord = buildElevatorStepsAtCoord(graph, nodePath, coordOffset, locale);
   const guide = simplifyForGuidance(coords, fullSegs, elevatorTextAtCoord, 14);
   const steps = buildSteps(guide.coords, guide.segs, locale, guide.elevatorText);
+  recalibrateStepDistances(coords, fullSegs, steps, locale);
   const segmentTypes = fullSegs.map((s) => s.type);
   const hasStairs = segmentTypes.some((s) => s === "stairs");
   const hasCrosswalk = segmentTypes.some((s) => s === "crosswalk");

@@ -93,3 +93,34 @@ export function projectOnSegment(
   const distance = Math.sqrt(dx * dx + dy * dy);
   return { point, distance, t };
 }
+
+/** 경로상 좌표 인덱스 (동일 참조 우선, 이후 최근접) */
+export function indexOfCoord(coords: LatLng[], point: LatLng, fromIdx = 0): number {
+  for (let i = fromIdx; i < coords.length; i++) {
+    if (coords[i] === point) return i;
+  }
+  for (let i = 0; i < fromIdx; i++) {
+    if (coords[i] === point) return i;
+  }
+  let best = -1;
+  let bestD = Infinity;
+  for (let i = fromIdx; i < coords.length; i++) {
+    const d = haversineMeters(point, coords[i]);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  return best;
+}
+
+/** coords[fromIdx] → coords[toIdx] 구간 누적 거리(m) */
+export function pathLengthAlong(coords: LatLng[], fromIdx: number, toIdx: number): number {
+  if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return 0;
+  const [lo, hi] = fromIdx < toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
+  let sum = 0;
+  for (let i = lo; i < hi; i++) {
+    sum += haversineMeters(coords[i], coords[i + 1]);
+  }
+  return sum;
+}
