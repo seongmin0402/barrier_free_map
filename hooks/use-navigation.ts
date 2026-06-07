@@ -218,6 +218,29 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     [buildingToPoint, setPoint],
   );
 
+  /** 지도 건물 폴리곤 탭: 출발지 → 도착지 순으로 채움 */
+  const handleBuildingSelect = useCallback(
+    (buildingId: string) => {
+      if (navigating) return;
+      const building = buildings.find((b) => b.id === buildingId);
+      if (!building) return;
+
+      if (pickMode) {
+        selectBuilding(pickMode, building);
+        return;
+      }
+
+      if (!origin) {
+        selectBuilding("origin", building);
+      } else if (!destination) {
+        selectBuilding("destination", building);
+      } else {
+        selectBuilding("destination", building);
+      }
+    },
+    [buildings, navigating, pickMode, origin, destination, selectBuilding],
+  );
+
   const startPickOnMap = useCallback((which: WhichPoint) => {
     setPickMode((prev) => (prev === which ? null : which));
   }, []);
@@ -554,6 +577,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     rerouteNotice,
     // handlers
     selectBuilding,
+    handleBuildingSelect,
     startPickOnMap,
     handleMapPick,
     useCurrentLocation,

@@ -283,7 +283,7 @@ export function RoutePanel(props: RoutePanelProps) {
   const SNAP_HALF = 54;
   const SNAP_FULL = 86;
   const [isMobile, setIsMobile] = useState(false);
-  const [sheetVh, setSheetVh] = useState<number>(SNAP_FULL);
+  const [sheetVh, setSheetVh] = useState<number>(SNAP_HALF);
   const [dragging, setDragging] = useState(false);
   const dragRef = useRef<{ startY: number; startVh: number; moved: boolean } | null>(null);
 
@@ -300,8 +300,9 @@ export function RoutePanel(props: RoutePanelProps) {
     if (pickMode) setSheetVh(SNAP_PEEK);
     else if (navigating) setSheetVh(SNAP_HALF);
     else if (route) setSheetVh(SNAP_HALF);
+    else if (!origin || !destination) setSheetVh(SNAP_HALF);
     else setSheetVh(SNAP_FULL);
-  }, [route, navigating, pickMode]);
+  }, [route, navigating, pickMode, origin, destination]);
 
   useEffect(() => {
     onSheetVhChange?.(sheetVh);
@@ -387,7 +388,7 @@ export function RoutePanel(props: RoutePanelProps) {
           aria-label={ui.route.back}
         >
           <ArrowLeft className="h-5 w-5" />
-          <span>{ui.route.back}</span>
+          <span className="hidden sm:inline">{ui.route.back}</span>
         </button>
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <Navigation className="h-5 w-5 shrink-0 text-blue-600" />

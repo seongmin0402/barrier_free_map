@@ -1550,8 +1550,8 @@ export function CampusMap({
   const mapBannerClass = cn(
     "pointer-events-none absolute z-20 text-center text-xs shadow-md backdrop-blur-sm",
     mapLayout === "route"
-      ? "top-3 left-3 right-14 sm:left-[calc(22rem+0.75rem)] sm:right-4 sm:max-w-md sm:text-left"
-      : "left-1/2 top-3 max-w-[min(calc(100%-1.5rem),24rem)] -translate-x-1/2",
+      ? "top-[max(0.75rem,env(safe-area-inset-top))] left-3 right-14 sm:left-[calc(22rem+0.75rem)] sm:right-4 sm:max-w-md sm:text-left"
+      : "left-1/2 top-[max(0.75rem,env(safe-area-inset-top))] max-w-[min(calc(100%-1.5rem),24rem)] -translate-x-1/2",
   );
 
   return (

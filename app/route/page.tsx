@@ -19,7 +19,7 @@ export default function RoutePage() {
   const ui = useUi();
   const { buildings } = useCampusBuildings(ui.page.loadError);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [sheetVh, setSheetVh] = useState(86);
+  const [sheetVh, setSheetVh] = useState(54);
 
   const nav = useNavigation(buildings);
   const setNavOpen = nav.setOpen;
@@ -84,7 +84,7 @@ export default function RoutePage() {
         <CampusMap
           buildings={buildings}
           selectedBuilding={null}
-          onBuildingSelect={() => {}}
+          onBuildingSelect={nav.handleBuildingSelect}
           routeLine={nav.route?.coords ?? null}
           routeSegments={nav.route?.segmentTypes ?? null}
           originPoint={nav.origin?.point ?? null}
