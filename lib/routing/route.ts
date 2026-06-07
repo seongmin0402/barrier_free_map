@@ -8,7 +8,7 @@ import {
   type LatLng,
 } from "./geo";
 import { nearestNode } from "./graph";
-import { simplifyForGuidance, walkPathLengthBetween, walkPolylineLength } from "./polyline-simplify";
+import { walkPathLengthBetween, walkPolylineLength } from "./polyline-simplify";
 import type { AppLocale } from "@/lib/app-settings";
 import { formatFloorLabel, type ElevatorRecord } from "./elevators";
 import {
@@ -662,49 +662,32 @@ function formatStepText(step: RouteStep, locale: AppLocale): void {
   }
 }
 
-/** 연속 동일 시설 안내 병합 (경사로·계단·횡단보도) */
-function consolidateFeatureSteps(steps: RouteStep[], locale: AppLocale): RouteStep[] {
-  const out: RouteStep[] = [];
-
-  for (const step of steps) {
-    const prev = out[out.length - 1];
-    const featureType =
-      isGuidanceManeuver(step.maneuver) ? step.edgeType : null;
-    const prevFeature =
-      prev && isGuidanceManeuver(prev.maneuver) ? prev.edgeType : null;
-
-    if (
-      prev &&
-      featureType &&
-      prevFeature === featureType &&
-      prev.maneuver === step.maneuver &&
-      step.maneuver !== "crosswalk"
-    ) {
-      prev.distance += step.distance;
-      prev.at = step.at;
-      formatStepText(prev, locale);
-      continue;
-    }
-
-    out.push(step);
-  }
-
-  return out;
+/** 시설 안내(횡단보도·경사로·계단·승강기)는 병합하지 않음 */
+function consolidateFeatureSteps(steps: RouteStep[], _locale: AppLocale): RouteStep[] {
+  return steps;
 }
 
-/** 직전 직진이 짧을 때(≤22m) 사소한 회전 안내 생략 */
+function isMandatoryGuidanceStep(maneuver: RouteStep["maneuver"]): boolean {
+  return maneuver === "elevator" || isGuidanceManeuver(maneuver);
+}
+
+/** 직전 직진이 짧을 때(≤22m) 사소한 회전 안내 생략 — 시설 안내 직전은 유지 */
 function consolidateMicroTurns(steps: RouteStep[], locale: AppLocale): RouteStep[] {
   const out: RouteStep[] = [];
 
-  for (const step of steps) {
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i];
     const prev = out[out.length - 1];
+    const nextMandatory = steps.slice(i + 1).find((s) => isMandatoryGuidanceStep(s.maneuver));
+
     if (
       prev &&
       isTurnManeuver(step.maneuver) &&
       (prev.maneuver === "depart" || prev.maneuver === "straight") &&
       prev.distance <= 22 &&
       step.maneuver !== "uturn" &&
-      !isGuidanceManeuver(step.maneuver)
+      !isMandatoryGuidanceStep(step.maneuver) &&
+      !nextMandatory
     ) {
       prev.distance += step.distance;
       prev.at = step.at;
@@ -1072,8 +1055,7 @@ function nodePathToRoute(
   const distance = walkPolylineLength(coords, fullSegs);
 
   const elevatorTextAtCoord = buildElevatorStepsAtCoord(graph, nodePath, coordOffset, locale);
-  const guide = simplifyForGuidance(coords, fullSegs, elevatorTextAtCoord, 14);
-  const steps = buildSteps(guide.coords, guide.segs, locale, guide.elevatorText);
+  const steps = buildSteps(coords, fullSegs, locale, elevatorTextAtCoord);
   recalibrateStepDistances(coords, fullSegs, steps, locale);
   const segmentTypes = fullSegs.map((s) => s.type);
   const hasStairs = segmentTypes.some((s) => s === "stairs");

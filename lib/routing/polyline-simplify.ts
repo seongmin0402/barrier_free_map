@@ -5,8 +5,8 @@ export interface GuideSegment {
   type: WalkwayType;
 }
 
-/** 단순화 시 꼭짓점 유지 — 횡단보도·경사로·계단 경계 */
-const GUIDANCE_BOUNDARY = new Set<string>(["crosswalk", "ramp", "stairs"]);
+/** 단순화 시 꼭짓점 유지 — 횡단보도·경사로·계단·승강기 경계 */
+const GUIDANCE_BOUNDARY = new Set<string>(["crosswalk", "ramp", "stairs", "elevator"]);
 
 export interface GuidePolyline {
   coords: LatLng[];
@@ -135,8 +135,9 @@ function dominantSegType(
   let best: WalkwayType = "path";
   let bestLen = 0;
   for (const [t, len] of totals) {
-    if (len > bestLen) {
-      bestLen = len;
+    const priority = GUIDANCE_BOUNDARY.has(t) ? len + 1e6 : len;
+    if (priority > bestLen) {
+      bestLen = priority;
       best = t;
     }
   }
