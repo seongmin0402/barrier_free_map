@@ -916,12 +916,30 @@ export function CampusMap({
     return routeElevatorIds instanceof Set ? routeElevatorIds : new Set(routeElevatorIds);
   }, [routeElevatorIds]);
 
-  /** 길찾기 지도 — 캠퍼스 승강기 위치 */
+  /** 길찾기 지도 — 경로가 잡힌 뒤 캠퍼스 승강기 위치 */
   useEffect(() => {
-    if (!sdkLoaded || mapLayout !== "route") return;
+    const clearElevatorMarkers = () => {
+      elevatorMarkersRef.current.forEach((m) => {
+        try {
+          m.setMap(null);
+        } catch {
+          /* ignore */
+        }
+      });
+      elevatorMarkersRef.current = [];
+    };
+
+    if (!sdkLoaded || mapLayout !== "route" || !routeLine || routeLine.length < 2) {
+      clearElevatorMarkers();
+      return;
+    }
+
     const map = mapInstanceRef.current;
     const maps = window.naver?.maps as NMaps | undefined;
-    if (!map || !maps?.LatLng || !maps?.Marker || !maps?.Point) return;
+    if (!map || !maps?.LatLng || !maps?.Marker || !maps?.Point) {
+      clearElevatorMarkers();
+      return;
+    }
 
     const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
     const PointCtor = maps.Point as new (x: number, y: number) => unknown;
@@ -929,14 +947,7 @@ export function CampusMap({
       setMap: (t: unknown) => void;
     };
 
-    elevatorMarkersRef.current.forEach((m) => {
-      try {
-        m.setMap(null);
-      } catch {
-        /* ignore */
-      }
-    });
-    elevatorMarkersRef.current = [];
+    clearElevatorMarkers();
 
     for (const ev of elevators) {
       if (!Number.isFinite(ev.point.lat) || !Number.isFinite(ev.point.lng)) continue;
@@ -955,17 +966,8 @@ export function CampusMap({
       elevatorMarkersRef.current.push(marker);
     }
 
-    return () => {
-      elevatorMarkersRef.current.forEach((m) => {
-        try {
-          m.setMap(null);
-        } catch {
-          /* ignore */
-        }
-      });
-      elevatorMarkersRef.current = [];
-    };
-  }, [sdkLoaded, mapReadyEpoch, mapLayout, elevators, routeElevatorIdSet, ui]);
+    return clearElevatorMarkers;
+  }, [sdkLoaded, mapReadyEpoch, mapLayout, routeLine, elevators, routeElevatorIdSet, ui]);
 
   /** 경로가 생기면 경로 전체가 보이도록 맞춤 (안내 중에는 카메라 루프가 담당) */
   useEffect(() => {
@@ -1718,7 +1720,7 @@ export function CampusMap({
           {routeLine && routeLine.length >= 2 && routeSegments && (
             <RouteLegend segmentTypes={routeSegments} variant="map" className="max-w-[min(calc(100vw-6rem),11rem)] sm:max-w-none" />
           )}
-          {mapLayout === "route" && elevators.length > 0 && (
+          {mapLayout === "route" && routeLine && routeLine.length >= 2 && elevators.length > 0 && (
             <div
               className="max-w-[min(calc(100vw-6rem),11rem)] rounded-lg border border-border/80 bg-background/95 px-3 py-2 text-[11px] shadow-md backdrop-blur-sm sm:max-w-none sm:text-xs"
               role="note"
