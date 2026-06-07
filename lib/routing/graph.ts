@@ -24,17 +24,18 @@ function addBidirectionalEdge(
   to: string,
   distance: number,
   type: string,
+  floor?: string,
 ) {
   if (from === to) return;
   const listA = adjacency.get(from);
   if (!listA) return;
   if (!listA.some((e) => e.to === to)) {
-    listA.push({ to, distance, type });
+    listA.push({ to, distance, type, floor });
   }
   const listB = adjacency.get(to);
   if (!listB) return;
   if (!listB.some((e) => e.to === from)) {
-    listB.push({ to: from, distance, type });
+    listB.push({ to: from, distance, type, floor });
   }
 }
 
@@ -65,6 +66,10 @@ export function buildWalkwayGraph(
 
   for (const feature of collection.features) {
     const type = String(feature.properties?.type ?? "path");
+    const props = feature.properties as { floor?: string } | undefined;
+    const floorRaw = props?.floor;
+    const floor =
+      floorRaw != null && String(floorRaw).trim() ? String(floorRaw).trim().toUpperCase() : undefined;
     for (const line of lineStringsOf(feature)) {
       for (let i = 0; i < line.length - 1; i++) {
         const [lng1, lat1] = line[i];
@@ -80,7 +85,7 @@ export function buildWalkwayGraph(
         const a = ensureNode(lng1, lat1);
         const b = ensureNode(lng2, lat2);
         const dist = haversineMeters({ lat: lat1, lng: lng1 }, { lat: lat2, lng: lng2 });
-        addBidirectionalEdge(adjacency, a, b, dist, type);
+        addBidirectionalEdge(adjacency, a, b, dist, type, floor);
       }
     }
   }
@@ -95,9 +100,10 @@ export function buildRoutingGraph(
 ): RoutingGraph {
   const base = buildWalkwayGraph(collection);
   const elevatorNodeIds = new Set<string>();
+  const elevatorByNodeId = new Map<string, ElevatorRecord>();
 
   if (!elevators?.length) {
-    return { ...base, elevatorNodeIds };
+    return { ...base, elevatorNodeIds, elevatorByNodeId };
   }
 
   for (const elv of elevators) {
@@ -109,6 +115,7 @@ export function buildRoutingGraph(
       base.adjacency.set(key, []);
     }
     elevatorNodeIds.add(key);
+    elevatorByNodeId.set(key, elv);
 
     const near = nearestNode(base, elv.point);
     if (near && near.id !== key && near.distance <= ELEVATOR_SNAP_M) {
@@ -116,7 +123,7 @@ export function buildRoutingGraph(
     }
   }
 
-  return { ...base, elevatorNodeIds };
+  return { ...base, elevatorNodeIds, elevatorByNodeId };
 }
 
 /** 좌표에서 가장 가까운 그래프 노드 */

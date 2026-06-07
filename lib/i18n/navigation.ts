@@ -8,7 +8,7 @@ export function hazardText(type: WalkwayType, locale: AppLocale): string | null 
     stairs: "계단이 있습니다",
     crosswalk: "횡단보도를 건너세요",
     ramp: "경사로가 있습니다",
-    elevator: "승강기를 이용하세요",
+    elevator: null,
   };
   const en: Partial<Record<string, string | null>> = {
     path: null,
@@ -16,7 +16,7 @@ export function hazardText(type: WalkwayType, locale: AppLocale): string | null 
     stairs: "stairs ahead",
     crosswalk: "cross the crosswalk",
     ramp: "ramp ahead",
-    elevator: "use the elevator",
+    elevator: null,
   };
   return (locale === "en" ? en : ko)[type] ?? null;
 }
@@ -31,6 +31,7 @@ export function maneuverLabel(maneuver: ManeuverKind, locale: AppLocale): string
       right: "우회전",
       "slight-right": "오른쪽 방향",
       uturn: "유턴",
+      elevator: "승강기",
       arrive: "도착",
     },
     en: {
@@ -41,6 +42,7 @@ export function maneuverLabel(maneuver: ManeuverKind, locale: AppLocale): string
       right: "turn right",
       "slight-right": "bear right",
       uturn: "make a U-turn",
+      elevator: "elevator",
       arrive: "arrive",
     },
   };
@@ -71,6 +73,13 @@ export function continueStraightPlaceholder(locale: AppLocale): string {
   return locale === "en" ? "Continue along the route" : "경로를 따라 직진하세요";
 }
 
+/** 승강기 탑승 안내 — 회전 안내와 분리 */
+export function elevatorTransferText(floorLabel: string, locale: AppLocale): string {
+  return locale === "en"
+    ? `Take the elevator to ${floorLabel}`
+    : `승강기를 이용해 ${floorLabel}으로 이동하세요`;
+}
+
 /** GPS 추적 중 음성 안내 문장 */
 export function navSpeechText(
   locale: AppLocale,
@@ -79,6 +88,9 @@ export function navSpeechText(
   maneuver: ManeuverKind,
 ): string {
   if (maneuver === "arrive") return arriveMessage(locale);
+  if (maneuver === "elevator") {
+    return locale === "en" ? "Take the elevator" : "승강기를 이용하세요";
+  }
   const turn = maneuverLabel(maneuver, locale);
   return locale === "en" ? `In ${distanceLabel}, ${turn}` : `${distanceLabel} 앞 ${turn}`;
 }

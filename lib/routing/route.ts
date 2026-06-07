@@ -7,11 +7,13 @@ import {
 } from "./geo";
 import { nearestNode } from "./graph";
 import type { AppLocale } from "@/lib/app-settings";
+import { formatFloorLabel, type ElevatorRecord } from "./elevators";
 import {
   aheadTurnText,
   arriveMessage,
   continueStraightPlaceholder,
   departStraightText,
+  elevatorTransferText,
   hazardText,
   maneuverLabel,
   turnThenContinueText,
@@ -152,25 +154,64 @@ function edgeTypeBetween(graph: RoutingGraph, from: string, to: string): Walkway
   const e = edges.find((x: GraphEdge) => x.to === to);
   const raw = e?.type ?? "path";
   if (raw === "elevator") return "elevator";
-  if (graph.elevatorNodeIds.has(from) && graph.elevatorNodeIds.has(to)) return "elevator";
   return raw;
 }
 
-function displaySegmentType(
+function floorBetween(graph: RoutingGraph, from: string, to: string): string | null {
+  const edges = graph.adjacency.get(from) ?? [];
+  const e = edges.find((x: GraphEdge) => x.to === to);
+  return e?.floor ?? null;
+}
+
+function normalizeFloorCode(floor: string): string {
+  return floor.trim().toUpperCase().replace(/\s+/g, "");
+}
+
+/** 승강기 탑승 후 이동할 목표 층 추정 */
+function inferElevatorTargetFloor(
   graph: RoutingGraph,
-  from: string,
-  to: string,
-  usesElevatorRoute: boolean,
-): WalkwayType {
-  const base = edgeTypeBetween(graph, from, to);
-  if (
-    usesElevatorRoute &&
-    (graph.elevatorNodeIds.has(from) || graph.elevatorNodeIds.has(to)) &&
-    base === "path"
-  ) {
-    return "elevator";
+  nodePath: string[],
+  elevIndex: number,
+  elevator: ElevatorRecord | undefined,
+): string {
+  const elevId = nodePath[elevIndex];
+
+  if (elevIndex + 1 < nodePath.length) {
+    const exitFloor = floorBetween(graph, elevId, nodePath[elevIndex + 1]);
+    if (exitFloor) return exitFloor;
   }
-  return base;
+
+  const approachFloor =
+    elevIndex > 0 ? floorBetween(graph, nodePath[elevIndex - 1], elevId) : null;
+
+  if (elevator?.floors.length) {
+    if (approachFloor) {
+      const normApproach = normalizeFloorCode(approachFloor);
+      const other = elevator.floors.find((f) => normalizeFloorCode(f) !== normApproach);
+      if (other) return other;
+    }
+    if (elevator.floors.length === 1) return elevator.floors[0];
+    return elevator.floors[elevator.floors.length - 1];
+  }
+
+  return "1F";
+}
+
+function buildElevatorStepsAtCoord(
+  graph: RoutingGraph,
+  nodePath: string[],
+  coordOffset: number,
+  locale: AppLocale,
+): Map<number, string> {
+  const out = new Map<number, string>();
+  for (let i = 0; i < nodePath.length; i++) {
+    if (!graph.elevatorNodeIds.has(nodePath[i])) continue;
+    const elevator = graph.elevatorByNodeId.get(nodePath[i]);
+    const targetFloor = inferElevatorTargetFloor(graph, nodePath, i, elevator);
+    const floorLabel = formatFloorLabel(targetFloor, locale);
+    out.set(coordOffset + i, elevatorTransferText(floorLabel, locale));
+  }
+  return out;
 }
 
 function hazardFor(type: WalkwayType, locale: AppLocale): string | null {
@@ -185,9 +226,20 @@ function maneuverFromDelta(delta: number): ManeuverKind {
   return delta > 0 ? "right" : "left";
 }
 
-function buildSteps(coords: LatLng[], segs: SegmentInfo[], locale: AppLocale): RouteStep[] {
+function buildSteps(
+  coords: LatLng[],
+  segs: SegmentInfo[],
+  locale: AppLocale,
+  elevatorTextAtCoord: Map<number, string>,
+): RouteStep[] {
   const steps: RouteStep[] = [];
   if (coords.length < 2) return steps;
+
+  const elevatorCoordIndices = new Set(elevatorTextAtCoord.keys());
+  const skipTurnAt = new Set<number>();
+  for (const e of elevatorCoordIndices) {
+    skipTurnAt.add(e + 1);
+  }
 
   let pendingDist = 0;
   let pendingType: WalkwayType = segs[0]?.type ?? "path";
@@ -206,7 +258,26 @@ function buildSteps(coords: LatLng[], segs: SegmentInfo[], locale: AppLocale): R
     const segLen = haversineMeters(coords[i], coords[i + 1]);
     const segType = segs[i]?.type ?? "path";
     pendingDist += segLen;
-    if (hazardFor(segType, locale)) pendingHazard = hazardFor(segType, locale);
+    pendingHazard = hazardFor(segType, locale);
+
+    const elevatorText = elevatorTextAtCoord.get(i + 1);
+    if (elevatorText) {
+      const last = steps[steps.length - 1];
+      last.distance += pendingDist;
+      if (pendingHazard && !last.hazard) last.hazard = pendingHazard;
+      steps.push({
+        text: elevatorText,
+        distance: 0,
+        at: coords[i + 1],
+        maneuver: "elevator",
+        edgeType: "elevator",
+        hazard: null,
+      });
+      pendingDist = 0;
+      pendingType = segType;
+      pendingHazard = null;
+      continue;
+    }
 
     const isLastVertex = i + 1 >= coords.length - 1;
     if (isLastVertex) {
@@ -222,6 +293,11 @@ function buildSteps(coords: LatLng[], segs: SegmentInfo[], locale: AppLocale): R
         hazard: null,
       });
       break;
+    }
+
+    // 승강기 직후 복도 꺾임에서 잘못된 유턴 안내 생략
+    if (skipTurnAt.has(i + 1)) {
+      continue;
     }
 
     const inBearing = bearingDeg(coords[i], coords[i + 1]);
@@ -250,6 +326,7 @@ function buildSteps(coords: LatLng[], segs: SegmentInfo[], locale: AppLocale): R
   }
 
   for (const step of steps) {
+    if (step.maneuver === "elevator") continue;
     const dist = formatDistance(step.distance, locale);
     if (step.maneuver === "depart") {
       step.text = departStraightText(dist, locale);
@@ -282,7 +359,7 @@ function nodePathToRoute(
   const segs: SegmentInfo[] = [];
   for (let i = 0; i < nodePath.length - 1; i++) {
     segs.push({
-      type: displaySegmentType(graph, nodePath[i], nodePath[i + 1], usesElevatorRoute),
+      type: edgeTypeBetween(graph, nodePath[i], nodePath[i + 1]),
     });
   }
 
@@ -290,6 +367,7 @@ function nodePathToRoute(
   const fullSegs: SegmentInfo[] = [];
 
   const startGap = haversineMeters(from, nodeCoords[0]);
+  const coordOffset = startGap > 1 ? 1 : 0;
   if (startGap > 1) {
     coords.push(from);
     fullSegs.push({ type: "path" });
@@ -308,11 +386,15 @@ function nodePathToRoute(
     distance += haversineMeters(coords[i], coords[i + 1]);
   }
 
-  const steps = buildSteps(coords, fullSegs, locale);
+  const elevatorTextAtCoord = buildElevatorStepsAtCoord(graph, nodePath, coordOffset, locale);
+  const steps = buildSteps(coords, fullSegs, locale, elevatorTextAtCoord);
   const segmentTypes = fullSegs.map((s) => s.type);
   const hasStairs = segmentTypes.some((s) => s === "stairs");
   const hasCrosswalk = segmentTypes.some((s) => s === "crosswalk");
-  const hasElevator = usesElevatorRoute || segmentTypes.some((s) => s === "elevator");
+  const hasElevator =
+    usesElevatorRoute ||
+    segmentTypes.some((s) => s === "elevator") ||
+    elevatorTextAtCoord.size > 0;
 
   return { coords, distance, steps, hasStairs, hasCrosswalk, hasElevator, segmentTypes };
 }

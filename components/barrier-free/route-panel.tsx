@@ -79,6 +79,8 @@ function maneuverIcon(maneuver: ManeuverKind) {
       return <ArrowUpRight className="h-4 w-4" />;
     case "uturn":
       return <RotateCcw className="h-4 w-4" />;
+    case "elevator":
+      return <ArrowUp className="h-4 w-4" />;
     case "arrive":
       return <Flag className="h-4 w-4" />;
     default:
@@ -580,7 +582,9 @@ export function RoutePanel(props: RoutePanelProps) {
                     className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
                       step.maneuver === "arrive"
                         ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300"
-                        : "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
+                        : step.maneuver === "elevator"
+                          ? "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300"
+                          : "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
                     }`}
                   >
                     {maneuverIcon(step.maneuver)}

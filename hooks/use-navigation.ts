@@ -448,7 +448,9 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       lastSpokenStepRef.current = progress.stepIndex;
       const distLabel = formatDistance(progress.distanceToNext, navLocale);
       getSpeechGuide().speak(
-        navSpeechText(navLocale, progress.distanceToNext, distLabel, step.maneuver),
+        step.maneuver === "elevator"
+          ? step.text
+          : navSpeechText(navLocale, progress.distanceToNext, distLabel, step.maneuver),
         { locale: navLocale },
       );
     }

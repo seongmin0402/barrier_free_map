@@ -1,4 +1,5 @@
 import type { LatLng } from "./geo";
+import type { ElevatorRecord } from "./elevators";
 
 export type WalkwayType = "path" | "crosswalk" | "stairs" | "ramp" | string;
 
@@ -39,6 +40,8 @@ export interface GraphEdge {
   to: string;
   distance: number;
   type: WalkwayType;
+  /** indoor.geojson 등 실내 선형의 층 (예: B1, 2F) */
+  floor?: string;
 }
 
 export interface GraphNode {
@@ -55,6 +58,7 @@ export interface WalkwayGraph {
 /** 보행로 + 엘리베이터 허브 노드 메타 */
 export interface RoutingGraph extends WalkwayGraph {
   elevatorNodeIds: Set<string>;
+  elevatorByNodeId: Map<string, ElevatorRecord>;
 }
 
 export interface BuildingEntrance {
@@ -85,6 +89,7 @@ export type ManeuverKind =
   | "right"
   | "slight-right"
   | "uturn"
+  | "elevator"
   | "arrive";
 
 export interface RouteStep {

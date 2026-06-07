@@ -36,6 +36,16 @@ function parseFloors(raw: string): string[] {
     .filter(Boolean);
 }
 
+/** B1 → 지하 1층, 2F → 2층 */
+export function formatFloorLabel(floor: string, locale: import("@/lib/app-settings").AppLocale): string {
+  const f = floor.trim().toUpperCase().replace(/\s+/g, "");
+  if (f === "B1") return locale === "en" ? "Basement 1" : "지하 1층";
+  if (f === "B2") return locale === "en" ? "Basement 2" : "지하 2층";
+  const match = f.match(/^(\d+)F$/);
+  if (match) return locale === "en" ? `Floor ${match[1]}` : `${match[1]}층`;
+  return floor.trim();
+}
+
 export function parseElevators(collection: { features?: ElevatorGeoFeature[] } | null): ElevatorRecord[] {
   if (!collection?.features?.length) return [];
   const out: ElevatorRecord[] = [];
