@@ -6,6 +6,7 @@ export type UiText = {
     subtitleShort: string;
     subtitleFull: string;
     searchPlaceholder: string;
+    searchPlaceholderShort: string;
     settingsAria: string;
   };
   sidebar: {
@@ -25,6 +26,7 @@ export type UiText = {
     gradeC: string;
   };
   facilities: Record<"elevator" | "ramp" | "toilet" | "braille" | "auto-door", string>;
+  facilitiesShort: Record<"elevator" | "ramp" | "toilet" | "braille" | "auto-door", string>;
   grade: Record<
     "A" | "B" | "C",
     { label: string; description: string }
@@ -162,6 +164,11 @@ export type UiText = {
     ariaLabel: string;
     all: string;
     report: string;
+    mapHintAll: string;
+    mapHintFiltered: (labels: string) => string;
+    mapHintAllShort: string;
+    mapHintFilteredShort: (labels: string) => string;
+    reportShort: string;
   };
   settings: {
     title: string;
@@ -186,7 +193,8 @@ const ko: UiText = {
     university: "공주대학교",
     subtitleShort: "베리어프리맵",
     subtitleFull: "신관캠퍼스 베리어프리맵",
-    searchPlaceholder: "건물·시설 검색",
+    searchPlaceholder: "예: 중앙도서관, 엘리베이터, 경사로",
+    searchPlaceholderShort: "건물·시설 검색 (예: 중앙도서관)",
     settingsAria: "접근성 설정",
   },
   sidebar: {
@@ -210,6 +218,13 @@ const ko: UiText = {
     ramp: "경사로",
     toilet: "장애인 화장실",
     braille: "점자블록",
+    "auto-door": "자동문",
+  },
+  facilitiesShort: {
+    elevator: "엘리베이터",
+    ramp: "경사로",
+    toilet: "화장실",
+    braille: "점자",
     "auto-door": "자동문",
   },
   grade: {
@@ -363,6 +378,11 @@ const ko: UiText = {
     ariaLabel: "시설 필터",
     all: "전체",
     report: "불편신고",
+    mapHintAll: "지도: 캠퍼스 전체 건물 · 테두리 색 = 접근성 등급",
+    mapHintFiltered: (labels) => `지도: ${labels} 보유 건물만 · 📍 위치 핀`,
+    mapHintAllShort: "전체 건물 표시 · 테두리 색 = 접근성 등급",
+    mapHintFilteredShort: (labels) => `${labels} 보유 건물 · 📍 위치 핀`,
+    reportShort: "신고",
   },
   settings: {
     title: "접근성 설정",
@@ -387,7 +407,8 @@ const en: UiText = {
     university: "Kongju National University",
     subtitleShort: "Barrier-Free Map",
     subtitleFull: "Singwan Campus Barrier-Free Map",
-    searchPlaceholder: "Search buildings & facilities",
+    searchPlaceholder: "e.g. Central Library, elevator, ramp",
+    searchPlaceholderShort: "Search buildings (e.g. library)",
     settingsAria: "Accessibility settings",
   },
   sidebar: {
@@ -412,6 +433,13 @@ const en: UiText = {
     toilet: "Accessible restroom",
     braille: "Tactile paving",
     "auto-door": "Automatic door",
+  },
+  facilitiesShort: {
+    elevator: "Elevator",
+    ramp: "Ramp",
+    toilet: "Restroom",
+    braille: "Braille",
+    "auto-door": "Auto door",
   },
   grade: {
     A: { label: "Excellent", description: "Strong accessibility facilities" },
@@ -565,6 +593,11 @@ const en: UiText = {
     ariaLabel: "Facility filters",
     all: "All",
     report: "Report issue",
+    mapHintAll: "Map: all campus buildings · border color = accessibility grade",
+    mapHintFiltered: (labels) => `Map: buildings with ${labels} · 📍 pins`,
+    mapHintAllShort: "All buildings · border color = grade",
+    mapHintFilteredShort: (labels) => `${labels} · 📍 pins`,
+    reportShort: "Report",
   },
   settings: {
     title: "Accessibility settings",

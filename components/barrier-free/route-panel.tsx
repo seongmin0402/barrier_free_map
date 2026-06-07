@@ -572,19 +572,19 @@ export function RoutePanel(props: RoutePanelProps) {
                 <li
                   key={idx}
                   className={cn(
-                    "flex items-center gap-3 rounded-lg border px-2.5 py-2.5",
+                    "flex items-center gap-2 rounded-lg border px-2 py-2 sm:gap-3 sm:px-2.5 sm:py-2.5",
                     active
                       ? "border-blue-500 bg-blue-50 ring-2 ring-blue-500/20 dark:bg-blue-950/40"
                       : "border-border/60 bg-card",
                   )}
                 >
-                  <div className="w-[3.25rem] shrink-0 text-center">
+                  <div className="w-11 shrink-0 text-center sm:w-[3.25rem]">
                     {distanceLabel ? (
                       <>
-                        <p className="text-lg font-bold tabular-nums leading-none tracking-tight text-foreground">
+                        <p className="text-base font-bold tabular-nums leading-none tracking-tight text-foreground sm:text-lg">
                           {distanceLabel}
                         </p>
-                        <p className="mt-0.5 text-[10px] font-medium text-muted-foreground">
+                        <p className="mt-0.5 text-[9px] font-medium text-muted-foreground sm:text-[10px]">
                           {ui.route.distanceAhead}
                         </p>
                       </>
@@ -594,17 +594,17 @@ export function RoutePanel(props: RoutePanelProps) {
                   </div>
                   <span
                     className={cn(
-                      "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-sm ring-2",
+                      "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-sm ring-2 sm:h-11 sm:w-11",
                       visual.bg,
                       visual.fg,
                       active ? visual.ring : "ring-transparent",
                     )}
                     aria-hidden
                   >
-                    {maneuverIcon(step.maneuver)}
+                    {maneuverIcon(step.maneuver, "h-5 w-5")}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold leading-snug text-foreground">{instruction}</p>
+                    <p className="text-[13px] font-semibold leading-snug text-foreground sm:text-sm">{instruction}</p>
                     {step.hazard && (
                       <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">
                         ⚠ {step.hazard}

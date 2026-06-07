@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useUi } from "@/hooks/use-ui";
+import { shortBuildingName } from "@/lib/building-display-name";
 import type { AccessibilityLevel } from "@/lib/building-types";
 
 interface Building {
@@ -60,7 +61,7 @@ export function Sidebar({
       />
       <aside
         className={cn(
-          "fixed top-0 left-0 z-30 flex h-full w-72 flex-col border-r border-border bg-card transition-transform duration-300 md:static md:z-auto md:h-auto md:translate-x-0",
+          "fixed top-0 left-0 z-30 flex h-full w-[min(100vw-1rem,20rem)] flex-col border-r border-border bg-card pt-[env(safe-area-inset-top)] transition-transform duration-300 md:static md:z-auto md:h-auto md:w-80 md:translate-x-0 md:pt-0",
           isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
         )}
       >
@@ -96,7 +97,7 @@ export function Sidebar({
                   onClick={() => onBuildingSelect(building.id)}
                   aria-current={selectedBuilding === building.id ? "true" : undefined}
                   className={cn(
-                    "flex w-full items-center gap-3 rounded-lg border-2 p-3 text-left transition-colors",
+                    "flex w-full items-start gap-3 rounded-lg border-2 p-3 text-left transition-colors",
                     selectedBuilding === building.id
                       ? "border-primary bg-primary/15 shadow-md ring-2 ring-primary/40 ring-offset-2 ring-offset-background"
                       : "border-transparent bg-secondary hover:bg-secondary/80",
@@ -116,24 +117,36 @@ export function Sidebar({
                     />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-foreground">
-                      {building.name}
+                    <p
+                      className="line-clamp-2 text-sm font-medium leading-snug text-foreground"
+                      title={building.name}
+                    >
+                      {shortBuildingName(building.name)}
                       {selectedBuilding === building.id ? (
                         <span className="sr-only">{ui.sidebar.selected}</span>
                       ) : null}
                     </p>
-                    <p className="text-xs text-muted-foreground">
-                      {building.accessibilityLevel === "unknown"
-                        ? ui.gradeUnsurveyed
-                        : ui.sidebar.facilities(building.facilities.filter((f) => f !== "charging").length)}
+                    <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
+                      <span>
+                        {building.accessibilityLevel === "unknown"
+                          ? ui.gradeUnsurveyed
+                          : ui.sidebar.facilities(building.facilities.filter((f) => f !== "charging").length)}
+                      </span>
+                      {building.accessibilityLevel !== "unknown" ? (
+                        <Badge
+                          className={cn("h-5 px-1.5 py-0 text-[10px] sm:hidden", accessibilityColors[building.accessibilityLevel])}
+                        >
+                          {building.accessibilityLevel}
+                        </Badge>
+                      ) : null}
                     </p>
                   </div>
-                  <Badge className={cn("shrink-0", accessibilityColors[building.accessibilityLevel])}>
+                  <Badge className={cn("mt-0.5 hidden shrink-0 sm:inline-flex", accessibilityColors[building.accessibilityLevel])}>
                     {building.accessibilityLevel === "unknown"
                       ? ui.gradeUnsurveyed
                       : building.accessibilityLevel}
                   </Badge>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <ChevronRight className="mt-2 hidden h-4 w-4 shrink-0 text-muted-foreground sm:block" />
                 </button>
               ))
             )}
@@ -142,7 +155,7 @@ export function Sidebar({
 
         <div className="border-t border-border bg-muted/50 p-4">
           <h3 className="mb-2 text-xs font-medium text-muted-foreground">{ui.sidebar.accessibilityGrade}</h3>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-x-2 gap-y-1.5">
             <div className="flex items-center gap-1.5">
               <span className="h-3 w-3 rounded-full bg-[oklch(0.65_0.18_160)]" />
               <span className="text-xs text-muted-foreground">{ui.sidebar.gradeA}</span>

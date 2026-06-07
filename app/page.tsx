@@ -5,7 +5,7 @@ import { Header } from "@/components/barrier-free/header";
 import { Sidebar } from "@/components/barrier-free/sidebar";
 import { CampusMap } from "@/components/barrier-free/campus-map";
 import { BuildingDetail } from "@/components/barrier-free/building-detail";
-import { FacilityFilterBar } from "@/components/barrier-free/facility-filter-bar";
+import { FacilityFilterBar, FacilityFilterMapHint } from "@/components/barrier-free/facility-filter-bar";
 import { SettingsPanel } from "@/components/barrier-free/settings-panel";
 import { MobileSidebarToggle } from "@/components/barrier-free/mobile-sidebar-toggle";
 import { useAppSettings } from "@/components/app-settings-provider";
@@ -109,23 +109,39 @@ export default function BarrierFreeMapPage() {
             directionsLabel={ui.page.directions}
           />
 
-          {/* 모바일: 메뉴 + 필터 한 줄 (목록 열리면 필터 숨김) */}
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-30 p-3 md:hidden">
-            <div className="pointer-events-auto flex items-start gap-2">
-              <MobileSidebarToggle
-                embedded
-                isOpen={isSidebarOpen}
-                onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
-              />
-              {!isSidebarOpen ? (
+          {/* 모바일: 메뉴 + 필터 (목록 열리면 필터 숨김) */}
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-30 p-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:hidden">
+            {!isSidebarOpen ? (
+              <div className="pointer-events-auto grid w-full grid-cols-[auto_1fr] gap-x-2 gap-y-1.5 animate-in fade-in duration-200">
+                <MobileSidebarToggle
+                  embedded
+                  isOpen={isSidebarOpen}
+                  onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
+                  className="row-start-1 self-start"
+                />
                 <FacilityFilterBar
                   embedded
+                  compact
+                  showHint={false}
                   filters={filters}
                   onFilterChange={setFilters}
-                  className="animate-in fade-in duration-200"
+                  className="col-start-2 row-start-1 min-w-0"
                 />
-              ) : null}
-            </div>
+                <FacilityFilterMapHint
+                  filters={filters}
+                  compact
+                  className="col-span-2 row-start-2"
+                />
+              </div>
+            ) : (
+              <div className="pointer-events-auto">
+                <MobileSidebarToggle
+                  embedded
+                  isOpen={isSidebarOpen}
+                  onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
+                />
+              </div>
+            )}
           </div>
 
           {/* 데스크톱: 필터만 상단 */}

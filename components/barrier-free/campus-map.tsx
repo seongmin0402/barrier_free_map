@@ -1422,7 +1422,9 @@ export function CampusMap({
     "transition-[bottom] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
     mapLayout === "route"
       ? "max-sm:bottom-[calc(var(--route-sheet-vh)*1vh+0.625rem)] sm:bottom-[max(0.75rem,env(safe-area-inset-bottom))]"
-      : "bottom-[max(0.75rem,env(safe-area-inset-bottom))]",
+      : mapLayout === "explore" && directionsHref
+        ? "bottom-[calc(max(0.75rem,env(safe-area-inset-bottom))+4.25rem)]"
+        : "bottom-[max(0.75rem,env(safe-area-inset-bottom))]",
   );
 
   const mapBannerClass = cn(
@@ -1502,7 +1504,7 @@ export function CampusMap({
         {/* 좌측: 줌 + 경로 범례 */}
         <div className={cn("pointer-events-auto absolute left-3 flex flex-col gap-2 sm:left-4", overlayBottomClass)}>
           {routeLine && routeLine.length >= 2 && routeSegments && (
-            <RouteLegend segmentTypes={routeSegments} variant="map" className="max-w-[11rem] sm:max-w-none" />
+            <RouteLegend segmentTypes={routeSegments} variant="map" className="max-w-[min(calc(100vw-6rem),11rem)] sm:max-w-none" />
           )}
           <div className="overflow-hidden rounded-lg border border-border bg-card/95 shadow-md backdrop-blur-sm">
             <Button
@@ -1622,7 +1624,7 @@ export function CampusMap({
             >
               <SlidersHorizontal className="h-5 w-5" />
             </Button>
-            {directionsHref && directionsLabel ? (
+            {directionsHref && directionsLabel && mapLayout !== "explore" ? (
               <Button
                 asChild
                 size="lg"
@@ -1630,12 +1632,32 @@ export function CampusMap({
               >
                 <Link href={directionsHref}>
                   <Navigation className="h-4 w-4 shrink-0" />
-                  <span className="max-[380px]:sr-only text-sm font-semibold">{directionsLabel}</span>
+                  <span className="text-sm font-semibold">{directionsLabel}</span>
                 </Link>
               </Button>
             ) : null}
           </div>
         </div>
+
+        {mapLayout === "explore" && directionsHref && directionsLabel ? (
+          <div
+            className={cn(
+              "pointer-events-none absolute inset-x-0 z-20 flex justify-center px-3 sm:px-4",
+              "bottom-[max(0.75rem,env(safe-area-inset-bottom))]",
+            )}
+          >
+            <Button
+              asChild
+              size="lg"
+              className="pointer-events-auto h-12 max-w-[calc(100%-0.5rem)] gap-2 rounded-2xl px-6 text-sm font-bold shadow-2xl ring-2 ring-primary/30 hover:shadow-primary/25 sm:h-14 sm:max-w-none sm:gap-2.5 sm:px-8 sm:text-base"
+            >
+              <Link href={directionsHref}>
+                <Navigation className="h-5 w-5 shrink-0" aria-hidden />
+                {directionsLabel}
+              </Link>
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       <AlertDialog open={locationDialogOpen} onOpenChange={setLocationDialogOpen}>

@@ -38,8 +38,8 @@ export function RouteLegend({ segmentTypes, variant = "panel", className }: Rout
       </p>
       <ul
         className={cn(
-          "flex flex-wrap gap-x-3 gap-y-1",
-          variant === "map" ? "text-xs" : "text-[11px]",
+          "flex flex-wrap gap-x-2 gap-y-1 sm:gap-x-3",
+          variant === "map" ? "text-[11px] sm:text-xs" : "text-[11px]",
         )}
       >
         {items.map((l) => (

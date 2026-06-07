@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useUi } from "@/hooks/use-ui";
+import { shortBuildingName } from "@/lib/building-display-name";
 import { sortFloorPhotoGroups, sortFloorPhotoSummary, sortFloorTokens } from "@/lib/floor-sort";
 import type { UiText } from "@/lib/i18n/ui";
 import type { BarrierBuilding } from "@/lib/building-types";
@@ -342,7 +343,10 @@ export function BuildingDetail({ building, onClose }: BuildingDetailProps) {
                 {unsurveyed ? "—" : building.accessibilityLevel}
               </div>
               <div className="min-w-0 flex-1">
-                <DialogTitle className="text-base leading-snug sm:text-lg">{building.name}</DialogTitle>
+                <DialogTitle className="text-base leading-snug sm:text-lg">
+                  <span className="sm:hidden">{shortBuildingName(building.name)}</span>
+                  <span className="hidden sm:inline">{building.name}</span>
+                </DialogTitle>
                 <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                   <Badge
                     variant="secondary"
