@@ -92,6 +92,75 @@ export class SpeechGuide {
       }
     })();
   }
+
+  /** 재생이 끝날 때까지 대기 — 안내 시작 전 요약 후 출발 안내 순차 재생 */
+  speakAndWait(text: string, opts?: { force?: boolean; locale?: AppLocale }): Promise<void> {
+    if (!this.enabled || typeof window === "undefined") return Promise.resolve();
+    const trimmed = text.trim();
+    if (!trimmed) return Promise.resolve();
+
+    const now = Date.now();
+    if (!opts?.force && trimmed === this.lastText && now - this.lastAt < 5000) {
+      return Promise.resolve();
+    }
+
+    this.lastText = trimmed;
+    this.lastAt = now;
+    this.stop();
+
+    const gen = this.generation;
+    const lang = opts?.locale ?? "ko";
+    const url = `/api/tts?text=${encodeURIComponent(trimmed)}&lang=${lang}`;
+    const controller = new AbortController();
+    this.abortController = controller;
+
+    return new Promise((resolve) => {
+      const finish = () => resolve();
+
+      void (async () => {
+        try {
+          const res = await fetch(url, { signal: controller.signal });
+          if (gen !== this.generation) {
+            finish();
+            return;
+          }
+          if (!res.ok) {
+            finish();
+            return;
+          }
+          const blob = await res.blob();
+          if (gen !== this.generation || !blob.size) {
+            finish();
+            return;
+          }
+
+          const objectUrl = URL.createObjectURL(blob);
+          if (gen !== this.generation) {
+            URL.revokeObjectURL(objectUrl);
+            finish();
+            return;
+          }
+
+          this.objectUrl = objectUrl;
+          const audio = new Audio(objectUrl);
+          this.audio = audio;
+          audio.onended = () => {
+            if (this.audio === audio) this.stop();
+            finish();
+          };
+          audio.onerror = () => finish();
+
+          await audio.play();
+        } catch (err) {
+          if (err instanceof DOMException && err.name === "AbortError") {
+            finish();
+            return;
+          }
+          finish();
+        }
+      })();
+    });
+  }
 }
 
 let singleton: SpeechGuide | null = null;

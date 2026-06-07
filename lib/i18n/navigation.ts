@@ -1,5 +1,7 @@
 import type { AppLocale } from "@/lib/app-settings";
-import type { ManeuverKind, WalkwayType } from "@/lib/routing/types";
+import { formatDistance } from "@/lib/routing/geo";
+import { estimateWalkMinutes } from "@/lib/routing/route-estimate";
+import type { ComputedRoute, ManeuverKind, WalkwayType } from "@/lib/routing/types";
 
 export function hazardText(type: WalkwayType, locale: AppLocale): string | null {
   const ko: Partial<Record<string, string | null>> = {
@@ -193,6 +195,46 @@ export function navSpeechText(
 
 export function remainingDistanceLabel(locale: AppLocale): string {
   return locale === "en" ? "Remaining" : "남은 거리";
+}
+
+/** 안내 시작 전 경로 요약 — 음성·스크린리더 공통 */
+export function routePreviewSpeechText(
+  locale: AppLocale,
+  route: ComputedRoute,
+  destLabel: string,
+): string {
+  const minutes = estimateWalkMinutes(route);
+  const dist = formatDistance(route.distance, locale);
+  const crosswalks = route.steps.filter((s) => s.maneuver === "crosswalk").length;
+  const elevators = route.steps.filter((s) => s.maneuver === "elevator").length;
+
+  if (locale === "en") {
+    const parts = [
+      `Route to ${destLabel}.`,
+      `About ${minutes} minutes, ${dist} on foot.`,
+    ];
+    if (crosswalks > 0) {
+      parts.push(`${crosswalks} crosswalk${crosswalks > 1 ? "s" : ""}.`);
+    }
+    if (elevators > 0) {
+      parts.push(`${elevators} elevator transfer${elevators > 1 ? "s" : ""}.`);
+    }
+    if (route.hasStairs) parts.push("This route includes stairs.");
+    else if (route.hasElevator) parts.push("Elevator segments are included.");
+    parts.push("Guidance will begin now.");
+    return parts.join(" ");
+  }
+
+  const parts = [
+    `${destLabel}까지 경로입니다.`,
+    `도보 약 ${minutes}분, ${dist}.`,
+  ];
+  if (crosswalks > 0) parts.push(`횡단보도 ${crosswalks}회.`);
+  if (elevators > 0) parts.push(`승강기 ${elevators}회.`);
+  if (route.hasStairs) parts.push("계단 구간이 포함되어 있습니다.");
+  else if (route.hasElevator) parts.push("승강기 구간이 포함되어 있습니다.");
+  parts.push("이제 길안내를 시작합니다.");
+  return parts.join(" ");
 }
 
 /** 경로 이탈 후 재탐색 시 음성 안내 (출발 문구 포함) */

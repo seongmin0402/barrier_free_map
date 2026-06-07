@@ -10,7 +10,8 @@ import { SettingsPanel } from "@/components/barrier-free/settings-panel";
 import { useNavigation } from "@/hooks/use-navigation";
 import { useCampusBuildings } from "@/hooks/use-campus-buildings";
 import { useUi } from "@/hooks/use-ui";
-import { arriveMessage, maneuverLabel, remainingDistanceLabel } from "@/lib/i18n/navigation";
+import { NavLiveRegion } from "@/components/barrier-free/nav-live-region";
+import { arriveMessage, remainingDistanceLabel } from "@/lib/i18n/navigation";
 import { formatDistance } from "@/lib/routing/geo";
 
 export default function RoutePage() {
@@ -35,11 +36,10 @@ export default function RoutePage() {
 
   const currentStep = nav.route?.steps[nav.currentStepIndex] ?? null;
   const isArrive = currentStep?.maneuver === "arrive";
-  const stepLabel = currentStep
-    ? currentStep.maneuver === "depart" || currentStep.maneuver === "arrive"
-      ? currentStep.text
-      : maneuverLabel(currentStep.maneuver, locale)
-    : "";
+  const bannerText =
+    nav.liveAnnouncement ||
+    (currentStep?.text ?? "") ||
+    (isArrive ? arriveMessage(locale) : "");
 
   return (
     <div
@@ -48,7 +48,12 @@ export default function RoutePage() {
       data-high-contrast={settings.highContrast ? "true" : undefined}
     >
       <main className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col">
-        {/* 데스크톱 안내 배너 — 모바일은 패널에서 표시 */}
+        <NavLiveRegion
+          message={nav.liveAnnouncement}
+          label={ui.route.navLiveLabel}
+        />
+
+        {/* 데스크톱 안내 배너 — 모바일은 패널·live region에서 표시 */}
         {nav.navigating && (
           <div className="absolute left-[calc(22rem+0.75rem)] top-3 z-40 hidden max-w-xs rounded-xl bg-blue-600 px-4 py-3 text-white shadow-xl sm:block">
             <div className="flex items-start gap-3">
@@ -66,7 +71,7 @@ export default function RoutePage() {
                     <p className="text-2xl font-extrabold leading-none">
                       {formatDistance(nav.distanceToNext ?? 0, locale)}
                     </p>
-                    <p className="mt-1 truncate text-sm font-medium leading-snug">{stepLabel}</p>
+                    <p className="mt-1 line-clamp-3 text-sm font-medium leading-snug">{bannerText}</p>
                   </>
                 ) : (
                   <p className="text-sm font-semibold leading-tight">{ui.route.navActive}</p>
@@ -126,6 +131,7 @@ export default function RoutePage() {
           remaining={nav.remaining}
           voiceEnabled={nav.voiceEnabled}
           onToggleVoice={nav.setVoiceEnabled}
+          liveAnnouncement={nav.liveAnnouncement}
           offRouteM={nav.offRouteM}
           rerouteNotice={nav.rerouteNotice}
           onSettingsClick={() => setIsSettingsOpen(true)}

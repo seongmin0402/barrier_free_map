@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppSettings } from "@/components/app-settings-provider";
 import type { BarrierBuilding } from "@/lib/building-types";
-import { arriveMessage, navStepSpeechText, offRouteRerouteSpeech } from "@/lib/i18n/navigation";
+import {
+  arriveMessage,
+  navStepSpeechText,
+  offRouteRerouteSpeech,
+  routePreviewSpeechText,
+} from "@/lib/i18n/navigation";
 import { getUi } from "@/lib/i18n/ui";
 import type { LatLng } from "@/lib/routing/geo";
 import { formatDistance, haversineMeters, bearingDeg } from "@/lib/routing/geo";
@@ -35,6 +40,17 @@ import type {
 
 type WhichPoint = "origin" | "destination";
 
+const VOICE_STORAGE_KEY = "barrier-free-voice-enabled";
+
+function loadVoiceEnabled(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    return localStorage.getItem(VOICE_STORAGE_KEY) !== "false";
+  } catch {
+    return true;
+  }
+}
+
 export function useNavigation(buildings: BarrierBuilding[]) {
   const { locale } = useAppSettings();
   const localeRef = useRef(locale);
@@ -52,7 +68,35 @@ export function useNavigation(buildings: BarrierBuilding[]) {
   const [navigating, setNavigating] = useState(false);
   /** 안내 시작 시점의 경로 — locale 변경으로 steps/coords 참조가 바뀌어도 추적 유지 */
   const [navigationRoute, setNavigationRoute] = useState<ComputedRoute | null>(null);
-  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [voiceEnabled, setVoiceEnabledState] = useState(loadVoiceEnabled);
+  const [liveAnnouncement, setLiveAnnouncement] = useState("");
+  const voiceEnabledRef = useRef(voiceEnabled);
+  voiceEnabledRef.current = voiceEnabled;
+
+  const setVoiceEnabled = useCallback((enabled: boolean) => {
+    setVoiceEnabledState(enabled);
+    try {
+      localStorage.setItem(VOICE_STORAGE_KEY, enabled ? "true" : "false");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  /** 스크린리더 live region + (선택) TTS 동시 갱신 */
+  const announce = useCallback(
+    (text: string, options?: { speak?: boolean; force?: boolean }) => {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+      setLiveAnnouncement(trimmed);
+      if (options?.speak === false) return;
+      if (!voiceEnabledRef.current) return;
+      getSpeechGuide().speak(trimmed, {
+        force: options?.force,
+        locale: localeRef.current,
+      });
+    },
+    [],
+  );
   const [userPos, setUserPos] = useState<LatLng | null>(null);
   const [userHeading, setUserHeading] = useState<number | null>(null);
   const [routeHeading, setRouteHeading] = useState<number | null>(null);
@@ -65,6 +109,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
 
   const watchIdRef = useRef<number | null>(null);
   const lastSpokenStepRef = useRef<number>(-1);
+  const lastLiveStepIndexRef = useRef<number>(-1);
   /** 단계별 거리 예고 음성 (120m → 60m) */
   const speechBandRef = useRef<{ stepIndex: number; band: number }>({
     stepIndex: -1,
@@ -317,6 +362,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     lastRerouteAtRef.current = 0;
     setOffRouteM(null);
     setRerouteNotice(false);
+    setLiveAnnouncement("");
   }, [clearWatch]);
 
   const startNav = useCallback(() => {
@@ -343,6 +389,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     setGeoError(null);
     setCurrentStepIndex(0);
     lastSpokenStepRef.current = -1;
+    lastLiveStepIndexRef.current = -1;
     firstGpsFixRef.current = null;
     navigationStartedAtRef.current = Date.now();
     setNavigationRoute(route);
@@ -359,14 +406,30 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     void requestCompassPermission();
 
     const navLocale = localeRef.current;
-
-    // 출발 안내 (depart 단계만 — arrive 문구는 실제 도착 시에만)
+    const destLabel = destination?.label ?? getUi(navLocale).route.destination;
+    const previewText = routePreviewSpeechText(navLocale, route, destLabel);
     const departStep = route.steps.find((s) => s.maneuver === "depart") ?? route.steps[0];
-    if (departStep) {
+    const departText = departStep?.text ?? "";
+
+    navSpeechBlockedUntilRef.current = Date.now() + 12000;
+    setLiveAnnouncement(previewText);
+
+    void (async () => {
+      const guide = getSpeechGuide();
+      if (voiceEnabledRef.current) {
+        await guide.speakAndWait(previewText, { force: true, locale: navLocale });
+      }
+      if (departText) {
+        setLiveAnnouncement(departText);
+        if (voiceEnabledRef.current) {
+          await guide.speakAndWait(departText, { force: true, locale: navLocale });
+        }
+      }
       navSpeechBlockedUntilRef.current = Date.now() + 5500;
-      getSpeechGuide().speak(departStep.text, { force: true, locale: navLocale });
-      lastSpokenStepRef.current = route.steps.indexOf(departStep);
-    }
+      if (departStep) {
+        lastSpokenStepRef.current = route.steps.indexOf(departStep);
+      }
+    })();
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
@@ -424,7 +487,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       },
       { enableHighAccuracy: true, maximumAge: 800, timeout: 25000 },
     );
-  }, [route, clearWatch, requestCompassPermission]);
+  }, [route, destination, clearWatch, requestCompassPermission]);
 
   // GPS 갱신 → 진행 상황 계산 + 음성 안내 + 경로 이탈 재탐색
   useEffect(() => {
@@ -461,15 +524,14 @@ export function useNavigation(buildings: BarrierBuilding[]) {
           setRemaining(newRoute.distance);
           setDistanceToNext(null);
           setRerouteNotice(true);
+          lastLiveStepIndexRef.current = -1;
           navSpeechBlockedUntilRef.current = Date.now() + 5500;
 
           const departStep =
             newRoute.steps.find((s) => s.maneuver === "depart") ?? newRoute.steps[0];
           if (departStep) {
-            getSpeechGuide().speak(
-              offRouteRerouteSpeech(navLocale, departStep.text),
-              { force: true, locale: navLocale },
-            );
+            const rerouteText = offRouteRerouteSpeech(navLocale, departStep.text);
+            announce(rerouteText, { force: true });
             lastSpokenStepRef.current = newRoute.steps.indexOf(departStep);
           }
           return;
@@ -488,47 +550,49 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     const speechAllowed = Date.now() >= navSpeechBlockedUntilRef.current;
     const d = progress.distanceToNext;
 
-    if (speechAllowed && step.maneuver !== "arrive" && step.maneuver !== "depart") {
-      const speakStep = (distanceM: number) => {
-        getSpeechGuide().speak(
-          navStepSpeechText(
-            navLocale,
-            step.text,
-            distanceM,
-            formatDistance(distanceM, navLocale),
-            step.maneuver,
-          ),
-          { locale: navLocale },
-        );
-      };
+    if (step.maneuver !== "arrive" && step.maneuver !== "depart") {
+      const liveText = navStepSpeechText(
+        navLocale,
+        step.text,
+        d,
+        formatDistance(d, navLocale),
+        step.maneuver,
+      );
 
-      const isGuidance =
-        step.maneuver === "elevator" ||
-        step.maneuver === "crosswalk" ||
-        step.maneuver === "ramp" ||
-        step.maneuver === "stairs";
+      if (progress.stepIndex !== lastLiveStepIndexRef.current) {
+        lastLiveStepIndexRef.current = progress.stepIndex;
+        setLiveAnnouncement(liveText);
+      }
 
-      if (progress.stepIndex !== lastSpokenStepRef.current) {
-        lastSpokenStepRef.current = progress.stepIndex;
-        speechBandRef.current = { stepIndex: progress.stepIndex, band: d };
-        speakStep(d);
-      } else if (speechBandRef.current.stepIndex === progress.stepIndex) {
-        const reminders = isGuidance ? [85, 35] : [70];
-        for (const band of reminders) {
-          if (d <= band && speechBandRef.current.band > band + 10) {
-            speechBandRef.current.band = band;
-            speakStep(d);
-            break;
+      if (speechAllowed) {
+        const isGuidance =
+          step.maneuver === "elevator" ||
+          step.maneuver === "crosswalk" ||
+          step.maneuver === "ramp" ||
+          step.maneuver === "stairs";
+
+        if (progress.stepIndex !== lastSpokenStepRef.current) {
+          lastSpokenStepRef.current = progress.stepIndex;
+          speechBandRef.current = { stepIndex: progress.stepIndex, band: d };
+          announce(liveText);
+        } else if (speechBandRef.current.stepIndex === progress.stepIndex) {
+          const reminders = isGuidance ? [85, 35] : [70];
+          for (const band of reminders) {
+            if (d <= band && speechBandRef.current.band > band + 10) {
+              speechBandRef.current.band = band;
+              announce(liveText);
+              break;
+            }
           }
         }
       }
     }
 
     if (arrived) {
-      getSpeechGuide().speak(arriveMessage(navLocale), { force: true, locale: navLocale });
+      announce(arriveMessage(navLocale), { force: true });
       stopNav();
     }
-  }, [navigating, navigationRoute, userPos, stopNav, hasArrived]);
+  }, [navigating, navigationRoute, userPos, stopNav, hasArrived, announce]);
 
   useEffect(() => {
     if (!rerouteNotice) return;
@@ -571,6 +635,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     navigating,
     voiceEnabled,
     setVoiceEnabled,
+    liveAnnouncement,
     userPos,
     userPosRef,
     userHeading,

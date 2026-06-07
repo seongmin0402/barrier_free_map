@@ -23,6 +23,8 @@ import {
   ArrowUpDown,
   Volume2,
   VolumeX,
+  Mic,
+  MicOff,
   Navigation,
   Footprints,
   TriangleAlert,
@@ -31,9 +33,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { useAppSettings } from "@/components/app-settings-provider";
 import type { BarrierBuilding } from "@/lib/building-types";
+import { useVoiceInput } from "@/hooks/use-voice-input";
 import { useUi } from "@/hooks/use-ui";
+import { shortBuildingName } from "@/lib/building-display-name";
 import { remainingDistanceLabel } from "@/lib/i18n/navigation";
 import { formatDistance } from "@/lib/routing/geo";
+import { estimateWalkMinutes } from "@/lib/routing/route-estimate";
 import { stepDisplayMeta, stepManeuverStyle } from "@/lib/routing/step-display";
 import { isUnsurveyedBuilding } from "@/lib/merge-campus-buildings";
 import { RouteLegend } from "@/components/barrier-free/route-legend";
@@ -63,6 +68,7 @@ interface RoutePanelProps {
   remaining: number | null;
   voiceEnabled: boolean;
   onToggleVoice: (v: boolean) => void;
+  liveAnnouncement?: string;
   offRouteM?: number | null;
   rerouteNotice?: boolean;
   onSettingsClick?: () => void;
@@ -98,24 +104,14 @@ function maneuverIcon(maneuver: ManeuverKind, iconClass = "h-5 w-5") {
   }
 }
 
-/** 접근성을 고려한 여유 보행 속도 (약 0.7 m/s) */
-const WALK_SPEED_MPS = 0.7;
-
-function estimateMinutes(route: ComputedRoute): number {
-  let seconds = route.distance / WALK_SPEED_MPS;
-  // 횡단보도 대기, 계단/경사로 통과에 따른 추가 시간(여유분)
-  for (const t of route.segmentTypes) {
-    if (t === "crosswalk") seconds += 25;
-    else if (t === "stairs") seconds += 20;
-    else if (t === "ramp") seconds += 8;
-    else if (t === "elevator") seconds += 18;
-  }
-  // 회전이 많을수록 여유 시간 추가
-  const turns = route.steps.filter(
-    (s) => s.maneuver !== "depart" && s.maneuver !== "arrive" && s.maneuver !== "straight",
-  ).length;
-  seconds += turns * 5;
-  return Math.max(1, Math.ceil(seconds / 60));
+function matchBuildingsFromSpeech(buildings: BarrierBuilding[], transcript: string): BarrierBuilding[] {
+  const q = transcript.trim().toLowerCase().replace(/\s+/g, "");
+  if (!q) return [];
+  return buildings.filter((b) => {
+    const full = b.name.toLowerCase().replace(/\s+/g, "");
+    const short = shortBuildingName(b.name).toLowerCase().replace(/\s+/g, "");
+    return full.includes(q) || short.includes(q) || q.includes(short);
+  });
 }
 
 function PointField({
@@ -141,9 +137,11 @@ function PointField({
   onClear: () => void;
   showDot?: boolean;
 }) {
+  const { locale } = useAppSettings();
   const ui = useUi();
   const [query, setQuery] = useState("");
   const [openList, setOpenList] = useState(false);
+  const { listening, errorKey, start: startVoice, stop: stopVoice } = useVoiceInput(locale);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -187,17 +185,57 @@ function PointField({
         </div>
       ) : (
         <>
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setOpenList(true);
-            }}
-            onFocus={() => setOpenList(true)}
-            placeholder={ui.route.searchPlaceholder}
-            className="w-full rounded-md border border-input bg-background px-2.5 py-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-sm"
-          />
+          <div className="flex gap-1.5">
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setOpenList(true);
+              }}
+              onFocus={() => setOpenList(true)}
+              placeholder={ui.route.searchPlaceholder}
+              className="min-w-0 flex-1 rounded-md border border-input bg-background px-2.5 py-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-sm"
+            />
+            <Button
+              type="button"
+              size="icon"
+              variant={listening ? "default" : "secondary"}
+              className="h-10 w-10 shrink-0"
+              aria-label={listening ? ui.route.voiceSearchStop : ui.route.voiceSearch}
+              title={listening ? ui.route.voiceListening : ui.route.voiceSearch}
+              onClick={() => {
+                if (listening) {
+                  stopVoice();
+                  return;
+                }
+                startVoice((transcript) => {
+                  const matches = matchBuildingsFromSpeech(buildings, transcript);
+                  if (matches.length === 1) {
+                    onSelectBuilding(matches[0]);
+                    setQuery("");
+                    setOpenList(false);
+                    return;
+                  }
+                  setQuery(transcript);
+                  setOpenList(true);
+                });
+              }}
+            >
+              {listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+            </Button>
+          </div>
+          {errorKey === "unsupported" ? (
+            <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">{ui.route.voiceUnsupported}</p>
+          ) : null}
+          {errorKey === "failed" ? (
+            <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">{ui.route.voiceFailed}</p>
+          ) : null}
+          {listening ? (
+            <p className="mt-1 text-xs font-medium text-primary" aria-live="polite">
+              {ui.route.voiceListening}
+            </p>
+          ) : null}
           {openList && filtered.length > 0 && (
             <div className="mt-1 max-h-44 overflow-y-auto rounded-md border border-border bg-popover shadow-sm">
               {filtered.map((b) => (
@@ -271,6 +309,7 @@ export function RoutePanel(props: RoutePanelProps) {
     remaining,
     voiceEnabled,
     onToggleVoice,
+    liveAnnouncement = "",
     offRouteM = null,
     rerouteNotice = false,
     onSettingsClick,
@@ -468,6 +507,15 @@ export function RoutePanel(props: RoutePanelProps) {
           </div>
         </div>
 
+        {navigating && liveAnnouncement ? (
+          <p
+            className="rounded-lg border border-blue-500/40 bg-blue-50 px-3 py-2 text-sm font-semibold leading-snug text-blue-950 dark:bg-blue-950/50 dark:text-blue-100 sm:hidden"
+            aria-hidden="true"
+          >
+            {liveAnnouncement}
+          </p>
+        ) : null}
+
         {routeError && (
           <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
             <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
@@ -495,7 +543,7 @@ export function RoutePanel(props: RoutePanelProps) {
             <div className="flex items-end justify-between">
               <div>
                 <p className="text-2xl font-bold leading-none">
-                  {ui.route.aboutMinutes} {estimateMinutes(route)}
+                  {ui.route.aboutMinutes} {estimateWalkMinutes(route)}
                   <span className="ml-1 text-sm font-medium text-muted-foreground">{ui.route.min}</span>
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -572,6 +620,7 @@ export function RoutePanel(props: RoutePanelProps) {
               return (
                 <li
                   key={idx}
+                  aria-current={active ? "step" : undefined}
                   className={cn(
                     "flex items-center gap-2 rounded-lg border px-2 py-2 sm:gap-3 sm:px-2.5 sm:py-2.5",
                     active
@@ -605,7 +654,9 @@ export function RoutePanel(props: RoutePanelProps) {
                     {maneuverIcon(step.maneuver, "h-5 w-5")}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[13px] font-semibold leading-snug text-foreground sm:text-sm">{instruction}</p>
+                    <p className="text-[13px] font-semibold leading-snug text-foreground sm:text-sm">
+                      {active && step.text ? step.text : instruction}
+                    </p>
                     {step.hazard && (
                       <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">
                         ⚠ {step.hazard}
