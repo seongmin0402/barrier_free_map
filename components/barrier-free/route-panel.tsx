@@ -346,14 +346,23 @@ export function RoutePanel(props: RoutePanelProps) {
     }
   }, [route]);
 
-  // 상태에 따라 기본 높이 — 경로가 잡히면 지도를 넓게(PEEK). 드래그로 조절 가능.
+  // 상태에 따라 기본 높이 — 경로 확정 시 PEEK, 상세 안내 펼침 시 FULL
   useEffect(() => {
-    if (pickMode) setSheetVh(SNAP_PEEK);
-    else if (route) setSheetVh(SNAP_PEEK);
-    else if (navigating) setSheetVh(SNAP_PEEK);
-    else if (!origin || !destination) setSheetVh(SNAP_HALF);
+    if (pickMode) {
+      setSheetVh(SNAP_PEEK);
+      return;
+    }
+    if (navigating) {
+      setSheetVh(showSteps ? SNAP_HALF : SNAP_PEEK);
+      return;
+    }
+    if (route) {
+      setSheetVh(showSteps ? SNAP_FULL : SNAP_PEEK);
+      return;
+    }
+    if (!origin || !destination) setSheetVh(SNAP_HALF);
     else setSheetVh(SNAP_FULL);
-  }, [route, navigating, pickMode, origin, destination]);
+  }, [route, navigating, pickMode, origin, destination, showSteps]);
 
   const compactSheet = isMobile && sheetVh <= SNAP_HALF + 4;
   const showFullPoints = !route || editPoints || !isMobile;
@@ -364,6 +373,19 @@ export function RoutePanel(props: RoutePanelProps) {
   }, [sheetVh, onSheetVhChange]);
 
   const routeSummaryRef = useRef<HTMLDivElement>(null);
+  const stepsListRef = useRef<HTMLOListElement>(null);
+
+  const toggleShowSteps = useCallback(() => {
+    setShowSteps((prev) => !prev);
+  }, []);
+
+  useEffect(() => {
+    if (!showSteps || !isMobile) return;
+    const id = requestAnimationFrame(() => {
+      stepsListRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [showSteps, isMobile]);
 
   const handleStartNav = useCallback(() => {
     onStartNav();
@@ -708,7 +730,8 @@ export function RoutePanel(props: RoutePanelProps) {
             variant="ghost"
             size="sm"
             className="h-8 w-full gap-1 text-xs text-muted-foreground"
-            onClick={() => setShowSteps((v) => !v)}
+            onClick={toggleShowSteps}
+            aria-expanded={showSteps}
           >
             {showSteps ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             {showSteps ? ui.route.hideSteps : ui.route.showSteps}
@@ -718,7 +741,10 @@ export function RoutePanel(props: RoutePanelProps) {
 
         {/* 턴바이턴 단계 — 모바일 컴팩트 시 접기, 안내 중에는 현재 단계만 */}
         {route && route.steps.length > 0 && showStepList && (
-          <ol className={cn("space-y-2", compactSheet && !showSteps && navigating && "space-y-0")}>
+          <ol
+            ref={stepsListRef}
+            className={cn("space-y-2", compactSheet && !showSteps && navigating && "space-y-0")}
+          >
             {route.steps.map((step: RouteStep, idx: number) => {
               if (compactSheet && !showSteps && navigating && idx !== currentStepIndex) {
                 return null;
