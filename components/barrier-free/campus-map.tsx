@@ -240,21 +240,23 @@ function fitToBuildings(
   }
 }
 
+const ELEVATOR_ICON_SRC = "/icons/facilities/elevator.png";
+
 function shortElevatorLabel(name: string): string {
   return name.replace(/^공주대학교\s*/, "").replace(/\s*승강기$/, "").trim() || name;
 }
 
 function elevatorMarkerHtml(label: string, onRoute: boolean) {
   const safe = escapeHtml(label);
-  const bg = onRoute ? "#0d9488" : "#94a3b8";
   const ring = onRoute
-    ? "box-shadow:0 0 0 3px rgba(13,148,136,.4),0 2px 8px rgba(0,0,0,.22);"
-    : "box-shadow:0 2px 6px rgba(0,0,0,.18);";
+    ? "box-shadow:0 0 0 3px rgba(13,148,136,.45),0 2px 10px rgba(0,0,0,.2);"
+    : "box-shadow:0 2px 8px rgba(0,0,0,.16);";
+  const imgStyle = onRoute
+    ? "display:block;width:34px;height:34px;object-fit:contain;"
+    : "display:block;width:34px;height:34px;object-fit:contain;opacity:0.78;filter:saturate(0.55);";
   return `<div aria-hidden="true" style="display:flex;flex-direction:column;align-items:center;max-width:88px;">
-    <div style="width:30px;height:30px;border-radius:50%;background:${bg};border:2.5px solid #fff;${ring}display:flex;align-items:center;justify-content:center;">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 19V5"/><path d="m5 12 7-7 7 7"/><path d="m5 19 7-7 7 7"/>
-      </svg>
+    <div style="width:38px;height:38px;border-radius:10px;background:#fff;border:2px solid #fff;${ring}display:flex;align-items:center;justify-content:center;overflow:hidden;">
+      <img src="${ELEVATOR_ICON_SRC}" alt="" width="34" height="34" decoding="async" draggable="false" style="${imgStyle}" />
     </div>
     <span style="margin-top:3px;padding:1px 5px;border-radius:4px;background:rgba(255,255,255,.92);font-size:10px;font-weight:600;line-height:1.2;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:88px;box-shadow:0 1px 3px rgba(0,0,0,.12);">${safe}</span>
   </div>`;
@@ -960,7 +962,7 @@ export function CampusMap({
         zIndex: onRoute ? 390 : 320,
         icon: {
           content: elevatorMarkerHtml(shortElevatorLabel(ev.name), onRoute),
-          anchor: new PointCtor(44, 15),
+          anchor: new PointCtor(44, 19),
         },
       });
       elevatorMarkersRef.current.push(marker);
@@ -1730,16 +1732,26 @@ export function CampusMap({
               <ul className="space-y-1 text-muted-foreground">
                 <li className="flex items-center gap-1.5">
                   <span
-                    className="inline-block h-3 w-3 shrink-0 rounded-full border-2 border-white bg-teal-600 shadow-sm ring-2 ring-teal-600/30"
+                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-white bg-white shadow-sm ring-2 ring-teal-600/35"
                     aria-hidden
-                  />
+                  >
+                    <img src={ELEVATOR_ICON_SRC} alt="" width={20} height={20} className="h-5 w-5 object-contain" />
+                  </span>
                   <span className="text-foreground/90">{ui.map.elevatorOnRouteLegend}</span>
                 </li>
                 <li className="flex items-center gap-1.5">
                   <span
-                    className="inline-block h-3 w-3 shrink-0 rounded-full border-2 border-white bg-slate-400 shadow-sm"
+                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-white bg-white shadow-sm"
                     aria-hidden
-                  />
+                  >
+                    <img
+                      src={ELEVATOR_ICON_SRC}
+                      alt=""
+                      width={20}
+                      height={20}
+                      className="h-5 w-5 object-contain opacity-75 saturate-50"
+                    />
+                  </span>
                   <span className="text-foreground/90">{ui.map.elevatorPinLegend}</span>
                 </li>
               </ul>
