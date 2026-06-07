@@ -376,7 +376,7 @@ export function CampusMap({
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/naver-geojson")
+    fetch("/data/naver.geojson")
       .then((res) => {
         if (!res.ok) throw new Error(String(res.status));
         return res.json() as Promise<FootprintFeatureCollection>;

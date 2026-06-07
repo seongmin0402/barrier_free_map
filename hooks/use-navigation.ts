@@ -115,7 +115,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
   useEffect(() => {
     if (!open || walkways) return;
     let cancelled = false;
-    fetch("/api/walkways")
+    fetch("/data/walkways.json")
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((data: FeatureCollection<WalkwayFeature>) => {
         if (!cancelled) setWalkways(data);
@@ -123,7 +123,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       .catch(() => {
         if (!cancelled) setWalkways(null);
       });
-    fetch("/api/entrances")
+    fetch("/data/entrances.json")
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((data: FeatureCollection<EntranceFeature>) => {
         if (!cancelled) setEntranceList(parseEntrances(data));
@@ -131,7 +131,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       .catch(() => {
         if (!cancelled) setEntranceList([]);
       });
-    fetch("/api/elevators")
+    fetch("/data/elevators.json")
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((data) => {
         if (!cancelled) setElevators(parseElevators(data));

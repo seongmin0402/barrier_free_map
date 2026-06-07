@@ -17,7 +17,7 @@ export function useCampusBuildings(loadErrorMessage: string) {
         if (!r.ok) throw new Error(String(r.status));
         return r.json() as Promise<BarrierBuilding[]>;
       }),
-      fetch("/api/naver-geojson")
+      fetch("/data/naver.geojson")
         .then((r) => (r.ok ? r.json() : null))
         .catch(() => null) as Promise<FootprintFeatureCollection | null>,
     ])
