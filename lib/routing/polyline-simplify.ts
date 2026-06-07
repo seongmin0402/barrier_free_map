@@ -15,6 +15,58 @@ export interface GuidePolyline {
   elevatorText: Map<number, string>;
 }
 
+/** 보행 거리 — GPS/QGIS 미세 꺾임을 무시하는 허용 오차(m) */
+export const WALK_DISTANCE_TOLERANCE_M = 6;
+
+function boundaryMustKeep(
+  coords: LatLng[],
+  segs: GuideSegment[],
+  extra: Set<number> = new Set(),
+): Set<number> {
+  const mustKeep = new Set<number>([0, coords.length - 1, ...extra]);
+  for (let i = 0; i < segs.length; i++) {
+    const t = segs[i]?.type ?? "path";
+    const tPrev = i > 0 ? (segs[i - 1]?.type ?? "path") : null;
+    if (GUIDANCE_BOUNDARY.has(t) || (tPrev && GUIDANCE_BOUNDARY.has(tPrev) && t !== tPrev)) {
+      mustKeep.add(i);
+      mustKeep.add(i + 1);
+    }
+  }
+  return mustKeep;
+}
+
+/** 실제 걸음 기준 거리 — Douglas–Peucker로 완만한 굴곡을 직선 보행으로 근사 */
+export function walkPolylineLength(
+  coords: LatLng[],
+  segs?: GuideSegment[],
+  toleranceM = WALK_DISTANCE_TOLERANCE_M,
+): number {
+  if (coords.length < 2) return 0;
+  const mustKeep = segs ? boundaryMustKeep(coords, segs) : new Set([0, coords.length - 1]);
+  const kept = douglasPeuckerIndices(coords, toleranceM, mustKeep);
+  let sum = 0;
+  for (let k = 0; k < kept.length - 1; k++) {
+    sum += haversineMeters(coords[kept[k]], coords[kept[k + 1]]);
+  }
+  return sum;
+}
+
+/** coords[fromIdx]→coords[toIdx] 구간 보행 거리(m) */
+export function walkPathLengthBetween(
+  coords: LatLng[],
+  segs: GuideSegment[] | undefined,
+  fromIdx: number,
+  toIdx: number,
+  toleranceM = WALK_DISTANCE_TOLERANCE_M,
+): number {
+  if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return 0;
+  const [lo, hi] = fromIdx < toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
+  const slice = coords.slice(lo, hi + 1);
+  if (slice.length < 2) return 0;
+  const sliceSegs = segs?.slice(lo, hi);
+  return walkPolylineLength(slice, sliceSegs, toleranceM);
+}
+
 /** 점 p와 선분 a-b 사이 수직 거리(m) */
 function perpendicularDistanceM(p: LatLng, a: LatLng, b: LatLng): number {
   return projectOnSegment(p, a, b).distance;
@@ -102,19 +154,7 @@ export function simplifyForGuidance(
     return { coords: [...coords], segs: [...segs], elevatorText: new Map(elevatorTextAtCoord) };
   }
 
-  const mustKeep = new Set<number>([0, coords.length - 1]);
-  for (const idx of elevatorTextAtCoord.keys()) {
-    mustKeep.add(idx);
-  }
-  for (let i = 0; i < segs.length; i++) {
-    const t = segs[i]?.type ?? "path";
-    const tPrev = i > 0 ? (segs[i - 1]?.type ?? "path") : null;
-    if (GUIDANCE_BOUNDARY.has(t) || (tPrev && GUIDANCE_BOUNDARY.has(tPrev) && t !== tPrev)) {
-      mustKeep.add(i);
-      mustKeep.add(i + 1);
-    }
-  }
-
+  const mustKeep = boundaryMustKeep(coords, segs, new Set(elevatorTextAtCoord.keys()));
   const kept = douglasPeuckerIndices(coords, toleranceM, mustKeep);
   const guideCoords = kept.map((i) => coords[i]);
 

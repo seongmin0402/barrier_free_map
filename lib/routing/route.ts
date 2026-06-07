@@ -4,12 +4,11 @@ import {
   formatDistance,
   haversineMeters,
   indexOfCoord,
-  pathLengthAlong,
   projectOnSegment,
   type LatLng,
 } from "./geo";
 import { nearestNode } from "./graph";
-import { simplifyForGuidance } from "./polyline-simplify";
+import { simplifyForGuidance, walkPathLengthBetween, walkPolylineLength } from "./polyline-simplify";
 import type { AppLocale } from "@/lib/app-settings";
 import { formatFloorLabel, type ElevatorRecord } from "./elevators";
 import {
@@ -711,7 +710,7 @@ function recalibrateStepDistances(
     if (targetIdx < 0) continue;
 
     if (step.maneuver === "crosswalk") {
-      step.distance = pathLengthAlong(fullCoords, cursorIdx, targetIdx);
+      step.distance = walkPathLengthBetween(fullCoords, segs, cursorIdx, targetIdx);
       cursorIdx = endOfFeatureAt(fullCoords, segs, targetIdx, "crosswalk");
       continue;
     }
@@ -719,12 +718,12 @@ function recalibrateStepDistances(
     if (isGuidanceManeuver(step.maneuver) && step.maneuver !== "crosswalk") {
       const featureType = step.edgeType ?? step.maneuver;
       const entryIdx = startOfFeatureAt(fullCoords, segs, targetIdx, featureType);
-      step.distance = pathLengthAlong(fullCoords, entryIdx, targetIdx);
+      step.distance = walkPathLengthBetween(fullCoords, segs, entryIdx, targetIdx);
       cursorIdx = targetIdx;
       continue;
     }
 
-    step.distance = pathLengthAlong(fullCoords, cursorIdx, targetIdx);
+    step.distance = walkPathLengthBetween(fullCoords, segs, cursorIdx, targetIdx);
     cursorIdx = targetIdx;
   }
 
@@ -970,10 +969,7 @@ function nodePathToRoute(
     coords.push(to);
   }
 
-  let distance = 0;
-  for (let i = 0; i < coords.length - 1; i++) {
-    distance += haversineMeters(coords[i], coords[i + 1]);
-  }
+  const distance = walkPolylineLength(coords, fullSegs);
 
   const elevatorTextAtCoord = buildElevatorStepsAtCoord(graph, nodePath, coordOffset, locale);
   const guide = simplifyForGuidance(coords, fullSegs, elevatorTextAtCoord, 14);

@@ -345,7 +345,7 @@ const ko: UiText = {
     total: "총",
     fitRoute: "경로 맞춤",
     resumeFollow: "추적 재개",
-    followPausedHint: "지도를 직접 이동 중 — 추적 재개를 누르면 다시 따라갑니다",
+    followPausedHint: "지도를 직접 이동 중 — 내 위치 버튼을 누르면 다시 따라갑니다",
     errors: {
       loadingWalkways: "보행로 데이터를 불러오는 중입니다…",
       noRoute: "두 지점을 잇는 보행로 경로를 찾지 못했습니다. 다른 지점을 선택해 보세요.",
@@ -560,7 +560,7 @@ const en: UiText = {
     total: "Total",
     fitRoute: "Fit route",
     resumeFollow: "Resume tracking",
-    followPausedHint: "Map moved manually — tap Resume tracking to follow again",
+    followPausedHint: "Map moved manually — tap My location to follow again",
     errors: {
       loadingWalkways: "Loading walkway data…",
       noRoute: "No walkway route found between these points. Try different locations.",

@@ -1,5 +1,6 @@
 import { haversineMeters, indexOfCoord, projectOnSegment, type LatLng } from "./geo";
-import type { ComputedRoute, RouteStep } from "./types";
+import { walkPathLengthBetween } from "./polyline-simplify";
+import type { ComputedRoute, RouteStep, WalkwayType } from "./types";
 
 export interface RouteProgress {
   /** 현재 진행 중인 단계 인덱스 */
@@ -14,11 +15,12 @@ export interface RouteProgress {
   snapped: LatLng;
 }
 
-/** 좌표열의 누적 거리 배열 */
-function cumulativeDistances(coords: LatLng[]): number[] {
+/** 좌표열의 누적 보행 거리 배열 */
+function cumulativeWalkDistances(coords: LatLng[], segs: WalkwayType[]): number[] {
+  const segList = segs.map((type) => ({ type }));
   const cum = [0];
   for (let i = 0; i < coords.length - 1; i++) {
-    cum.push(cum[i] + haversineMeters(coords[i], coords[i + 1]));
+    cum.push(cum[i] + walkPathLengthBetween(coords, segList, i, i + 1));
   }
   return cum;
 }
@@ -28,11 +30,12 @@ export function computeProgress(
   route: ComputedRoute,
   user: LatLng,
 ): RouteProgress | null {
-  const { coords, steps } = route;
+  const { coords, steps, segmentTypes } = route;
   if (coords.length < 2) return null;
 
-  const cum = cumulativeDistances(coords);
+  const cum = cumulativeWalkDistances(coords, segmentTypes);
   const total = cum[cum.length - 1];
+  const segList = segmentTypes.map((type) => ({ type }));
 
   // 가장 가까운 세그먼트 찾기
   let bestDist = Infinity;
@@ -42,8 +45,8 @@ export function computeProgress(
     const { point, distance, t } = projectOnSegment(user, coords[i], coords[i + 1]);
     if (distance < bestDist) {
       bestDist = distance;
-      const segLen = haversineMeters(coords[i], coords[i + 1]);
-      bestAlong = cum[i] + segLen * t;
+      const segWalkLen = walkPathLengthBetween(coords, segList, i, i + 1);
+      bestAlong = cum[i] + segWalkLen * t;
       bestSnap = point;
     }
   }

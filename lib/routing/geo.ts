@@ -50,7 +50,8 @@ export function angleDelta(fromBearing: number, toBearing: number): number {
 export function formatDistance(meters: number, locale: "ko" | "en" = "ko"): string {
   if (meters < 1) return locale === "en" ? "0 m" : "0m";
   if (meters < 1000) {
-    const n = Math.round(meters);
+    // 현장 보행보다 polyline 합이 길게 나오는 경향 — 300m 미만은 내림 표시
+    const n = meters < 300 ? Math.floor(meters) : Math.round(meters);
     return locale === "en" ? `${n} m` : `${n}m`;
   }
   const km = meters / 1000;

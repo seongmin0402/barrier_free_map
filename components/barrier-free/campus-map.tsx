@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback, useMemo, useState, type RefObject } from "react";
 import Script from "next/script";
-import { Plus, Minus, Locate, Maximize2, SlidersHorizontal, Route, Crosshair, Navigation } from "lucide-react";
+import { Plus, Minus, Locate, Maximize2, SlidersHorizontal, Route, Navigation } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { BarrierBuilding } from "@/lib/building-types";
 import type { LatLng } from "@/lib/routing/geo";
+import { haversineMeters } from "@/lib/routing/geo";
 import {
   applyNavigationCamera,
   fuseNavigationHeading,
@@ -52,6 +53,8 @@ interface CampusMapProps {
   destPoint?: LatLng | null;
   /** 실시간 GPS 위치 (네비게이션 중) */
   liveUserPosition?: LatLng | null;
+  /** GPS ref — rAF 루프에서 React 리렌더 없이 위치 읽기 */
+  liveUserPositionRef?: RefObject<LatLng | null>;
   /** 지도에서 출발/도착 지점 선택 모드 */
   pickMode?: "origin" | "destination" | null;
   onMapPick?: (point: LatLng) => void;
@@ -263,6 +266,7 @@ export function CampusMap({
   originPoint = null,
   destPoint = null,
   liveUserPosition = null,
+  liveUserPositionRef,
   pickMode = null,
   onMapPick,
   followUser = false,
@@ -315,6 +319,10 @@ export function CampusMap({
   const lastSheetVhForViewportRef = useRef(mobileSheetVh);
   const mobileSheetVhRef = useRef(mobileSheetVh);
   const programmaticCameraRef = useRef(false);
+  const liveUserPosRefProp = useRef(liveUserPositionRef);
+  liveUserPosRefProp.current = liveUserPositionRef;
+  const lastCameraFrameRef = useRef(0);
+  const lastAppliedCamRef = useRef<{ lat: number; lng: number; heading: number } | null>(null);
   mobileSheetVhRef.current = mobileSheetVh;
   const userHeadingRef = useRef(userHeading);
   const routeHeadingRef = useRef(routeHeading);
@@ -627,15 +635,10 @@ export function CampusMap({
     const map = mapInstanceRef.current;
     if (!map) return;
 
-    const maps = window.naver?.maps as NMaps | undefined;
-    const PolygonCtor = maps?.Polygon as
-      | (new (opts: Record<string, unknown>) => {
-          setMap: (target: unknown) => void;
-          setOptions?: (opts: Record<string, unknown>) => void;
-        })
-      | undefined;
-    const LatLngCtor = maps?.LatLng as new (lat: number, lng: number) => unknown | undefined;
-    if (!PolygonCtor || !LatLngCtor || !maps?.Event?.addListener) return;
+    const hideFootprintsOnMobileNav =
+      navigationMode &&
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 639px)").matches;
 
     footprintPolygonsRef.current.forEach(({ poly }) => {
       try {
@@ -645,6 +648,29 @@ export function CampusMap({
       }
     });
     footprintPolygonsRef.current = [];
+
+    if (hideFootprintsOnMobileNav) {
+      return () => {
+        footprintPolygonsRef.current.forEach(({ poly }) => {
+          try {
+            poly.setMap(null);
+          } catch {
+            /* ignore */
+          }
+        });
+        footprintPolygonsRef.current = [];
+      };
+    }
+
+    const maps = window.naver?.maps as NMaps | undefined;
+    const PolygonCtor = maps?.Polygon as
+      | (new (opts: Record<string, unknown>) => {
+          setMap: (target: unknown) => void;
+          setOptions?: (opts: Record<string, unknown>) => void;
+        })
+      | undefined;
+    const LatLngCtor = maps?.LatLng as new (lat: number, lng: number) => unknown | undefined;
+    if (!PolygonCtor || !LatLngCtor || !maps?.Event?.addListener) return;
 
     const buildingMap = new Map(buildings.map((b) => [b.id, b]));
 
@@ -689,7 +715,7 @@ export function CampusMap({
       });
       footprintPolygonsRef.current = [];
     };
-  }, [sdkLoaded, footprintCollection, mapReadyEpoch, buildings, showAllFootprints, ui]);
+  }, [sdkLoaded, footprintCollection, mapReadyEpoch, buildings, showAllFootprints, navigationMode, ui]);
 
   /** 선택 변경 시 폴리곤 테두리만 갱신 */
   useEffect(() => {
@@ -861,6 +887,11 @@ export function CampusMap({
 
   /** GPS 목표 위치·방향 갱신 */
   useEffect(() => {
+    const fromRef = liveUserPosRefProp.current?.current;
+    if (fromRef) {
+      targetPosRef.current = fromRef;
+      return;
+    }
     if (liveUserPosition) {
       targetPosRef.current = liveUserPosition;
     }
@@ -892,6 +923,7 @@ export function CampusMap({
       displayPosRef.current = null;
       targetPosRef.current = null;
       lastMarkerHeadingRef.current = null;
+      lastAppliedCamRef.current = null;
       const seedHeading = routeHeading ?? userHeading ?? 0;
       displayHeadingRef.current = seedHeading;
       targetHeadingRef.current = seedHeading;
@@ -986,20 +1018,26 @@ export function CampusMap({
     resolveFusedHeading,
   ]);
 
-  /** 안내 중 지도 드래그 → 추적 일시 중지 */
+  /** 안내 중 지도 드래그·핀치 줌 → 추적 일시 중지 */
   useEffect(() => {
     if (!sdkLoaded || !navigationMode) return;
     const map = mapInstanceRef.current;
     const maps = window.naver?.maps as NMaps | undefined;
     if (!map || !maps?.Event?.addListener) return;
 
-    const dragListener = maps.Event.addListener(map, "dragstart", () => {
+    const pauseFollow = () => {
+      if (programmaticCameraRef.current) return;
       setFollowPaused(true);
-    });
+    };
+
+    const dragListener = maps.Event.addListener(map, "dragstart", pauseFollow);
+    const zoomListener = maps.Event.addListener(map, "zoom_changed", pauseFollow);
 
     return () => {
       try {
-        (maps.Event as { removeListener?: (l: unknown) => void }).removeListener?.(dragListener);
+        const remove = (maps.Event as { removeListener?: (l: unknown) => void }).removeListener;
+        remove?.(dragListener);
+        remove?.(zoomListener);
       } catch {
         /* ignore */
       }
@@ -1057,8 +1095,25 @@ export function CampusMap({
     }
 
     let lastFrameTime = performance.now();
+    const isMobileNav =
+      typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches;
+    const minFrameMs = isMobileNav ? 33 : 0;
+    const markerHeadingThreshold = isMobileNav ? 6 : 2;
+    const camMoveSkipM = isMobileNav ? 0.4 : 0.25;
+    const camHeadingSkipDeg = isMobileNav ? 5 : 2;
 
     const tick = (now: number) => {
+      if (minFrameMs > 0 && now - lastCameraFrameRef.current < minFrameMs) {
+        navAnimFrameRef.current = requestAnimationFrame(tick);
+        return;
+      }
+      lastCameraFrameRef.current = now;
+
+      const freshPos = liveUserPosRefProp.current?.current;
+      if (freshPos) {
+        targetPosRef.current = freshPos;
+      }
+
       const dt = Math.min(48, now - lastFrameTime) / 16.67;
       lastFrameTime = now;
 
@@ -1102,7 +1157,10 @@ export function CampusMap({
 
       if (PointCtor != null && navUserMarkerRef.current?.setIcon) {
         const prevH = lastMarkerHeadingRef.current;
-        if (prevH == null || Math.abs(((headingForCam - prevH + 540) % 360) - 180) > 2) {
+        if (
+          prevH == null ||
+          Math.abs(((headingForCam - prevH + 540) % 360) - 180) > markerHeadingThreshold
+        ) {
           lastMarkerHeadingRef.current = headingForCam;
           navUserMarkerRef.current.setIcon({
             content: navArrowHtml(headingForCam),
@@ -1119,6 +1177,19 @@ export function CampusMap({
           : 0;
 
       const needsViewportAdjust = !viewportAdjustedRef.current;
+      const lastCam = lastAppliedCamRef.current;
+      const skipCamera =
+        !shouldSnap &&
+        !needsViewportAdjust &&
+        lastCam != null &&
+        haversineMeters(lastCam, display) < camMoveSkipM &&
+        Math.abs(((headingForCam - lastCam.heading + 540) % 360) - 180) < camHeadingSkipDeg;
+
+      if (skipCamera) {
+        navAnimFrameRef.current = requestAnimationFrame(tick);
+        return;
+      }
+
       const m = map as Parameters<typeof applyNavigationCamera>[0] & { relayout?: () => void };
 
       try {
@@ -1155,6 +1226,11 @@ export function CampusMap({
           }
         }
         navZoomSetRef.current = true;
+        lastAppliedCamRef.current = {
+          lat: display.lat,
+          lng: display.lng,
+          heading: headingForCam,
+        };
       } catch {
         /* ignore */
       } finally {
@@ -1170,6 +1246,39 @@ export function CampusMap({
       navAnimFrameRef.current = null;
     };
   }, [sdkLoaded, followUser, navigationMode, followPaused, mapReadyEpoch, mapLayout]);
+
+  /** 추적 일시 중지 중에도 GPS 마커만 부드럽게 갱신 */
+  useEffect(() => {
+    if (!sdkLoaded || !followUser || !navigationMode || !followPaused) return;
+
+    let frame: number | null = null;
+    let lastTick = 0;
+    const isMobile =
+      typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches;
+    const minMs = isMobile ? 50 : 32;
+
+    const tick = (now: number) => {
+      if (now - lastTick >= minMs) {
+        lastTick = now;
+        const freshPos = liveUserPosRefProp.current?.current;
+        if (freshPos) targetPosRef.current = freshPos;
+
+        const map = mapInstanceRef.current;
+        const maps = window.naver?.maps as NMaps | undefined;
+        const pos = targetPosRef.current;
+        if (map && maps?.LatLng && pos && navUserMarkerRef.current?.setPosition) {
+          const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
+          navUserMarkerRef.current.setPosition(new LatLngCtor(pos.lat, pos.lng));
+        }
+      }
+      frame = requestAnimationFrame(tick);
+    };
+
+    frame = requestAnimationFrame(tick);
+    return () => {
+      if (frame != null) cancelAnimationFrame(frame);
+    };
+  }, [sdkLoaded, followUser, navigationMode, followPaused, mapReadyEpoch]);
 
   /** 추적 중이 아닐 때 GPS 위치만 표시 */
   useEffect(() => {
@@ -1236,12 +1345,23 @@ export function CampusMap({
   }, [routeLine]);
 
   const resumeNavigationFollow = useCallback(() => {
-    displayPosRef.current = targetPosRef.current ? { ...targetPosRef.current } : null;
+    const latest = liveUserPosRefProp.current?.current ?? targetPosRef.current;
+    if (latest) {
+      targetPosRef.current = latest;
+      displayPosRef.current = { ...latest };
+    }
+    lastAppliedCamRef.current = null;
     navZoomSetRef.current = false;
     navSnapPendingRef.current = true;
     hasNavCenteredRef.current = false;
+    viewportAdjustedRef.current = false;
     setFollowPaused(false);
   }, []);
+
+  const handleNavigationLocatePress = useCallback(() => {
+    if (!navigationMode) return;
+    resumeNavigationFollow();
+  }, [navigationMode, resumeNavigationFollow]);
 
   const showCampusOverview = useCallback(() => {
     const maps = window.naver?.maps as NMaps | undefined;
@@ -1586,33 +1706,31 @@ export function CampusMap({
             </div>
           )}
           <div className="flex flex-col gap-2">
+            {navigationMode && (
+              <Button
+                type="button"
+                variant={followPaused ? "default" : "secondary"}
+                size="icon"
+                onClick={handleNavigationLocatePress}
+                className={cn("shadow-md", followPaused && "ring-2 ring-primary/40")}
+                aria-label={followPaused ? ui.route.resumeFollow : ui.map.myLocationTitle}
+                title={followPaused ? ui.route.resumeFollow : ui.map.myLocationTitle}
+              >
+                <Locate className="h-5 w-5" />
+              </Button>
+            )}
             {routeLine && routeLine.length >= 2 && (
-              <>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="icon"
-                  onClick={fitRouteOnMap}
-                  className="shadow-md"
-                  aria-label={ui.route.fitRoute}
-                  title={ui.route.fitRoute}
-                >
-                  <Route className="h-5 w-5" />
-                </Button>
-                {navigationMode && followPaused && (
-                  <Button
-                    type="button"
-                    variant="default"
-                    size="icon"
-                    onClick={resumeNavigationFollow}
-                    className="shadow-md"
-                    aria-label={ui.route.resumeFollow}
-                    title={ui.route.resumeFollow}
-                  >
-                    <Crosshair className="h-5 w-5" />
-                  </Button>
-                )}
-              </>
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon"
+                onClick={fitRouteOnMap}
+                className="shadow-md"
+                aria-label={ui.route.fitRoute}
+                title={ui.route.fitRoute}
+              >
+                <Route className="h-5 w-5" />
+              </Button>
             )}
             <Button
               type="button"

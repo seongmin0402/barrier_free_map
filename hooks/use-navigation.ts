@@ -79,6 +79,8 @@ export function useNavigation(buildings: BarrierBuilding[]) {
   const graphRef = useRef<RoutingGraph | null>(null);
   const destinationRef = useRef<RoutePoint | null>(null);
   const userPosRef = useRef<LatLng | null>(null);
+  const lastUiPosUpdateRef = useRef(0);
+  const lastUiHeadingUpdateRef = useRef(0);
   const prevGpsRef = useRef<LatLng | null>(null);
   const lastGpsHeadingRef = useRef<number | null>(null);
   const routeHeadingNavRef = useRef<number | null>(null);
@@ -347,6 +349,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       (pos) => {
         const raw = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         const here = gpsSmootherRef.current.filter(raw, pos.coords.accuracy);
+        const isFirstFix = !firstGpsFixRef.current;
         if (!firstGpsFixRef.current) firstGpsFixRef.current = here;
 
         const prev = prevGpsRef.current;
@@ -373,12 +376,22 @@ export function useNavigation(buildings: BarrierBuilding[]) {
           pos.coords.heading,
           routeHeadingNavRef.current,
         );
+        userPosRef.current = here;
+        prevGpsRef.current = here;
+
+        const now = Date.now();
+        if (isFirstFix || now - lastUiPosUpdateRef.current >= 380) {
+          lastUiPosUpdateRef.current = now;
+          setUserPos(here);
+        }
+
         if (heading != null) {
           lastGpsHeadingRef.current = heading;
-          setUserHeading(heading);
+          if (now - lastUiHeadingUpdateRef.current >= 280) {
+            lastUiHeadingUpdateRef.current = now;
+            setUserHeading(heading);
+          }
         }
-        prevGpsRef.current = here;
-        setUserPos(here);
       },
       (err) => {
         const te = getUi(localeRef.current).route.errors;
@@ -529,6 +542,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     voiceEnabled,
     setVoiceEnabled,
     userPos,
+    userPosRef,
     userHeading,
     routeHeading,
     deviceHeadingRef,

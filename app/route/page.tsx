@@ -90,6 +90,7 @@ export default function RoutePage() {
           originPoint={nav.origin?.point ?? null}
           destPoint={nav.destination?.point ?? null}
           liveUserPosition={nav.navigating ? nav.userPos : null}
+          liveUserPositionRef={nav.userPosRef}
           pickMode={nav.pickMode}
           onMapPick={nav.handleMapPick}
           followUser={nav.navigating}
