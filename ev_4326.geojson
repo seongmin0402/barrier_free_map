@@ -1,0 +1,11 @@
+{
+"type": "FeatureCollection",
+"name": "ev_4326",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"features": [
+{ "type": "Feature", "properties": { "fid": 1, "id": "ev_001", "elevator_name": "중앙도서관 승강기", "building_id ": "b-1", "floor_served ": "1F, 3F" }, "geometry": { "type": "Point", "coordinates": [ 127.14050389687668, 36.469569933099947 ] } },
+{ "type": "Feature", "properties": { "fid": 2, "id": "ev_002", "elevator_name": "웅비학생회관 승강기", "building_id ": "b-19", "floor_served ": "1F, 3F" }, "geometry": { "type": "Point", "coordinates": [ 127.139522984290068, 36.469880616879742 ] } },
+{ "type": "Feature", "properties": { "fid": 3, "id": "ev_003", "elevator_name": "미래융합역사문화관 승강기", "building_id ": "b-18", "floor_served ": "B1, 2F" }, "geometry": { "type": "Point", "coordinates": [ 127.140767563229858, 36.470408871496382 ] } },
+{ "type": "Feature", "properties": { "fid": 4, "id": "ev_004", "elevator_name": "산학연구관 승강기", "building_id ": "b-29", "floor_served ": "B1, 1F" }, "geometry": { "type": "Point", "coordinates": [ 127.141149234104702, 36.471125195819475 ] } }
+]
+}

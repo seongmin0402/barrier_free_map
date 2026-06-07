@@ -8,10 +8,11 @@ import { getUi } from "@/lib/i18n/ui";
 import type { LatLng } from "@/lib/routing/geo";
 import { formatDistance, haversineMeters, bearingDeg } from "@/lib/routing/geo";
 import {
-  buildWalkwayGraph,
+  buildRoutingGraph,
   mainEntranceForBuilding,
   parseEntrances,
 } from "@/lib/routing/graph";
+import { parseElevators, type ElevatorRecord } from "@/lib/routing/elevators";
 import { computeRoute } from "@/lib/routing/route";
 import { computeProgress } from "@/lib/routing/progress";
 import {
@@ -27,6 +28,7 @@ import type {
   EntranceFeature,
   FeatureCollection,
   RoutePoint,
+  RoutingGraph,
   WalkwayFeature,
 } from "@/lib/routing/types";
 
@@ -39,6 +41,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
 
   const [open, setOpen] = useState(false);
   const [walkways, setWalkways] = useState<FeatureCollection<WalkwayFeature> | null>(null);
+  const [elevators, setElevators] = useState<ElevatorRecord[]>([]);
   const [entranceList, setEntranceList] = useState<BuildingEntrance[]>([]);
 
   const [origin, setOrigin] = useState<RoutePoint | null>(null);
@@ -66,7 +69,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
   /** 출발 안내 직후 GPS 단계 안내 음성과 겹치지 않도록 */
   const navSpeechBlockedUntilRef = useRef(0);
   const lastRerouteAtRef = useRef(0);
-  const graphRef = useRef<ReturnType<typeof buildWalkwayGraph> | null>(null);
+  const graphRef = useRef<RoutingGraph | null>(null);
   const destinationRef = useRef<RoutePoint | null>(null);
   const userPosRef = useRef<LatLng | null>(null);
   const prevGpsRef = useRef<LatLng | null>(null);
@@ -128,12 +131,20 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       .catch(() => {
         if (!cancelled) setEntranceList([]);
       });
+    fetch("/api/elevators")
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((data) => {
+        if (!cancelled) setElevators(parseElevators(data));
+      })
+      .catch(() => {
+        if (!cancelled) setElevators([]);
+      });
     return () => {
       cancelled = true;
     };
   }, [open, walkways]);
 
-  const graph = useMemo(() => buildWalkwayGraph(walkways), [walkways]);
+  const graph = useMemo(() => buildRoutingGraph(walkways, elevators), [walkways, elevators]);
   graphRef.current = graph;
   destinationRef.current = destination;
 

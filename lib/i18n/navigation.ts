@@ -2,19 +2,23 @@ import type { AppLocale } from "@/lib/app-settings";
 import type { ManeuverKind, WalkwayType } from "@/lib/routing/types";
 
 export function hazardText(type: WalkwayType, locale: AppLocale): string | null {
-  const ko: Record<WalkwayType, string | null> = {
+  const ko: Partial<Record<string, string | null>> = {
     path: null,
+    indoor: null,
     stairs: "계단이 있습니다",
     crosswalk: "횡단보도를 건너세요",
     ramp: "경사로가 있습니다",
+    elevator: "승강기를 이용하세요",
   };
-  const en: Record<WalkwayType, string | null> = {
+  const en: Partial<Record<string, string | null>> = {
     path: null,
+    indoor: null,
     stairs: "stairs ahead",
     crosswalk: "cross the crosswalk",
     ramp: "ramp ahead",
+    elevator: "use the elevator",
   };
-  return (locale === "en" ? en : ko)[type];
+  return (locale === "en" ? en : ko)[type] ?? null;
 }
 
 export function maneuverLabel(maneuver: ManeuverKind, locale: AppLocale): string {

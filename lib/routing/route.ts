@@ -21,34 +21,66 @@ import type {
   GraphEdge,
   ManeuverKind,
   RouteStep,
-  WalkwayGraph,
+  RoutingGraph,
   WalkwayType,
 } from "./types";
 
-/** type별 비용 가중치 (경사도 반영 전 임시값) */
-export function edgeWeight(type: WalkwayType): number {
+type RouteWeightMode = "shortest" | "elevator";
+
+/** type별 비용 가중치 */
+export function edgeWeight(type: WalkwayType, mode: RouteWeightMode = "shortest"): number {
   switch (type) {
     case "stairs":
-      return 1.6;
+      return mode === "elevator" ? 4.2 : 1.6;
+    case "elevator":
+      return 0.35;
     case "ramp":
       return 1.05;
     case "crosswalk":
       return 1.1;
+    case "indoor":
+      return mode === "elevator" ? 0.92 : 1;
     default:
       return 1;
   }
 }
 
+/** 엘리베이터 우선 시 허용 우회 (비율 + 절대 m) */
+const ELEVATOR_DETOUR_RATIO = 1.32;
+const ELEVATOR_DETOUR_EXTRA_M = 55;
+
 interface SegmentInfo {
   type: WalkwayType;
 }
 
-/** 최소 힙 없이 간단 우선순위(노드 수가 작아 충분) */
+interface DijkstraOptions {
+  mode?: RouteWeightMode;
+  elevatorNodeIds?: Set<string>;
+}
+
+function edgeCost(
+  edge: GraphEdge,
+  mode: RouteWeightMode,
+  fromId: string,
+  toId: string,
+  elevatorNodeIds: Set<string>,
+): number {
+  let cost = edge.distance * edgeWeight(edge.type, mode);
+  if (mode === "elevator" && (elevatorNodeIds.has(fromId) || elevatorNodeIds.has(toId))) {
+    cost *= 0.82;
+  }
+  return cost;
+}
+
 function dijkstra(
-  graph: WalkwayGraph,
+  graph: RoutingGraph,
   startId: string,
   endId: string,
+  options: DijkstraOptions = {},
 ): string[] | null {
+  const mode = options.mode ?? "shortest";
+  const elevatorNodeIds = options.elevatorNodeIds ?? graph.elevatorNodeIds;
+
   const dist = new Map<string, number>();
   const prev = new Map<string, string>();
   const visited = new Set<string>();
@@ -70,7 +102,7 @@ function dijkstra(
     const baseDist = dist.get(id) ?? Infinity;
     for (const edge of edges) {
       if (visited.has(edge.to)) continue;
-      const cost = edge.distance * edgeWeight(edge.type);
+      const cost = edgeCost(edge, mode, id, edge.to, elevatorNodeIds);
       const nd = baseDist + cost;
       if (nd < (dist.get(edge.to) ?? Infinity)) {
         dist.set(edge.to, nd);
@@ -93,10 +125,52 @@ function dijkstra(
   return path;
 }
 
-function edgeTypeBetween(graph: WalkwayGraph, from: string, to: string): WalkwayType {
+function pathUsesElevator(nodePath: string[], elevatorNodeIds: Set<string>): boolean {
+  return nodePath.some((id) => elevatorNodeIds.has(id));
+}
+
+function pathPhysicalDistance(graph: RoutingGraph, nodePath: string[]): number {
+  let total = 0;
+  for (let i = 0; i < nodePath.length - 1; i++) {
+    const a = graph.nodes.get(nodePath[i]);
+    const b = graph.nodes.get(nodePath[i + 1]);
+    if (!a || !b) continue;
+    total += haversineMeters(a, b);
+  }
+  return total;
+}
+
+function pathHasStairs(graph: RoutingGraph, nodePath: string[]): boolean {
+  for (let i = 0; i < nodePath.length - 1; i++) {
+    if (edgeTypeBetween(graph, nodePath[i], nodePath[i + 1]) === "stairs") return true;
+  }
+  return false;
+}
+
+function edgeTypeBetween(graph: RoutingGraph, from: string, to: string): WalkwayType {
   const edges = graph.adjacency.get(from) ?? [];
   const e = edges.find((x: GraphEdge) => x.to === to);
-  return e?.type ?? "path";
+  const raw = e?.type ?? "path";
+  if (raw === "elevator") return "elevator";
+  if (graph.elevatorNodeIds.has(from) && graph.elevatorNodeIds.has(to)) return "elevator";
+  return raw;
+}
+
+function displaySegmentType(
+  graph: RoutingGraph,
+  from: string,
+  to: string,
+  usesElevatorRoute: boolean,
+): WalkwayType {
+  const base = edgeTypeBetween(graph, from, to);
+  if (
+    usesElevatorRoute &&
+    (graph.elevatorNodeIds.has(from) || graph.elevatorNodeIds.has(to)) &&
+    base === "path"
+  ) {
+    return "elevator";
+  }
+  return base;
 }
 
 function hazardFor(type: WalkwayType, locale: AppLocale): string | null {
@@ -111,15 +185,10 @@ function maneuverFromDelta(delta: number): ManeuverKind {
   return delta > 0 ? "right" : "left";
 }
 
-/**
- * 좌표열 + 구간 type으로 턴바이턴 안내 생성.
- * coords[i]→coords[i+1] 의 type은 segs[i].
- */
 function buildSteps(coords: LatLng[], segs: SegmentInfo[], locale: AppLocale): RouteStep[] {
   const steps: RouteStep[] = [];
   if (coords.length < 2) return steps;
 
-  // 누적 직진 거리 단위로 단계 묶기
   let pendingDist = 0;
   let pendingType: WalkwayType = segs[0]?.type ?? "path";
   let pendingHazard: string | null = hazardFor(pendingType, locale);
@@ -139,10 +208,8 @@ function buildSteps(coords: LatLng[], segs: SegmentInfo[], locale: AppLocale): R
     pendingDist += segLen;
     if (hazardFor(segType, locale)) pendingHazard = hazardFor(segType, locale);
 
-    // 다음 꼭짓점에서의 회전 판단
     const isLastVertex = i + 1 >= coords.length - 1;
     if (isLastVertex) {
-      // 마지막 구간 → 직전 단계에 거리 반영 후 도착 단계
       const last = steps[steps.length - 1];
       last.distance += pendingDist;
       if (pendingHazard && !last.hazard) last.hazard = pendingHazard;
@@ -154,8 +221,6 @@ function buildSteps(coords: LatLng[], segs: SegmentInfo[], locale: AppLocale): R
         edgeType: segType,
         hazard: null,
       });
-      pendingDist = 0;
-      pendingHazard = null;
       break;
     }
 
@@ -164,22 +229,17 @@ function buildSteps(coords: LatLng[], segs: SegmentInfo[], locale: AppLocale): R
     const delta = angleDelta(inBearing, outBearing);
     const maneuver = maneuverFromDelta(delta);
 
-    if (maneuver === "straight") {
-      // 직진은 계속 누적 (다만 hazard 변화는 유지)
-      continue;
-    }
+    if (maneuver === "straight") continue;
 
-    // 회전 발생 → 직전까지의 거리를 이전 단계에 반영하고, 회전 단계 추가
     const last = steps[steps.length - 1];
     last.distance += pendingDist;
     if (pendingHazard && !last.hazard) last.hazard = pendingHazard;
 
-    const turnPoint = coords[i + 1];
     const label = maneuverLabel(maneuver, locale);
     steps.push({
       text: turnThenContinueText(label, locale),
       distance: 0,
-      at: turnPoint,
+      at: coords[i + 1],
       maneuver,
       edgeType: segType,
       hazard: null,
@@ -189,7 +249,6 @@ function buildSteps(coords: LatLng[], segs: SegmentInfo[], locale: AppLocale): R
     pendingHazard = null;
   }
 
-  // 안내 문구에 거리 부여
   for (const step of steps) {
     const dist = formatDistance(step.distance, locale);
     if (step.maneuver === "depart") {
@@ -201,42 +260,32 @@ function buildSteps(coords: LatLng[], segs: SegmentInfo[], locale: AppLocale): R
       step.text = aheadTurnText(dist, label, locale);
     }
     if (step.hazard) {
-      step.text += locale === "en" ? ` (${step.hazard})` : ` (${step.hazard})`;
+      step.text += ` (${step.hazard})`;
     }
   }
 
   return steps;
 }
 
-/**
- * 출발/도착 좌표로 보행로 그래프 기반 경로 계산.
- * 그래프 노드에 스냅한 뒤 출발/도착 실제 좌표를 양 끝에 이어 붙인다.
- */
-export function computeRoute(
-  graph: WalkwayGraph,
+function nodePathToRoute(
+  graph: RoutingGraph,
+  nodePath: string[],
   from: LatLng,
   to: LatLng,
-  locale: AppLocale = "ko",
-): ComputedRoute | null {
-  if (!graph.nodes.size) return null;
-  const startSnap = nearestNode(graph, from);
-  const endSnap = nearestNode(graph, to);
-  if (!startSnap || !endSnap) return null;
-
-  const nodePath = dijkstra(graph, startSnap.id, endSnap.id);
-  if (!nodePath || nodePath.length === 0) return null;
-
-  // 노드 경로 → 좌표열 + 구간 type
+  locale: AppLocale,
+  usesElevatorRoute: boolean,
+): ComputedRoute {
   const nodeCoords: LatLng[] = nodePath.map((id) => {
     const n = graph.nodes.get(id)!;
     return { lat: n.lat, lng: n.lng };
   });
   const segs: SegmentInfo[] = [];
   for (let i = 0; i < nodePath.length - 1; i++) {
-    segs.push({ type: edgeTypeBetween(graph, nodePath[i], nodePath[i + 1]) });
+    segs.push({
+      type: displaySegmentType(graph, nodePath[i], nodePath[i + 1], usesElevatorRoute),
+    });
   }
 
-  // 출발 실제좌표 → 첫 노드, 마지막 노드 → 도착 실제좌표 연결
   const coords: LatLng[] = [];
   const fullSegs: SegmentInfo[] = [];
 
@@ -254,7 +303,6 @@ export function computeRoute(
     coords.push(to);
   }
 
-  // 총 거리
   let distance = 0;
   for (let i = 0; i < coords.length - 1; i++) {
     distance += haversineMeters(coords[i], coords[i + 1]);
@@ -262,8 +310,65 @@ export function computeRoute(
 
   const steps = buildSteps(coords, fullSegs, locale);
   const segmentTypes = fullSegs.map((s) => s.type);
-  const hasStairs = segs.some((s) => s.type === "stairs");
-  const hasCrosswalk = segs.some((s) => s.type === "crosswalk");
+  const hasStairs = segmentTypes.some((s) => s === "stairs");
+  const hasCrosswalk = segmentTypes.some((s) => s === "crosswalk");
+  const hasElevator = usesElevatorRoute || segmentTypes.some((s) => s === "elevator");
 
-  return { coords, distance, steps, hasStairs, hasCrosswalk, segmentTypes };
+  return { coords, distance, steps, hasStairs, hasCrosswalk, hasElevator, segmentTypes };
+}
+
+function pickNodePath(
+  graph: RoutingGraph,
+  startId: string,
+  endId: string,
+): { nodePath: string[]; usesElevator: boolean } | null {
+  const shortest = dijkstra(graph, startId, endId, { mode: "shortest" });
+  if (!shortest) return null;
+
+  if (!graph.elevatorNodeIds.size) {
+    return { nodePath: shortest, usesElevator: false };
+  }
+
+  const elevatorBiased = dijkstra(graph, startId, endId, { mode: "elevator" });
+  if (!elevatorBiased) {
+    return { nodePath: shortest, usesElevator: pathUsesElevator(shortest, graph.elevatorNodeIds) };
+  }
+
+  const shortestDist = pathPhysicalDistance(graph, shortest);
+  const elevatorDist = pathPhysicalDistance(graph, elevatorBiased);
+  const elevatorUses = pathUsesElevator(elevatorBiased, graph.elevatorNodeIds);
+
+  if (
+    elevatorUses &&
+    (elevatorDist <= shortestDist * ELEVATOR_DETOUR_RATIO + ELEVATOR_DETOUR_EXTRA_M ||
+      (pathHasStairs(graph, shortest) && !pathHasStairs(graph, elevatorBiased)))
+  ) {
+    return { nodePath: elevatorBiased, usesElevator: true };
+  }
+
+  return {
+    nodePath: shortest,
+    usesElevator: pathUsesElevator(shortest, graph.elevatorNodeIds),
+  };
+}
+
+/**
+ * 출발/도착 좌표로 보행로 그래프 기반 경로 계산.
+ * 실내·엘리베이터가 포함된 그래프에서는 크게 돌지 않으면 승강기 경유를 우선한다.
+ */
+export function computeRoute(
+  graph: RoutingGraph,
+  from: LatLng,
+  to: LatLng,
+  locale: AppLocale = "ko",
+): ComputedRoute | null {
+  if (!graph.nodes.size) return null;
+  const startSnap = nearestNode(graph, from);
+  const endSnap = nearestNode(graph, to);
+  if (!startSnap || !endSnap) return null;
+
+  const picked = pickNodePath(graph, startSnap.id, endSnap.id);
+  if (!picked) return null;
+
+  return nodePathToRoute(graph, picked.nodePath, from, to, locale, picked.usesElevator);
 }

@@ -96,6 +96,7 @@ function estimateMinutes(route: ComputedRoute): number {
     if (t === "crosswalk") seconds += 25;
     else if (t === "stairs") seconds += 20;
     else if (t === "ramp") seconds += 8;
+    else if (t === "elevator") seconds += 18;
   }
   // 회전이 많을수록 여유 시간 추가
   const turns = route.steps.filter(
@@ -512,6 +513,13 @@ export function RoutePanel(props: RoutePanelProps) {
               <div className="mt-2 flex items-center gap-1.5 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
                 <TriangleAlert className="h-3.5 w-3.5" />
                 {ui.route.stairsWarning}
+              </div>
+            )}
+
+            {route.hasElevator && (
+              <div className="mt-2 flex items-center gap-1.5 rounded-md bg-teal-50 px-2 py-1 text-xs text-teal-900 dark:bg-teal-950/40 dark:text-teal-100">
+                <Navigation className="h-3.5 w-3.5" />
+                {ui.route.elevatorNotice}
               </div>
             )}
 

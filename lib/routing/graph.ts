@@ -1,17 +1,41 @@
 import { haversineMeters, type LatLng } from "./geo";
+import type { ElevatorRecord } from "./elevators";
 import type {
   BuildingEntrance,
   EntranceFeature,
   FeatureCollection,
   GraphEdge,
   GraphNode,
+  RoutingGraph,
   WalkwayFeature,
   WalkwayGraph,
 } from "./types";
 
 /** 노드 키: 좌표를 6자리(~0.1m)로 반올림해 공유 끝점을 동일 노드로 병합 */
-function nodeKey(lng: number, lat: number): string {
+export function nodeKey(lng: number, lat: number): string {
   return `${lng.toFixed(6)},${lat.toFixed(6)}`;
+}
+
+const ELEVATOR_SNAP_M = 22;
+
+function addBidirectionalEdge(
+  adjacency: Map<string, GraphEdge[]>,
+  from: string,
+  to: string,
+  distance: number,
+  type: string,
+) {
+  if (from === to) return;
+  const listA = adjacency.get(from);
+  if (!listA) return;
+  if (!listA.some((e) => e.to === to)) {
+    listA.push({ to, distance, type });
+  }
+  const listB = adjacency.get(to);
+  if (!listB) return;
+  if (!listB.some((e) => e.to === from)) {
+    listB.push({ to: from, distance, type });
+  }
 }
 
 function lineStringsOf(feature: WalkwayFeature): number[][][] {
@@ -39,15 +63,6 @@ export function buildWalkwayGraph(
     return key;
   };
 
-  const addEdge = (from: string, to: string, distance: number, type: string) => {
-    if (from === to) return;
-    const list = adjacency.get(from);
-    if (!list) return;
-    if (!list.some((e) => e.to === to)) {
-      list.push({ to, distance, type });
-    }
-  };
-
   for (const feature of collection.features) {
     const type = String(feature.properties?.type ?? "path");
     for (const line of lineStringsOf(feature)) {
@@ -65,13 +80,43 @@ export function buildWalkwayGraph(
         const a = ensureNode(lng1, lat1);
         const b = ensureNode(lng2, lat2);
         const dist = haversineMeters({ lat: lat1, lng: lng1 }, { lat: lat2, lng: lng2 });
-        addEdge(a, b, dist, type);
-        addEdge(b, a, dist, type);
+        addBidirectionalEdge(adjacency, a, b, dist, type);
       }
     }
   }
 
   return { nodes, adjacency };
+}
+
+/** 실외·실내 보행로 + 엘리베이터 포인트를 포함한 길찾기 그래프 */
+export function buildRoutingGraph(
+  collection: FeatureCollection<WalkwayFeature> | null | undefined,
+  elevators: ElevatorRecord[] | null | undefined,
+): RoutingGraph {
+  const base = buildWalkwayGraph(collection);
+  const elevatorNodeIds = new Set<string>();
+
+  if (!elevators?.length) {
+    return { ...base, elevatorNodeIds };
+  }
+
+  for (const elv of elevators) {
+    const { lat, lng } = elv.point;
+    const key = nodeKey(lng, lat);
+
+    if (!base.nodes.has(key)) {
+      base.nodes.set(key, { id: key, lat, lng });
+      base.adjacency.set(key, []);
+    }
+    elevatorNodeIds.add(key);
+
+    const near = nearestNode(base, elv.point);
+    if (near && near.id !== key && near.distance <= ELEVATOR_SNAP_M) {
+      addBidirectionalEdge(base.adjacency, key, near.id, near.distance, "elevator");
+    }
+  }
+
+  return { ...base, elevatorNodeIds };
 }
 
 /** 좌표에서 가장 가까운 그래프 노드 */

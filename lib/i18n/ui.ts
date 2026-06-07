@@ -119,6 +119,7 @@ export type UiText = {
     walking: string;
     walkwayBased: string;
     stairsWarning: string;
+    elevatorNotice: string;
     startNav: string;
     stopNav: string;
     acquiringGps: string;
@@ -149,7 +150,7 @@ export type UiText = {
     };
     currentLocationLabel: string;
     mapPickLabel: (lat: number, lng: number) => string;
-    legend: Record<"path" | "crosswalk" | "stairs" | "ramp", string>;
+    legend: Record<"path" | "crosswalk" | "stairs" | "ramp" | "elevator", string>;
   };
   page: {
     directions: string;
@@ -311,6 +312,7 @@ const ko: UiText = {
     walking: "도보",
     walkwayBased: "보행로 기반",
     stairsWarning: "경로에 계단이 포함되어 있습니다",
+    elevatorNotice: "승강기 구간이 포함된 경로입니다",
     startNav: "안내 시작",
     stopNav: "안내 중지",
     acquiringGps: "GPS 위치를 확인하는 중…",
@@ -346,6 +348,7 @@ const ko: UiText = {
       crosswalk: "횡단보도",
       stairs: "계단",
       ramp: "경사로",
+      elevator: "승강기",
     },
   },
   page: {
@@ -510,6 +513,7 @@ const en: UiText = {
     walking: "Walking",
     walkwayBased: "Walkway network",
     stairsWarning: "This route includes stairs",
+    elevatorNotice: "This route includes an elevator segment",
     startNav: "Start guidance",
     stopNav: "Stop guidance",
     acquiringGps: "Acquiring GPS location…",
@@ -545,6 +549,7 @@ const en: UiText = {
       crosswalk: "Crosswalk",
       stairs: "Stairs",
       ramp: "Ramp",
+      elevator: "Elevator",
     },
   },
   page: {

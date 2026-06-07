@@ -52,6 +52,11 @@ export interface WalkwayGraph {
   adjacency: Map<string, GraphEdge[]>;
 }
 
+/** 보행로 + 엘리베이터 허브 노드 메타 */
+export interface RoutingGraph extends WalkwayGraph {
+  elevatorNodeIds: Set<string>;
+}
+
 export interface BuildingEntrance {
   id: string;
   buildingId: string;
@@ -101,6 +106,7 @@ export interface ComputedRoute {
   steps: RouteStep[];
   hasStairs: boolean;
   hasCrosswalk: boolean;
+  hasElevator: boolean;
   /** coords[i] → coords[i+1] 구간의 종류 (length = coords.length - 1) */
   segmentTypes: WalkwayType[];
 }
