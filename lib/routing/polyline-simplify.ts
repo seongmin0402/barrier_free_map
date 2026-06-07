@@ -5,6 +5,9 @@ export interface GuideSegment {
   type: WalkwayType;
 }
 
+/** 단순화 시 꼭짓점 유지 — 횡단보도·경사로·계단 경계 */
+const GUIDANCE_BOUNDARY = new Set<string>(["crosswalk", "ramp", "stairs"]);
+
 export interface GuidePolyline {
   coords: LatLng[];
   segs: GuideSegment[];
@@ -102,6 +105,14 @@ export function simplifyForGuidance(
   const mustKeep = new Set<number>([0, coords.length - 1]);
   for (const idx of elevatorTextAtCoord.keys()) {
     mustKeep.add(idx);
+  }
+  for (let i = 0; i < segs.length; i++) {
+    const t = segs[i]?.type ?? "path";
+    const tPrev = i > 0 ? (segs[i - 1]?.type ?? "path") : null;
+    if (GUIDANCE_BOUNDARY.has(t) || (tPrev && GUIDANCE_BOUNDARY.has(tPrev) && t !== tPrev)) {
+      mustKeep.add(i);
+      mustKeep.add(i + 1);
+    }
   }
 
   const kept = douglasPeuckerIndices(coords, toleranceM, mustKeep);

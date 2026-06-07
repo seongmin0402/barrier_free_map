@@ -80,7 +80,13 @@ function maneuverIcon(maneuver: ManeuverKind) {
     case "uturn":
       return <RotateCcw className="h-4 w-4" />;
     case "elevator":
-      return <ArrowUp className="h-4 w-4" />;
+      return <ArrowUpDown className="h-4 w-4" />;
+    case "crosswalk":
+      return <Footprints className="h-4 w-4" />;
+    case "ramp":
+      return <ArrowUpRight className="h-4 w-4" />;
+    case "stairs":
+      return <TriangleAlert className="h-4 w-4" />;
     case "straight":
       return <ArrowUp className="h-4 w-4" />;
     case "arrive":
@@ -586,7 +592,13 @@ export function RoutePanel(props: RoutePanelProps) {
                         ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300"
                         : step.maneuver === "elevator"
                           ? "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300"
-                          : "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
+                          : step.maneuver === "crosswalk"
+                            ? "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-200"
+                            : step.maneuver === "ramp"
+                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+                              : step.maneuver === "stairs"
+                                ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200"
+                                : "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
                     }`}
                   >
                     {maneuverIcon(step.maneuver)}

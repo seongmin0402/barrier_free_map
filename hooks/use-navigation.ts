@@ -466,12 +466,18 @@ export function useNavigation(buildings: BarrierBuilding[]) {
         );
       };
 
+      const isGuidance =
+        step.maneuver === "elevator" ||
+        step.maneuver === "crosswalk" ||
+        step.maneuver === "ramp" ||
+        step.maneuver === "stairs";
+
       if (progress.stepIndex !== lastSpokenStepRef.current) {
         lastSpokenStepRef.current = progress.stepIndex;
         speechBandRef.current = { stepIndex: progress.stepIndex, band: d };
         speakStep(d);
       } else if (speechBandRef.current.stepIndex === progress.stepIndex) {
-        const reminders = step.maneuver === "elevator" ? [85, 35] : [70];
+        const reminders = isGuidance ? [85, 35] : [70];
         for (const band of reminders) {
           if (d <= band && speechBandRef.current.band > band + 10) {
             speechBandRef.current.band = band;

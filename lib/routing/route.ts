@@ -17,7 +17,9 @@ import {
   departStraightText,
   elevatorTransferText,
   featureFollowText,
+  guidanceManeuverFor,
   hazardText,
+  isGuidanceManeuver,
   maneuverLabel,
   turnThenContinueText,
 } from "@/lib/i18n/navigation";
@@ -458,11 +460,48 @@ function maneuverFromDelta(delta: number): ManeuverKind {
   return delta > 0 ? "right" : "left";
 }
 
+/** 횡단보도·경사로·계단 — 전용 안내 단계 생성 */
+const GUIDANCE_SEGMENT = new Set<WalkwayType>(["crosswalk", "ramp", "stairs"]);
+
+interface FeatureRun {
+  startSeg: number;
+  endSeg: number;
+  type: WalkwayType;
+  distance: number;
+}
+
+function collectFeatureRuns(coords: LatLng[], segs: SegmentInfo[]): FeatureRun[] {
+  const runs: FeatureRun[] = [];
+  let i = 0;
+  while (i < segs.length) {
+    const t = segs[i]?.type ?? "path";
+    if (!GUIDANCE_SEGMENT.has(t)) {
+      i++;
+      continue;
+    }
+    const startSeg = i;
+    let dist = haversineMeters(coords[i], coords[i + 1]);
+    i++;
+    while (i < segs.length && (segs[i]?.type ?? "path") === t) {
+      dist += haversineMeters(coords[i], coords[i + 1]);
+      i++;
+    }
+    runs.push({ startSeg, endSeg: i, type: t, distance: dist });
+  }
+  return runs;
+}
+
 /** 경사로·계단 polyline 꺾임 — 구간 단위로 안내 */
-const CONTINUOUS_FEATURE = new Set<WalkwayType>(["ramp", "stairs"]);
+const CONTINUOUS_FEATURE = new Set<WalkwayType>(["ramp", "stairs", "crosswalk"]);
 
 function isTurnManeuver(m: ManeuverKind): boolean {
-  return m !== "depart" && m !== "arrive" && m !== "elevator" && m !== "straight";
+  return (
+    m !== "depart" &&
+    m !== "arrive" &&
+    m !== "elevator" &&
+    m !== "straight" &&
+    !isGuidanceManeuver(m)
+  );
 }
 
 function formatStepText(step: RouteStep, locale: AppLocale): void {
@@ -472,6 +511,16 @@ function formatStepText(step: RouteStep, locale: AppLocale): void {
   }
 
   const dist = formatDistance(step.distance, locale);
+
+  if (isGuidanceManeuver(step.maneuver)) {
+    const follow = featureFollowText(step.edgeType, dist, locale);
+    if (follow) {
+      step.text = follow;
+      step.hazard = null;
+    }
+    return;
+  }
+
   const featureType =
     step.edgeType && CONTINUOUS_FEATURE.has(step.edgeType)
       ? step.edgeType
@@ -479,7 +528,9 @@ function formatStepText(step: RouteStep, locale: AppLocale): void {
         ? "ramp"
         : step.hazard === hazardText("stairs", locale)
           ? "stairs"
-          : null;
+          : step.hazard === hazardText("crosswalk", locale)
+            ? "crosswalk"
+            : null;
   const follow = featureType ? featureFollowText(featureType, dist, locale) : null;
 
   if (follow && (step.maneuver === "depart" || step.maneuver === "straight")) {
@@ -499,29 +550,25 @@ function formatStepText(step: RouteStep, locale: AppLocale): void {
   }
 }
 
-/** 연속 경사로/계단 회전 안내를 한 step으로 병합 */
+/** 연속 동일 시설 안내 병합 (경사로·계단·횡단보도) */
 function consolidateFeatureSteps(steps: RouteStep[], locale: AppLocale): RouteStep[] {
   const out: RouteStep[] = [];
 
   for (const step of steps) {
     const prev = out[out.length - 1];
     const featureType =
-      step.edgeType && CONTINUOUS_FEATURE.has(step.edgeType) ? step.edgeType : null;
+      isGuidanceManeuver(step.maneuver) ? step.edgeType : null;
     const prevFeature =
-      prev?.edgeType && CONTINUOUS_FEATURE.has(prev.edgeType) ? prev.edgeType : null;
+      prev && isGuidanceManeuver(prev.maneuver) ? prev.edgeType : null;
 
     if (
       prev &&
       featureType &&
       prevFeature === featureType &&
-      isTurnManeuver(prev.maneuver) &&
-      isTurnManeuver(step.maneuver)
+      prev.maneuver === step.maneuver
     ) {
       prev.distance += step.distance;
       prev.at = step.at;
-      prev.maneuver = "straight";
-      prev.edgeType = featureType;
-      prev.hazard = null;
       formatStepText(prev, locale);
       continue;
     }
@@ -543,7 +590,8 @@ function consolidateMicroTurns(steps: RouteStep[], locale: AppLocale): RouteStep
       isTurnManeuver(step.maneuver) &&
       (prev.maneuver === "depart" || prev.maneuver === "straight") &&
       prev.distance <= 22 &&
-      step.maneuver !== "uturn"
+      step.maneuver !== "uturn" &&
+      !isGuidanceManeuver(step.maneuver)
     ) {
       prev.distance += step.distance;
       prev.at = step.at;
@@ -567,7 +615,9 @@ function consolidateStraightSteps(steps: RouteStep[], locale: AppLocale): RouteS
       step.maneuver === "straight" &&
       (prev.maneuver === "depart" || prev.maneuver === "straight") &&
       prev.maneuver !== "elevator" &&
-      step.maneuver !== "elevator";
+      step.maneuver !== "elevator" &&
+      !isGuidanceManeuver(prev.maneuver) &&
+      !isGuidanceManeuver(step.maneuver);
 
     if (mergeable) {
       prev.distance += step.distance;
@@ -595,6 +645,14 @@ function buildSteps(
   const steps: RouteStep[] = [];
   if (coords.length < 2) return steps;
 
+  const featureRuns = collectFeatureRuns(coords, segs);
+  const featureAtSegStart = new Map<number, FeatureRun>();
+  const segInFeature = new Set<number>();
+  for (const run of featureRuns) {
+    featureAtSegStart.set(run.startSeg, run);
+    for (let s = run.startSeg; s < run.endSeg; s++) segInFeature.add(s);
+  }
+
   const elevatorCoordIndices = new Set(elevatorTextAtCoord.keys());
   const skipTurnAt = new Set<number>();
   for (const e of elevatorCoordIndices) {
@@ -617,6 +675,46 @@ function buildSteps(
   for (let i = 0; i < coords.length - 1; i++) {
     const segLen = haversineMeters(coords[i], coords[i + 1]);
     const segType = segs[i]?.type ?? "path";
+
+    const featureRun = featureAtSegStart.get(i);
+    if (featureRun) {
+      const last = steps[steps.length - 1];
+      last.distance += pendingDist;
+      if (pendingHazard && !last.hazard) last.hazard = pendingHazard;
+      pendingDist = 0;
+      pendingHazard = null;
+
+      const maneuver = guidanceManeuverFor(featureRun.type)!;
+      steps.push({
+        text: featureFollowText(featureRun.type, formatDistance(featureRun.distance, locale), locale) ?? "",
+        distance: featureRun.distance,
+        at: coords[featureRun.endSeg],
+        maneuver,
+        edgeType: featureRun.type,
+        hazard: null,
+      });
+
+      if (featureRun.endSeg >= segs.length) {
+        steps.push({
+          text: arriveMessage(locale),
+          distance: 0,
+          at: coords[coords.length - 1],
+          maneuver: "arrive",
+          edgeType: segs[segs.length - 1]?.type ?? "path",
+          hazard: null,
+        });
+        break;
+      }
+
+      i = featureRun.endSeg - 1;
+      pendingType = segs[i]?.type ?? "path";
+      continue;
+    }
+
+    if (segInFeature.has(i)) {
+      continue;
+    }
+
     pendingDist += segLen;
     pendingHazard = hazardFor(segType, locale);
 

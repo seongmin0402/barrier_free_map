@@ -32,6 +32,9 @@ export function maneuverLabel(maneuver: ManeuverKind, locale: AppLocale): string
       "slight-right": "오른쪽 방향",
       uturn: "유턴",
       elevator: "승강기",
+      crosswalk: "횡단보도",
+      ramp: "경사로",
+      stairs: "계단",
       arrive: "도착",
     },
     en: {
@@ -43,6 +46,9 @@ export function maneuverLabel(maneuver: ManeuverKind, locale: AppLocale): string
       "slight-right": "bear right",
       uturn: "make a U-turn",
       elevator: "elevator",
+      crosswalk: "crosswalk",
+      ramp: "ramp",
+      stairs: "stairs",
       arrive: "arrive",
     },
   };
@@ -106,7 +112,7 @@ export function navStepSpeechText(
         : `${distanceLabel} 앞, ${stepText}`
       : stepText;
 
-  if (maneuver === "elevator" || maneuver === "straight") {
+  if (maneuver === "elevator" || maneuver === "straight" || isGuidanceManeuver(maneuver)) {
     return withDistance;
   }
 
@@ -120,12 +126,28 @@ export function navStepSpeechText(
       : `지금 ${turn}`;
 }
 
-/** 경사로·계단 등 연속 구간 — 회전 대신 한 줄 안내 */
+/** 경사로·계단·횡단보도 등 — 구간 단위 한 줄 안내 */
+export function isGuidanceManeuver(m: ManeuverKind): boolean {
+  return m === "crosswalk" || m === "ramp" || m === "stairs";
+}
+
+export function guidanceManeuverFor(type: WalkwayType): ManeuverKind | null {
+  if (type === "crosswalk") return "crosswalk";
+  if (type === "ramp") return "ramp";
+  if (type === "stairs") return "stairs";
+  return null;
+}
+
 export function featureFollowText(
   type: WalkwayType,
   distance: string,
   locale: AppLocale,
 ): string | null {
+  if (type === "crosswalk") {
+    return locale === "en"
+      ? `Cross the crosswalk for ${distance}`
+      : `횡단보도를 ${distance} 구간에서 건너세요`;
+  }
   if (type === "ramp") {
     return locale === "en"
       ? `Follow the ramp for ${distance}`
@@ -135,6 +157,11 @@ export function featureFollowText(
     return locale === "en"
       ? `Use the stairs for ${distance}`
       : `계단 구간을 ${distance} 이동하세요`;
+  }
+  if (type === "indoor") {
+    return locale === "en"
+      ? `Continue indoors for ${distance}`
+      : `실내 통로를 따라 ${distance} 이동하세요`;
   }
   return null;
 }

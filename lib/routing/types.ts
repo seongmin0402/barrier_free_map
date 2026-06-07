@@ -90,6 +90,9 @@ export type ManeuverKind =
   | "slight-right"
   | "uturn"
   | "elevator"
+  | "crosswalk"
+  | "ramp"
+  | "stairs"
   | "arrive";
 
 export interface RouteStep {
