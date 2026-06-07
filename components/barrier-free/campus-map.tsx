@@ -1721,14 +1721,20 @@ export function CampusMap({
       </div>
 
       <div className="pointer-events-none absolute inset-0 z-10">
-        {/* 좌측: 줌 + 경로 범례 */}
-        <div className={cn("pointer-events-auto absolute left-3 flex flex-col gap-2 sm:left-4", overlayBottomClass)}>
+        {/* 좌측: 경로 범례 — 모바일 길찾기에서는 패널에만 표시 */}
+        <div
+          className={cn(
+            "pointer-events-auto absolute left-3 hidden flex-col gap-2 sm:left-4 sm:flex",
+            mapLayout === "route" && "max-sm:hidden",
+            overlayBottomClass,
+          )}
+        >
           {routeLine && routeLine.length >= 2 && routeSegments && (
-            <RouteLegend segmentTypes={routeSegments} variant="map" className="max-w-[min(calc(100vw-6rem),11rem)] sm:max-w-none" />
+            <RouteLegend segmentTypes={routeSegments} variant="map" className="max-w-[11rem]" />
           )}
           {mapLayout === "route" && routeLine && routeLine.length >= 2 && routeElevators.length > 0 && (
             <div
-              className="max-w-[min(calc(100vw-6rem),11rem)] rounded-lg border border-border/80 bg-background/95 px-3 py-2 text-[11px] shadow-md backdrop-blur-sm sm:max-w-none sm:text-xs"
+              className="max-w-[11rem] rounded-lg border border-border/80 bg-background/95 px-3 py-2 text-xs shadow-md backdrop-blur-sm"
               role="note"
               aria-label={ui.map.elevatorOnRouteLegend}
             >
@@ -1743,13 +1749,22 @@ export function CampusMap({
               </div>
             </div>
           )}
-          <div className="overflow-hidden rounded-lg border border-border bg-card/95 shadow-md backdrop-blur-sm">
+        </div>
+
+        {/* 우측: 줌·경로·안내 (모바일 길찾기는 최소 버튼만) */}
+        <div
+          className={cn(
+            "pointer-events-auto absolute right-3 flex items-end gap-1.5 sm:right-4 sm:flex-col sm:items-end sm:gap-2",
+            overlayBottomClass,
+          )}
+        >
+          <div className="flex overflow-hidden rounded-lg border border-border bg-card/95 shadow-md backdrop-blur-sm sm:flex-col">
             <Button
               type="button"
               variant="ghost"
               size="icon"
               onClick={() => zoomDelta(1)}
-              className="h-9 w-9 rounded-none border-b border-border hover:bg-secondary"
+              className="h-9 w-9 rounded-none border-r border-border hover:bg-secondary sm:border-r-0 sm:border-b"
               aria-label={ui.map.zoomIn}
             >
               <Plus className="h-4 w-4" />
@@ -1765,16 +1780,12 @@ export function CampusMap({
               <Minus className="h-4 w-4" />
             </Button>
           </div>
-        </div>
-
-        {/* 우측: 지도 옵션·경로·길찾기 */}
-        <div className={cn("pointer-events-auto absolute right-3 flex flex-col items-end gap-2 sm:right-4", overlayBottomClass)}>
           {geoHintMessage && (
             <div className="max-w-[14rem] rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive shadow-md">
               {geoHintMessage}
             </div>
           )}
-          {controlsOpen && (
+          {controlsOpen && mapLayout !== "route" && (
             <div className="w-[min(86vw,18rem)] rounded-lg border border-border bg-card/95 p-2 shadow-lg backdrop-blur-sm">
               <p className="mb-1 px-1 text-[10px] font-medium text-muted-foreground">{ui.map.mapOptions}</p>
               <div className="mb-2 flex flex-wrap gap-1">
@@ -1822,18 +1833,18 @@ export function CampusMap({
               </div>
             </div>
           )}
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-row items-center gap-1.5 sm:flex-col sm:items-end sm:gap-2">
             {navigationMode && (
               <Button
                 type="button"
                 variant={followPaused ? "default" : "secondary"}
                 size="icon"
                 onClick={handleNavigationLocatePress}
-                className={cn("shadow-md", followPaused && "ring-2 ring-primary/40")}
+                className={cn("h-9 w-9 shadow-md", followPaused && "ring-2 ring-primary/40")}
                 aria-label={followPaused ? ui.route.resumeFollow : ui.map.myLocationTitle}
                 title={followPaused ? ui.route.resumeFollow : ui.map.myLocationTitle}
               >
-                <Locate className="h-5 w-5" />
+                <Locate className="h-4 w-4 sm:h-5 sm:w-5" />
               </Button>
             )}
             {routeLine && routeLine.length >= 2 && (
@@ -1842,23 +1853,25 @@ export function CampusMap({
                 variant="secondary"
                 size="icon"
                 onClick={fitRouteOnMap}
-                className="shadow-md"
+                className="h-9 w-9 shadow-md"
                 aria-label={ui.route.fitRoute}
                 title={ui.route.fitRoute}
               >
-                <Route className="h-5 w-5" />
+                <Route className="h-4 w-4 sm:h-5 sm:w-5" />
               </Button>
             )}
-            <Button
-              type="button"
-              variant={controlsOpen ? "default" : "secondary"}
-              size="icon"
-              onClick={() => setControlsOpen((prev) => !prev)}
-              className="shadow-md"
-              aria-label={controlsOpen ? ui.map.mapOptionsClose : ui.map.mapOptionsOpen}
-            >
-              <SlidersHorizontal className="h-5 w-5" />
-            </Button>
+            {mapLayout !== "route" ? (
+              <Button
+                type="button"
+                variant={controlsOpen ? "default" : "secondary"}
+                size="icon"
+                onClick={() => setControlsOpen((prev) => !prev)}
+                className="h-9 w-9 shadow-md"
+                aria-label={controlsOpen ? ui.map.mapOptionsClose : ui.map.mapOptionsOpen}
+              >
+                <SlidersHorizontal className="h-4 w-4 sm:h-5 sm:w-5" />
+              </Button>
+            ) : null}
             {directionsHref && directionsLabel && mapLayout !== "explore" ? (
               <Button
                 asChild

@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 interface RouteLegendProps {
   segmentTypes: WalkwayType[];
   /** 지도 위 오버레이 — 배경·그림자 강조 */
-  variant?: "panel" | "map";
+  variant?: "panel" | "map" | "inline";
   className?: string;
 }
 
@@ -17,6 +17,27 @@ export function RouteLegend({ segmentTypes, variant = "panel", className }: Rout
   const items = legendItemsForRoute(segmentTypes);
 
   if (items.length <= 1) return null;
+
+  if (variant === "inline") {
+    return (
+      <ul
+        className={cn("flex flex-wrap items-center gap-x-2 gap-y-0.5", className)}
+        role="note"
+        aria-label={ui.route.legendTitle}
+      >
+        {items.map((l) => (
+          <li key={l.type} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            <span
+              className="inline-block h-1.5 w-3 shrink-0 rounded-full"
+              style={{ backgroundColor: l.color }}
+              aria-hidden
+            />
+            <span>{ui.route.legend[l.type as keyof typeof ui.route.legend]}</span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
 
   return (
     <div

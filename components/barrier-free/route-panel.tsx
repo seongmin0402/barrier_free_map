@@ -21,6 +21,9 @@ import {
   Flag,
   X,
   ArrowUpDown,
+  ChevronDown,
+  ChevronUp,
+  Pencil,
   Volume2,
   VolumeX,
   Mic,
@@ -318,12 +321,14 @@ export function RoutePanel(props: RoutePanelProps) {
 
   const { locale } = useAppSettings();
   const ui = useUi();
-  const SNAP_PEEK = 32;
-  const SNAP_HALF = 54;
-  const SNAP_FULL = 86;
+  const SNAP_PEEK = 28;
+  const SNAP_HALF = 46;
+  const SNAP_FULL = 82;
   const [isMobile, setIsMobile] = useState(false);
   const [sheetVh, setSheetVh] = useState<number>(SNAP_HALF);
   const [dragging, setDragging] = useState(false);
+  const [editPoints, setEditPoints] = useState(true);
+  const [showSteps, setShowSteps] = useState(false);
   const dragRef = useRef<{ startY: number; startVh: number; moved: boolean } | null>(null);
 
   useEffect(() => {
@@ -334,14 +339,25 @@ export function RoutePanel(props: RoutePanelProps) {
     return () => mq.removeEventListener("change", update);
   }, []);
 
-  // 상태에 따라 기본 높이 자동 조정 (지도가 보이게 낮춤). 이후 드래그로 자유 조절 가능.
+  useEffect(() => {
+    if (!route) {
+      setEditPoints(true);
+      setShowSteps(false);
+    }
+  }, [route]);
+
+  // 상태에 따라 기본 높이 — 경로가 잡히면 지도를 넓게(PEEK). 드래그로 조절 가능.
   useEffect(() => {
     if (pickMode) setSheetVh(SNAP_PEEK);
-    else if (navigating) setSheetVh(SNAP_HALF);
-    else if (route) setSheetVh(SNAP_HALF);
+    else if (route) setSheetVh(SNAP_PEEK);
+    else if (navigating) setSheetVh(SNAP_PEEK);
     else if (!origin || !destination) setSheetVh(SNAP_HALF);
     else setSheetVh(SNAP_FULL);
   }, [route, navigating, pickMode, origin, destination]);
+
+  const compactSheet = isMobile && sheetVh <= SNAP_HALF + 4;
+  const showFullPoints = !route || editPoints || !isMobile;
+  const showStepList = !isMobile || showSteps || sheetVh > SNAP_HALF || navigating;
 
   useEffect(() => {
     onSheetVhChange?.(sheetVh);
@@ -412,14 +428,14 @@ export function RoutePanel(props: RoutePanelProps) {
         onPointerMove={onHandleMove}
         onPointerUp={onHandleUp}
         onPointerCancel={onHandleUp}
-        className="flex shrink-0 cursor-grab touch-none flex-col items-center justify-center py-3 active:cursor-grabbing sm:hidden"
+        className="flex shrink-0 cursor-grab touch-none flex-col items-center justify-center py-2 active:cursor-grabbing sm:hidden"
         role="separator"
         aria-label={ui.route.sheetResize}
       >
         <span className="h-1.5 w-12 rounded-full bg-muted-foreground/40" />
       </div>
 
-      <div className="flex items-center gap-2 border-b border-border px-3 py-2.5 sm:py-3">
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2 sm:py-3">
         <button
           type="button"
           onClick={onClose}
@@ -448,64 +464,120 @@ export function RoutePanel(props: RoutePanelProps) {
       </div>
 
       <div
-        className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain scroll-smooth p-3 pb-[max(1rem,env(safe-area-inset-bottom))]"
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth pb-[max(0.75rem,env(safe-area-inset-bottom))]",
+          compactSheet ? "space-y-2 p-2.5" : "space-y-3 p-3",
+        )}
         style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
       >
-        {/* 출발/도착 입력 — 좌측 점·점선으로 구간 연결 */}
-        <div className="flex gap-3">
-          <div className="relative flex w-4 shrink-0 flex-col items-center pt-5 pb-5">
-            <span
-              className="h-3 w-3 shrink-0 rounded-full bg-green-600 ring-2 ring-green-600/25"
-              aria-hidden
-            />
-            <div
-              className="my-1 min-h-6 w-0 flex-1 border-l-2 border-dashed border-muted-foreground/40"
-              aria-hidden
-            />
-            <span
-              className="h-3 w-3 shrink-0 rounded-full bg-red-600 ring-2 ring-red-600/25"
-              aria-hidden
-            />
-            <Button
-              type="button"
-              size="icon"
-              variant="outline"
-              className="absolute left-1/2 top-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full bg-background shadow-sm"
-              onClick={onSwap}
-              aria-label={ui.route.swap}
-            >
-              <ArrowUpDown className="h-4 w-4" />
-            </Button>
-          </div>
+        {showFullPoints ? (
+          <div className="flex gap-3">
+            <div className="relative flex w-4 shrink-0 flex-col items-center pt-5 pb-5">
+              <span
+                className="h-3 w-3 shrink-0 rounded-full bg-green-600 ring-2 ring-green-600/25"
+                aria-hidden
+              />
+              <div
+                className="my-1 min-h-6 w-0 flex-1 border-l-2 border-dashed border-muted-foreground/40"
+                aria-hidden
+              />
+              <span
+                className="h-3 w-3 shrink-0 rounded-full bg-red-600 ring-2 ring-red-600/25"
+                aria-hidden
+              />
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                className="absolute left-1/2 top-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full bg-background shadow-sm"
+                onClick={onSwap}
+                aria-label={ui.route.swap}
+              >
+                <ArrowUpDown className="h-4 w-4" />
+              </Button>
+            </div>
 
-          <div className="min-w-0 flex-1 space-y-2">
-            <PointField
-              which="origin"
-              label={ui.route.origin}
-              value={origin}
-              buildings={buildings}
-              pickActive={pickMode === "origin"}
-              onSelectBuilding={(b) => onSelectBuilding("origin", b)}
-              onPickOnMap={() => onPickOnMap("origin")}
-              onUseCurrentLocation={() => onUseCurrentLocation("origin")}
-              onClear={() => onClearPoint("origin")}
-              showDot={false}
-            />
+            <div className="min-w-0 flex-1 space-y-2">
+              <PointField
+                which="origin"
+                label={ui.route.origin}
+                value={origin}
+                buildings={buildings}
+                pickActive={pickMode === "origin"}
+                onSelectBuilding={(b) => onSelectBuilding("origin", b)}
+                onPickOnMap={() => onPickOnMap("origin")}
+                onUseCurrentLocation={() => onUseCurrentLocation("origin")}
+                onClear={() => onClearPoint("origin")}
+                showDot={false}
+              />
 
-            <PointField
-              which="destination"
-              label={ui.route.destination}
-              value={destination}
-              buildings={buildings}
-              pickActive={pickMode === "destination"}
-              onSelectBuilding={(b) => onSelectBuilding("destination", b)}
-              onPickOnMap={() => onPickOnMap("destination")}
-              onUseCurrentLocation={() => onUseCurrentLocation("destination")}
-              onClear={() => onClearPoint("destination")}
-              showDot={false}
-            />
+              <PointField
+                which="destination"
+                label={ui.route.destination}
+                value={destination}
+                buildings={buildings}
+                pickActive={pickMode === "destination"}
+                onSelectBuilding={(b) => onSelectBuilding("destination", b)}
+                onPickOnMap={() => onPickOnMap("destination")}
+                onUseCurrentLocation={() => onUseCurrentLocation("destination")}
+                onClear={() => onClearPoint("destination")}
+                showDot={false}
+              />
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex items-stretch gap-2 rounded-lg border border-border bg-card px-2.5 py-2">
+            <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
+              <div className="flex min-w-0 items-center gap-2 text-sm">
+                <span className="h-2 w-2 shrink-0 rounded-full bg-green-600" aria-hidden />
+                <span className="truncate font-medium text-foreground">
+                  {origin ? shortBuildingName(origin.label) : "—"}
+                </span>
+              </div>
+              <div className="flex min-w-0 items-center gap-2 text-sm">
+                <span className="h-2 w-2 shrink-0 rounded-full bg-red-600" aria-hidden />
+                <span className="truncate font-medium text-foreground">
+                  {destination ? shortBuildingName(destination.label) : "—"}
+                </span>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-col gap-1">
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                className="h-8 w-8"
+                onClick={onSwap}
+                aria-label={ui.route.swap}
+              >
+                <ArrowUpDown className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                className="h-8 w-8"
+                onClick={() => setEditPoints(true)}
+                aria-label={ui.route.editRoute}
+                title={ui.route.editRoute}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {showFullPoints && route && isMobile && (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="h-8 w-full text-xs"
+            onClick={() => setEditPoints(false)}
+          >
+            {ui.route.doneEdit}
+          </Button>
+        )}
 
         {navigating && liveAnnouncement ? (
           <p
@@ -539,39 +611,59 @@ export function RoutePanel(props: RoutePanelProps) {
 
         {/* 경로 요약 */}
         {route && (
-          <div ref={routeSummaryRef} className="rounded-lg border border-border bg-card p-3">
-            <div className="flex items-end justify-between">
-              <div>
-                <p className="text-2xl font-bold leading-none">
+          <div
+            ref={routeSummaryRef}
+            className={cn(
+              "rounded-lg border border-border bg-card",
+              compactSheet ? "p-2.5" : "p-3",
+            )}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className={cn("font-bold leading-none", compactSheet ? "text-xl" : "text-2xl")}>
                   {ui.route.aboutMinutes} {estimateWalkMinutes(route)}
                   <span className="ml-1 text-sm font-medium text-muted-foreground">{ui.route.min}</span>
                 </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {ui.route.total} {formatDistance(route.distance, locale)} · {ui.route.walking}
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {formatDistance(route.distance, locale)} · {ui.route.walking}
                 </p>
               </div>
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Footprints className="h-4 w-4" />
-                {ui.route.walkwayBased}
-              </div>
+              {!compactSheet ? (
+                <div className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex">
+                  <Footprints className="h-4 w-4" />
+                  {ui.route.walkwayBased}
+                </div>
+              ) : null}
             </div>
-            <RouteLegend segmentTypes={route.segmentTypes} variant="panel" className="mt-2" />
 
-            {route.hasStairs && (
-              <div className="mt-2 flex items-center gap-1.5 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
-                <TriangleAlert className="h-3.5 w-3.5" />
-                {ui.route.stairsWarning}
+            <RouteLegend
+              segmentTypes={route.segmentTypes}
+              variant={compactSheet ? "inline" : "panel"}
+              className={compactSheet ? "mt-1.5" : "mt-2"}
+            />
+
+            {(route.hasStairs || route.hasElevator) && (
+              <div className={cn("flex flex-wrap gap-1", compactSheet ? "mt-1.5" : "mt-2")}>
+                {route.hasStairs && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                    <TriangleAlert className="h-3 w-3 shrink-0" />
+                    {compactSheet ? ui.route.legend.stairs : ui.route.stairsWarning}
+                  </span>
+                )}
+                {route.hasElevator && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-teal-50 px-2 py-0.5 text-[10px] font-medium text-teal-900 dark:bg-teal-950/40 dark:text-teal-100">
+                    <ArrowUpDown className="h-3 w-3 shrink-0" />
+                    {compactSheet
+                      ? locale === "en"
+                        ? "Elevator"
+                        : "승강기"
+                      : ui.route.elevatorNotice}
+                  </span>
+                )}
               </div>
             )}
 
-            {route.hasElevator && (
-              <div className="mt-2 flex items-center gap-1.5 rounded-md bg-teal-50 px-2 py-1 text-xs text-teal-900 dark:bg-teal-950/40 dark:text-teal-100">
-                <Navigation className="h-3.5 w-3.5" />
-                {ui.route.elevatorNotice}
-              </div>
-            )}
-
-            <div className="mt-3 flex gap-2">
+            <div className={cn("flex gap-2", compactSheet ? "mt-2" : "mt-3")}>
               {!navigating ? (
                 <Button type="button" className="h-9 flex-1 gap-1.5" onClick={handleStartNav}>
                   <Navigation className="h-4 w-4" />
@@ -610,10 +702,27 @@ export function RoutePanel(props: RoutePanelProps) {
           </div>
         )}
 
-        {/* 턴바이턴 단계 */}
-        {route && route.steps.length > 0 && (
-          <ol className="space-y-2">
+        {route && route.steps.length > 0 && isMobile && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 w-full gap-1 text-xs text-muted-foreground"
+            onClick={() => setShowSteps((v) => !v)}
+          >
+            {showSteps ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            {showSteps ? ui.route.hideSteps : ui.route.showSteps}
+            <span className="text-muted-foreground/80">({route.steps.length})</span>
+          </Button>
+        )}
+
+        {/* 턴바이턴 단계 — 모바일 컴팩트 시 접기, 안내 중에는 현재 단계만 */}
+        {route && route.steps.length > 0 && showStepList && (
+          <ol className={cn("space-y-2", compactSheet && !showSteps && navigating && "space-y-0")}>
             {route.steps.map((step: RouteStep, idx: number) => {
+              if (compactSheet && !showSteps && navigating && idx !== currentStepIndex) {
+                return null;
+              }
               const active = navigating && idx === currentStepIndex;
               const { distanceLabel, instruction } = stepDisplayMeta(step, locale);
               const visual = stepManeuverStyle(step.maneuver);

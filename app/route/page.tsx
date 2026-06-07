@@ -20,7 +20,7 @@ export default function RoutePage() {
   const ui = useUi();
   const { buildings } = useCampusBuildings(ui.page.loadError);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [sheetVh, setSheetVh] = useState(54);
+  const [sheetVh, setSheetVh] = useState(28);
 
   const nav = useNavigation(buildings);
   const setNavOpen = nav.setOpen;

@@ -141,6 +141,10 @@ export type UiText = {
     voiceUnsupported: string;
     voiceFailed: string;
     navLiveLabel: string;
+    editRoute: string;
+    doneEdit: string;
+    showSteps: string;
+    hideSteps: string;
     emptyHint1: string;
     emptyHint2: string;
     total: string;
@@ -358,6 +362,10 @@ const ko: UiText = {
     voiceUnsupported: "이 브라우저에서는 음성 입력을 사용할 수 없습니다.",
     voiceFailed: "음성을 인식하지 못했습니다. 다시 시도해 주세요.",
     navLiveLabel: "길안내 안내 문구",
+    editRoute: "출발·도착 수정",
+    doneEdit: "완료",
+    showSteps: "상세 안내 보기",
+    hideSteps: "상세 안내 접기",
     emptyHint1: "출발지와 도착지를 선택하면",
     emptyHint2: "지도에서 건물을 눌러도 선택할 수 있습니다.",
     total: "총",
@@ -582,6 +590,10 @@ const en: UiText = {
     voiceUnsupported: "Voice input is not available in this browser.",
     voiceFailed: "Could not recognize speech. Please try again.",
     navLiveLabel: "Turn-by-turn guidance",
+    editRoute: "Edit origin & destination",
+    doneEdit: "Done",
+    showSteps: "Show turn-by-turn steps",
+    hideSteps: "Hide turn-by-turn steps",
     emptyHint1: "Select origin and destination",
     emptyHint2: "or tap buildings on the map.",
     total: "Total",
