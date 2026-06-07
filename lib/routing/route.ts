@@ -29,27 +29,29 @@ import type {
 
 type RouteWeightMode = "shortest" | "elevator";
 
-/** type별 비용 가중치 */
+/** type별 비용 가중치 — shortest에서도 계단은 상대적으로 비싸게 */
 export function edgeWeight(type: WalkwayType, mode: RouteWeightMode = "shortest"): number {
   switch (type) {
     case "stairs":
-      return mode === "elevator" ? 4.2 : 1.6;
+      return mode === "elevator" ? 5.5 : 2.4;
     case "elevator":
-      return 0.35;
+      return 0.3;
     case "ramp":
       return 1.05;
     case "crosswalk":
       return 1.1;
     case "indoor":
-      return mode === "elevator" ? 0.92 : 1;
+      return mode === "elevator" ? 0.88 : 1;
     default:
       return 1;
   }
 }
 
-/** 엘리베이터 우선 시 허용 우회 (비율 + 절대 m) */
-const ELEVATOR_DETOUR_RATIO = 1.32;
-const ELEVATOR_DETOUR_EXTRA_M = 55;
+/** 승강기 우선 — 절대 우회(m) 이내면 무조건 승강기 경로 */
+const ELEVATOR_DETOUR_CLOSE_M = 85;
+/** 그 외 허용 우회 (비율 + 절대 m) */
+const ELEVATOR_DETOUR_RATIO = 1.28;
+const ELEVATOR_DETOUR_EXTRA_M = 50;
 
 interface SegmentInfo {
   type: WalkwayType;
@@ -69,7 +71,7 @@ function edgeCost(
 ): number {
   let cost = edge.distance * edgeWeight(edge.type, mode);
   if (mode === "elevator" && (elevatorNodeIds.has(fromId) || elevatorNodeIds.has(toId))) {
-    cost *= 0.82;
+    cost *= 0.75;
   }
   return cost;
 }
@@ -399,6 +401,28 @@ function nodePathToRoute(
   return { coords, distance, steps, hasStairs, hasCrosswalk, hasElevator, segmentTypes };
 }
 
+function shouldPreferElevatorRoute(
+  graph: RoutingGraph,
+  shortest: string[],
+  elevatorBiased: string[],
+  shortestDist: number,
+  elevatorDist: number,
+  elevatorUses: boolean,
+): boolean {
+  if (!elevatorUses) return false;
+
+  const detourM = elevatorDist - shortestDist;
+
+  // 우회가 가까우면(≈85m 이내) 승강기 경로 우선
+  if (detourM <= ELEVATOR_DETOUR_CLOSE_M) return true;
+
+  // 최단 경로에 계단이 있고 승강기 경로에는 없으면 우선
+  if (pathHasStairs(graph, shortest) && !pathHasStairs(graph, elevatorBiased)) return true;
+
+  // 그 외 — 허용 우회 범위 안이면 승강기
+  return elevatorDist <= shortestDist * ELEVATOR_DETOUR_RATIO + ELEVATOR_DETOUR_EXTRA_M;
+}
+
 function pickNodePath(
   graph: RoutingGraph,
   startId: string,
@@ -421,9 +445,14 @@ function pickNodePath(
   const elevatorUses = pathUsesElevator(elevatorBiased, graph.elevatorNodeIds);
 
   if (
-    elevatorUses &&
-    (elevatorDist <= shortestDist * ELEVATOR_DETOUR_RATIO + ELEVATOR_DETOUR_EXTRA_M ||
-      (pathHasStairs(graph, shortest) && !pathHasStairs(graph, elevatorBiased)))
+    shouldPreferElevatorRoute(
+      graph,
+      shortest,
+      elevatorBiased,
+      shortestDist,
+      elevatorDist,
+      elevatorUses,
+    )
   ) {
     return { nodePath: elevatorBiased, usesElevator: true };
   }
@@ -436,7 +465,7 @@ function pickNodePath(
 
 /**
  * 출발/도착 좌표로 보행로 그래프 기반 경로 계산.
- * 실내·엘리베이터가 포함된 그래프에서는 크게 돌지 않으면 승강기 경유를 우선한다.
+ * 승강기 경로가 최단보다 ~85m 이내로만 길면 우선하며, 계단 회피·가중치로도 유도한다.
  */
 export function computeRoute(
   graph: RoutingGraph,
