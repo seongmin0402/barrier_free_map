@@ -55,13 +55,19 @@ export function edgeWeight(type: WalkwayType, mode: RouteWeightMode = "shortest"
   }
 }
 
-/** 승강기 우선 (유형별 가중치 도입 전 임시 설정) */
-const ELEVATOR_DETOUR_CLOSE_M = 200;
-const ELEVATOR_DETOUR_RATIO = 1.5;
-const ELEVATOR_DETOUR_EXTRA_M = 100;
-/** 승강기 경로에 부여하는 가상 단축 — 거리가 조금 길어도 승강기 경로 선호 */
-const ELEVATOR_SCORE_BONUS_M = 160;
-const NO_ELEVATOR_PENALTY_M = 250;
+/** 편의 승강기 — 최단 경로와 크게 다르지 않으면 우선 */
+const ELEVATOR_COMFORT_CLOSE_M = 75;
+const ELEVATOR_COMFORT_RATIO = 1.15;
+const ELEVATOR_COMFORT_EXTRA_M = 45;
+/** 계단 회피 등으로만 허용하는 추가 우회 상한 */
+const ELEVATOR_EXTENDED_RATIO = 1.22;
+const ELEVATOR_EXTENDED_EXTRA_M = 55;
+/** 승강기 경로에 부여하는 가상 단축 */
+const ELEVATOR_SCORE_BONUS_M = 150;
+const ELEVATOR_COMFORT_BONUS_M = 130;
+const NO_ELEVATOR_PENALTY_M = 130;
+/** 최단 경로에 계단이 많을 때 승강기 미사용 추가 패널티 */
+const NO_ELEVATOR_STAIRS_THRESHOLD_M = 18;
 /** 기준(최단) 경로 선형에서 승강기까지 허용 거리 — “길 위” 승강기 */
 const ELEVATOR_ON_CORRIDOR_M = 48;
 /** 경로에 승강기가 2곳 이상이면 불필요한 우회로 간주 — 추가 패널티 */
@@ -210,10 +216,15 @@ function pathSignature(nodePath: string[]): string {
   return nodePath.join("\0");
 }
 
-function withinElevatorDetourBudget(dist: number, shortestDist: number): boolean {
+function withinElevatorComfortBudget(dist: number, shortestDist: number): boolean {
   const detour = dist - shortestDist;
-  if (detour <= ELEVATOR_DETOUR_CLOSE_M) return true;
-  return dist <= shortestDist * ELEVATOR_DETOUR_RATIO + ELEVATOR_DETOUR_EXTRA_M;
+  if (detour <= ELEVATOR_COMFORT_CLOSE_M) return true;
+  return dist <= shortestDist * ELEVATOR_COMFORT_RATIO + ELEVATOR_COMFORT_EXTRA_M;
+}
+
+function withinElevatorExtendedBudget(dist: number, shortestDist: number): boolean {
+  if (withinElevatorComfortBudget(dist, shortestDist)) return true;
+  return dist <= shortestDist * ELEVATOR_EXTENDED_RATIO + ELEVATOR_EXTENDED_EXTRA_M;
 }
 
 /** 0=출발, 1=도착 방향으로 얼마나 진행했는지 (직선 투영) */
@@ -290,6 +301,45 @@ function elevatorsUsedOnPath(graph: RoutingGraph, nodePath: string[]): string[] 
 }
 
 /** 후보 경로 점수 (낮을수록 좋음) — 승강기 우선 · 길 위 승강기 · 계단 최소 */
+function pathNearBackwardElevator(
+  graph: RoutingGraph,
+  nodePath: string[],
+  startNode: LatLng,
+  endNode: LatLng,
+  maxDistM = 14,
+): boolean {
+  for (const evId of graph.elevatorNodeIds) {
+    const n = graph.nodes.get(evId);
+    if (!n) continue;
+    if (progressAlongRoute(n, startNode, endNode) >= 0.05) continue;
+    if (minDistPointToNodePath(graph, nodePath, n) <= maxDistM) return true;
+  }
+  return false;
+}
+
+/** 최단 경로 인근 승강기를 실제로 이용하고, 우회가 작을 때 */
+function isComfortElevatorPath(
+  graph: RoutingGraph,
+  nodePath: string[],
+  shortestDist: number,
+  startNode: LatLng,
+  endNode: LatLng,
+  corridorElevators: Set<string>,
+): boolean {
+  if (!pathUsesElevator(graph, nodePath)) return false;
+  if (pathNearBackwardElevator(graph, nodePath, startNode, endNode)) return false;
+
+  const dist = pathPhysicalDistance(graph, nodePath);
+  if (!withinElevatorComfortBudget(dist, shortestDist)) return false;
+
+  const used = elevatorsUsedOnPath(graph, nodePath);
+  return used.some((id) => {
+    if (!corridorElevators.has(id)) return false;
+    const n = graph.nodes.get(id)!;
+    return progressAlongRoute(n, startNode, endNode) >= 0.08;
+  });
+}
+
 function scorePathCandidate(
   graph: RoutingGraph,
   nodePath: string[],
@@ -297,20 +347,34 @@ function scorePathCandidate(
   startId: string,
   endId: string,
   corridorElevators: Set<string>,
+  referenceStairM: number,
 ): number {
   const dist = pathPhysicalDistance(graph, nodePath);
   const stairM = pathStairMeters(graph, nodePath);
   const usesElevator = pathUsesElevator(graph, nodePath);
+  const startNode = graph.nodes.get(startId)!;
+  const endNode = graph.nodes.get(endId)!;
+  const comfortElevator = isComfortElevatorPath(
+    graph,
+    nodePath,
+    shortestDist,
+    startNode,
+    endNode,
+    corridorElevators,
+  );
+
   let score = dist;
   score += stairM * 12;
   if (usesElevator) {
     score -= ELEVATOR_SCORE_BONUS_M;
-  } else {
+    if (comfortElevator) score -= ELEVATOR_COMFORT_BONUS_M;
+  } else if (corridorElevators.size > 0) {
     score += NO_ELEVATOR_PENALTY_M;
+    if (referenceStairM >= NO_ELEVATOR_STAIRS_THRESHOLD_M) score += 45;
+  } else if (referenceStairM >= NO_ELEVATOR_STAIRS_THRESHOLD_M) {
+    score += NO_ELEVATOR_PENALTY_M * 0.6;
   }
 
-  const startNode = graph.nodes.get(startId)!;
-  const endNode = graph.nodes.get(endId)!;
   const onPath = elevatorsUsedOnPath(graph, nodePath);
 
   if (onPath.length > 1) {
@@ -328,6 +392,8 @@ function scorePathCandidate(
       const prog = progressAlongRoute(n, startNode, endNode);
       bestProgress = Math.max(bestProgress, prog);
       if (corridorElevators.has(evId)) onCorridor = true;
+      if (prog < 0.05) score += 520;
+      else if (prog < 0.12) score += 200;
       if (prog >= 0.15 && corridorElevators.has(evId)) {
         score -= 55;
       }
@@ -338,7 +404,6 @@ function scorePathCandidate(
       score -= 120;
       score -= (bestProgress - 0.15) * 200;
     }
-    if (bestProgress < 0.12) score += 180;
 
     if (onCorridor) {
       score -= 90;
@@ -347,9 +412,15 @@ function scorePathCandidate(
     }
   }
 
+  if (pathNearBackwardElevator(graph, nodePath, startNode, endNode)) {
+    score += 450;
+  }
+
   const detour = dist - shortestDist;
-  if (detour > ELEVATOR_DETOUR_CLOSE_M) {
-    score += (detour - ELEVATOR_DETOUR_CLOSE_M) * 0.45;
+  if (!comfortElevator && detour > ELEVATOR_COMFORT_CLOSE_M) {
+    score += (detour - ELEVATOR_COMFORT_CLOSE_M) * 0.9;
+  } else if (!comfortElevator && detour > 0) {
+    score += detour * 0.25;
   }
   return score;
 }
@@ -1015,15 +1086,68 @@ function pickNodePath(
     return { nodePath: shortest, usesElevator: false };
   }
 
-  const elevatorCandidates = candidates.filter((path) => {
-    if (!pathUsesElevator(graph, path)) return false;
-    const dist = pathPhysicalDistance(graph, path);
-    if (withinElevatorDetourBudget(dist, shortestDist)) return true;
-    return elevatorsUsedOnPath(graph, path).some((id) => corridorElevators.has(id));
-  });
-
   const startNode = graph.nodes.get(startId)!;
   const endNode = graph.nodes.get(endId)!;
+  const referenceStairM = referencePath ? pathStairMeters(graph, referencePath) : 0;
+
+  const elevatorCandidates = candidates.filter((path) => {
+    if (!pathUsesElevator(graph, path)) return false;
+    for (const evId of elevatorsUsedOnPath(graph, path)) {
+      const n = graph.nodes.get(evId)!;
+      if (progressAlongRoute(n, startNode, endNode) < 0.05) return false;
+    }
+    if (pathNearBackwardElevator(graph, path, startNode, endNode)) return false;
+    const dist = pathPhysicalDistance(graph, path);
+    if (!withinElevatorExtendedBudget(dist, shortestDist)) return false;
+    if (!withinElevatorComfortBudget(dist, shortestDist)) {
+      const stairSave = referenceStairM - pathStairMeters(graph, path);
+      if (stairSave < 15) return false;
+    }
+    return true;
+  });
+
+  const comfortElevatorPaths = elevatorCandidates.filter((path) =>
+    isComfortElevatorPath(
+      graph,
+      path,
+      shortestDist,
+      startNode,
+      endNode,
+      corridorElevators,
+    ),
+  );
+
+  if (comfortElevatorPaths.length > 0) {
+    let bestComfort = comfortElevatorPaths[0];
+    let bestComfortScore = scorePathCandidate(
+      graph,
+      bestComfort,
+      shortestDist,
+      startId,
+      endId,
+      corridorElevators,
+      referenceStairM,
+    );
+    for (let i = 1; i < comfortElevatorPaths.length; i++) {
+      const score = scorePathCandidate(
+        graph,
+        comfortElevatorPaths[i],
+        shortestDist,
+        startId,
+        endId,
+        corridorElevators,
+        referenceStairM,
+      );
+      if (score < bestComfortScore) {
+        bestComfort = comfortElevatorPaths[i];
+        bestComfortScore = score;
+      }
+    }
+    return {
+      nodePath: bestComfort,
+      usesElevator: true,
+    };
+  }
 
   /** 가는 방향 “길 위” 승강기 중 출발 직후가 아닌 구간(≈15% 이후) */
   const midCorridorElevatorPaths = elevatorCandidates.filter((path) =>
@@ -1064,9 +1188,25 @@ function pickNodePath(
   }
 
   let best = pool[0];
-  let bestScore = scorePathCandidate(graph, best, shortestDist, startId, endId, corridorElevators);
+  let bestScore = scorePathCandidate(
+    graph,
+    best,
+    shortestDist,
+    startId,
+    endId,
+    corridorElevators,
+    referenceStairM,
+  );
   for (let i = 1; i < pool.length; i++) {
-    const score = scorePathCandidate(graph, pool[i], shortestDist, startId, endId, corridorElevators);
+    const score = scorePathCandidate(
+      graph,
+      pool[i],
+      shortestDist,
+      startId,
+      endId,
+      corridorElevators,
+      referenceStairM,
+    );
     if (score < bestScore) {
       best = pool[i];
       bestScore = score;
