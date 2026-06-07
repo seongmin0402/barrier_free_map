@@ -80,6 +80,25 @@ export function elevatorTransferText(floorLabel: string, locale: AppLocale): str
     : `승강기를 이용해 ${floorLabel}으로 이동하세요`;
 }
 
+/** 경사로·계단 등 연속 구간 — 회전 대신 한 줄 안내 */
+export function featureFollowText(
+  type: WalkwayType,
+  distance: string,
+  locale: AppLocale,
+): string | null {
+  if (type === "ramp") {
+    return locale === "en"
+      ? `Follow the ramp for ${distance}`
+      : `경사로를 따라 ${distance} 이동하세요`;
+  }
+  if (type === "stairs") {
+    return locale === "en"
+      ? `Use the stairs for ${distance}`
+      : `계단 구간을 ${distance} 이동하세요`;
+  }
+  return null;
+}
+
 /** GPS 추적 중 음성 안내 문장 */
 export function navSpeechText(
   locale: AppLocale,

@@ -14,6 +14,7 @@ import {
   continueStraightPlaceholder,
   departStraightText,
   elevatorTransferText,
+  featureFollowText,
   hazardText,
   maneuverLabel,
   turnThenContinueText,
@@ -228,6 +229,77 @@ function maneuverFromDelta(delta: number): ManeuverKind {
   return delta > 0 ? "right" : "left";
 }
 
+/** 경사로·계단 polyline 꺾임 — 구간 단위로 안내 */
+const CONTINUOUS_FEATURE = new Set<WalkwayType>(["ramp", "stairs"]);
+
+function isTurnManeuver(m: ManeuverKind): boolean {
+  return m !== "depart" && m !== "arrive" && m !== "elevator" && m !== "straight";
+}
+
+function formatStepText(step: RouteStep, locale: AppLocale): void {
+  if (step.maneuver === "elevator") return;
+
+  const dist = formatDistance(step.distance, locale);
+  const featureType =
+    step.edgeType && CONTINUOUS_FEATURE.has(step.edgeType)
+      ? step.edgeType
+      : step.hazard === hazardText("ramp", locale)
+        ? "ramp"
+        : step.hazard === hazardText("stairs", locale)
+          ? "stairs"
+          : null;
+  const follow = featureType ? featureFollowText(featureType, dist, locale) : null;
+
+  if (follow && (step.maneuver === "depart" || step.maneuver === "straight")) {
+    step.text = follow;
+    step.edgeType = featureType ?? step.edgeType;
+    step.hazard = null;
+    return;
+  }
+
+  if (step.maneuver === "depart") {
+    step.text = departStraightText(dist, locale);
+  } else if (step.maneuver === "arrive") {
+    step.text = arriveMessage(locale);
+  } else {
+    const label = maneuverLabel(step.maneuver, locale);
+    step.text = aheadTurnText(dist, label, locale);
+  }
+}
+
+/** 연속 경사로/계단 회전 안내를 한 step으로 병합 */
+function consolidateFeatureSteps(steps: RouteStep[], locale: AppLocale): RouteStep[] {
+  const out: RouteStep[] = [];
+
+  for (const step of steps) {
+    const prev = out[out.length - 1];
+    const featureType =
+      step.edgeType && CONTINUOUS_FEATURE.has(step.edgeType) ? step.edgeType : null;
+    const prevFeature =
+      prev?.edgeType && CONTINUOUS_FEATURE.has(prev.edgeType) ? prev.edgeType : null;
+
+    if (
+      prev &&
+      featureType &&
+      prevFeature === featureType &&
+      isTurnManeuver(prev.maneuver) &&
+      isTurnManeuver(step.maneuver)
+    ) {
+      prev.distance += step.distance;
+      prev.at = step.at;
+      prev.maneuver = "straight";
+      prev.edgeType = featureType;
+      prev.hazard = null;
+      formatStepText(prev, locale);
+      continue;
+    }
+
+    out.push(step);
+  }
+
+  return out;
+}
+
 function buildSteps(
   coords: LatLng[],
   segs: SegmentInfo[],
@@ -302,6 +374,11 @@ function buildSteps(
       continue;
     }
 
+    const segAfter = segs[i + 1]?.type ?? "path";
+    if (CONTINUOUS_FEATURE.has(segType) || CONTINUOUS_FEATURE.has(segAfter)) {
+      continue;
+    }
+
     const inBearing = bearingDeg(coords[i], coords[i + 1]);
     const outBearing = bearingDeg(coords[i + 1], coords[i + 2]);
     const delta = angleDelta(inBearing, outBearing);
@@ -328,22 +405,10 @@ function buildSteps(
   }
 
   for (const step of steps) {
-    if (step.maneuver === "elevator") continue;
-    const dist = formatDistance(step.distance, locale);
-    if (step.maneuver === "depart") {
-      step.text = departStraightText(dist, locale);
-    } else if (step.maneuver === "arrive") {
-      step.text = arriveMessage(locale);
-    } else {
-      const label = maneuverLabel(step.maneuver, locale);
-      step.text = aheadTurnText(dist, label, locale);
-    }
-    if (step.hazard) {
-      step.text += ` (${step.hazard})`;
-    }
+    formatStepText(step, locale);
   }
 
-  return steps;
+  return consolidateFeatureSteps(steps, locale);
 }
 
 function nodePathToRoute(

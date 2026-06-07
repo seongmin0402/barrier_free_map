@@ -81,6 +81,8 @@ function maneuverIcon(maneuver: ManeuverKind) {
       return <RotateCcw className="h-4 w-4" />;
     case "elevator":
       return <ArrowUp className="h-4 w-4" />;
+    case "straight":
+      return <ArrowUp className="h-4 w-4" />;
     case "arrive":
       return <Flag className="h-4 w-4" />;
     default:
