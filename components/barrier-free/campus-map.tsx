@@ -246,17 +246,11 @@ function shortElevatorLabel(name: string): string {
   return name.replace(/^공주대학교\s*/, "").replace(/\s*승강기$/, "").trim() || name;
 }
 
-function elevatorMarkerHtml(label: string, onRoute: boolean) {
+function elevatorMarkerHtml(label: string) {
   const safe = escapeHtml(label);
-  const ring = onRoute
-    ? "box-shadow:0 0 0 3px rgba(13,148,136,.45),0 2px 10px rgba(0,0,0,.2);"
-    : "box-shadow:0 2px 8px rgba(0,0,0,.16);";
-  const imgStyle = onRoute
-    ? "display:block;width:34px;height:34px;object-fit:contain;"
-    : "display:block;width:34px;height:34px;object-fit:contain;opacity:0.78;filter:saturate(0.55);";
   return `<div aria-hidden="true" style="display:flex;flex-direction:column;align-items:center;max-width:88px;">
-    <div style="width:38px;height:38px;border-radius:10px;background:#fff;border:2px solid #fff;${ring}display:flex;align-items:center;justify-content:center;overflow:hidden;">
-      <img src="${ELEVATOR_ICON_SRC}" alt="" width="34" height="34" decoding="async" draggable="false" style="${imgStyle}" />
+    <div style="width:38px;height:38px;border-radius:10px;background:#fff;border:2px solid #fff;box-shadow:0 0 0 3px rgba(13,148,136,.45),0 2px 10px rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;overflow:hidden;">
+      <img src="${ELEVATOR_ICON_SRC}" alt="" width="34" height="34" decoding="async" draggable="false" style="display:block;width:34px;height:34px;object-fit:contain;" />
     </div>
     <span style="margin-top:3px;padding:1px 5px;border-radius:4px;background:rgba(255,255,255,.92);font-size:10px;font-weight:600;line-height:1.2;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:88px;box-shadow:0 1px 3px rgba(0,0,0,.12);">${safe}</span>
   </div>`;
@@ -918,6 +912,11 @@ export function CampusMap({
     return routeElevatorIds instanceof Set ? routeElevatorIds : new Set(routeElevatorIds);
   }, [routeElevatorIds]);
 
+  const routeElevators = useMemo(
+    () => elevators.filter((ev) => routeElevatorIdSet.has(ev.id)),
+    [elevators, routeElevatorIdSet],
+  );
+
   /** 길찾기 지도 — 경로가 잡힌 뒤 캠퍼스 승강기 위치 */
   useEffect(() => {
     const clearElevatorMarkers = () => {
@@ -931,7 +930,13 @@ export function CampusMap({
       elevatorMarkersRef.current = [];
     };
 
-    if (!sdkLoaded || mapLayout !== "route" || !routeLine || routeLine.length < 2) {
+    if (
+      !sdkLoaded ||
+      mapLayout !== "route" ||
+      !routeLine ||
+      routeLine.length < 2 ||
+      routeElevators.length === 0
+    ) {
       clearElevatorMarkers();
       return;
     }
@@ -951,17 +956,16 @@ export function CampusMap({
 
     clearElevatorMarkers();
 
-    for (const ev of elevators) {
+    for (const ev of routeElevators) {
       if (!Number.isFinite(ev.point.lat) || !Number.isFinite(ev.point.lng)) continue;
-      const onRoute = routeElevatorIdSet.has(ev.id);
       const floorsLabel = ev.floors.join(", ");
       const marker = new MarkerCtor({
         map,
         position: new LatLngCtor(ev.point.lat, ev.point.lng),
         title: ui.map.elevatorMarkerTitle(ev.name, floorsLabel),
-        zIndex: onRoute ? 390 : 320,
+        zIndex: 390,
         icon: {
-          content: elevatorMarkerHtml(shortElevatorLabel(ev.name), onRoute),
+          content: elevatorMarkerHtml(shortElevatorLabel(ev.name)),
           anchor: new PointCtor(44, 19),
         },
       });
@@ -969,7 +973,7 @@ export function CampusMap({
     }
 
     return clearElevatorMarkers;
-  }, [sdkLoaded, mapReadyEpoch, mapLayout, routeLine, elevators, routeElevatorIdSet, ui]);
+  }, [sdkLoaded, mapReadyEpoch, mapLayout, routeLine, routeElevators, ui]);
 
   /** 경로가 생기면 경로 전체가 보이도록 맞춤 (안내 중에는 카메라 루프가 담당) */
   useEffect(() => {
@@ -1722,39 +1726,21 @@ export function CampusMap({
           {routeLine && routeLine.length >= 2 && routeSegments && (
             <RouteLegend segmentTypes={routeSegments} variant="map" className="max-w-[min(calc(100vw-6rem),11rem)] sm:max-w-none" />
           )}
-          {mapLayout === "route" && routeLine && routeLine.length >= 2 && elevators.length > 0 && (
+          {mapLayout === "route" && routeLine && routeLine.length >= 2 && routeElevators.length > 0 && (
             <div
               className="max-w-[min(calc(100vw-6rem),11rem)] rounded-lg border border-border/80 bg-background/95 px-3 py-2 text-[11px] shadow-md backdrop-blur-sm sm:max-w-none sm:text-xs"
               role="note"
-              aria-label={ui.map.elevatorPinLegend}
+              aria-label={ui.map.elevatorOnRouteLegend}
             >
-              <p className="mb-1.5 font-semibold text-foreground">{ui.map.elevatorPinLegend}</p>
-              <ul className="space-y-1 text-muted-foreground">
-                <li className="flex items-center gap-1.5">
-                  <span
-                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-white bg-white shadow-sm ring-2 ring-teal-600/35"
-                    aria-hidden
-                  >
-                    <img src={ELEVATOR_ICON_SRC} alt="" width={20} height={20} className="h-5 w-5 object-contain" />
-                  </span>
-                  <span className="text-foreground/90">{ui.map.elevatorOnRouteLegend}</span>
-                </li>
-                <li className="flex items-center gap-1.5">
-                  <span
-                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-white bg-white shadow-sm"
-                    aria-hidden
-                  >
-                    <img
-                      src={ELEVATOR_ICON_SRC}
-                      alt=""
-                      width={20}
-                      height={20}
-                      className="h-5 w-5 object-contain opacity-75 saturate-50"
-                    />
-                  </span>
-                  <span className="text-foreground/90">{ui.map.elevatorPinLegend}</span>
-                </li>
-              </ul>
+              <div className="flex items-center gap-1.5 text-muted-foreground">
+                <span
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-white bg-white shadow-sm ring-2 ring-teal-600/35"
+                  aria-hidden
+                >
+                  <img src={ELEVATOR_ICON_SRC} alt="" width={20} height={20} className="h-5 w-5 object-contain" />
+                </span>
+                <span className="font-semibold text-foreground">{ui.map.elevatorOnRouteLegend}</span>
+              </div>
             </div>
           )}
           <div className="overflow-hidden rounded-lg border border-border bg-card/95 shadow-md backdrop-blur-sm">
