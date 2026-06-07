@@ -33,13 +33,7 @@ for (const [, elv] of graph.elevatorByNodeId) {
 }
 
 const route = computeRoute(graph, from.point, to.point, "ko")!;
-console.log("\nPicked:", Math.round(route.distance), "m");
-for (const s of route.steps.filter((s) => s.maneuver === "elevator")) {
-  let name = "?";
-  for (const [, elv] of graph.elevatorByNodeId) {
-    if (Math.abs(elv.point.lat - s.at.lat) < 1e-5 && Math.abs(elv.point.lng - s.at.lng) < 1e-5) {
-      name = elv.name;
-    }
-  }
-  console.log(" ", name, "—", s.text);
+console.log("\nPicked:", Math.round(route.distance), "m,", route.steps.length, "steps");
+for (const s of route.steps) {
+  console.log(" ", s.maneuver, "—", s.text);
 }

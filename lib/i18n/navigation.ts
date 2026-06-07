@@ -74,10 +74,50 @@ export function continueStraightPlaceholder(locale: AppLocale): string {
 }
 
 /** 승강기 탑승 안내 — 회전 안내와 분리 */
-export function elevatorTransferText(floorLabel: string, locale: AppLocale): string {
+export function elevatorTransferText(
+  floorLabel: string,
+  locale: AppLocale,
+  elevatorName?: string,
+): string {
+  if (elevatorName) {
+    return locale === "en"
+      ? `Take ${elevatorName} to ${floorLabel}`
+      : `${elevatorName}를 이용해 ${floorLabel}으로 이동하세요`;
+  }
   return locale === "en"
     ? `Take the elevator to ${floorLabel}`
     : `승강기를 이용해 ${floorLabel}으로 이동하세요`;
+}
+
+/** GPS 추적 중 단계별 음성 — 거리 예고 + 승강기 전체 문장 */
+export function navStepSpeechText(
+  locale: AppLocale,
+  stepText: string,
+  distanceM: number,
+  distanceLabel: string,
+  maneuver: ManeuverKind,
+): string {
+  if (maneuver === "arrive") return arriveMessage(locale);
+
+  const withDistance =
+    distanceM > 12
+      ? locale === "en"
+        ? `In ${distanceLabel}, ${stepText}`
+        : `${distanceLabel} 앞, ${stepText}`
+      : stepText;
+
+  if (maneuver === "elevator" || maneuver === "straight") {
+    return withDistance;
+  }
+
+  const turn = maneuverLabel(maneuver, locale);
+  return distanceM > 12
+    ? locale === "en"
+      ? `In ${distanceLabel}, ${turn}`
+      : `${distanceLabel} 앞 ${turn}`
+    : locale === "en"
+      ? `${turn} now`
+      : `지금 ${turn}`;
 }
 
 /** 경사로·계단 등 연속 구간 — 회전 대신 한 줄 안내 */
@@ -99,7 +139,7 @@ export function featureFollowText(
   return null;
 }
 
-/** GPS 추적 중 음성 안내 문장 */
+/** GPS 추적 중 음성 안내 문장 (회전 전용 — navStepSpeechText 권장) */
 export function navSpeechText(
   locale: AppLocale,
   distanceM: number,
@@ -107,9 +147,6 @@ export function navSpeechText(
   maneuver: ManeuverKind,
 ): string {
   if (maneuver === "arrive") return arriveMessage(locale);
-  if (maneuver === "elevator") {
-    return locale === "en" ? "Take the elevator" : "승강기를 이용하세요";
-  }
   const turn = maneuverLabel(maneuver, locale);
   return locale === "en" ? `In ${distanceLabel}, ${turn}` : `${distanceLabel} 앞 ${turn}`;
 }

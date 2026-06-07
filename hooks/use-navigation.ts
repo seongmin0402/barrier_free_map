@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppSettings } from "@/components/app-settings-provider";
 import type { BarrierBuilding } from "@/lib/building-types";
-import { arriveMessage, navSpeechText, offRouteRerouteSpeech } from "@/lib/i18n/navigation";
+import { arriveMessage, navStepSpeechText, offRouteRerouteSpeech } from "@/lib/i18n/navigation";
 import { getUi } from "@/lib/i18n/ui";
 import type { LatLng } from "@/lib/routing/geo";
 import { formatDistance, haversineMeters, bearingDeg } from "@/lib/routing/geo";
@@ -15,6 +15,7 @@ import {
 import { parseElevators, type ElevatorRecord } from "@/lib/routing/elevators";
 import { computeRoute } from "@/lib/routing/route";
 import { computeProgress } from "@/lib/routing/progress";
+import { createGpsSmoother } from "@/lib/routing/gps-smooth";
 import {
   headingAlongRoute,
   resolveNavigationHeading,
@@ -64,6 +65,12 @@ export function useNavigation(buildings: BarrierBuilding[]) {
 
   const watchIdRef = useRef<number | null>(null);
   const lastSpokenStepRef = useRef<number>(-1);
+  /** 단계별 거리 예고 음성 (120m → 60m) */
+  const speechBandRef = useRef<{ stepIndex: number; band: number }>({
+    stepIndex: -1,
+    band: Infinity,
+  });
+  const gpsSmootherRef = useRef(createGpsSmoother());
   const navigationStartedAtRef = useRef<number>(0);
   const firstGpsFixRef = useRef<LatLng | null>(null);
   /** 출발 안내 직후 GPS 단계 안내 음성과 겹치지 않도록 */
@@ -275,6 +282,8 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     setRouteHeading(null);
     prevGpsRef.current = null;
     lastGpsHeadingRef.current = null;
+    gpsSmootherRef.current.reset();
+    speechBandRef.current = { stepIndex: -1, band: Infinity };
     setRemaining(null);
     setDistanceToNext(null);
     navigationStartedAtRef.current = 0;
@@ -298,6 +307,8 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     setUserHeading(null);
     prevGpsRef.current = null;
     lastGpsHeadingRef.current = null;
+    gpsSmootherRef.current.reset();
+    speechBandRef.current = { stepIndex: -1, band: Infinity };
     navMotionRef.current = {
       gpsHeading: null,
       speedMps: null,
@@ -334,7 +345,8 @@ export function useNavigation(buildings: BarrierBuilding[]) {
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
-        const here = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        const raw = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        const here = gpsSmootherRef.current.filter(raw, pos.coords.accuracy);
         if (!firstGpsFixRef.current) firstGpsFixRef.current = here;
 
         const prev = prevGpsRef.current;
@@ -438,21 +450,36 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     if (!step) return;
 
     const speechAllowed = Date.now() >= navSpeechBlockedUntilRef.current;
+    const d = progress.distanceToNext;
 
-    if (
-      speechAllowed &&
-      progress.stepIndex !== lastSpokenStepRef.current &&
-      step.maneuver !== "arrive" &&
-      step.maneuver !== "depart"
-    ) {
-      lastSpokenStepRef.current = progress.stepIndex;
-      const distLabel = formatDistance(progress.distanceToNext, navLocale);
-      getSpeechGuide().speak(
-        step.maneuver === "elevator" || step.maneuver === "straight"
-          ? step.text
-          : navSpeechText(navLocale, progress.distanceToNext, distLabel, step.maneuver),
-        { locale: navLocale },
-      );
+    if (speechAllowed && step.maneuver !== "arrive" && step.maneuver !== "depart") {
+      const speakStep = (distanceM: number) => {
+        getSpeechGuide().speak(
+          navStepSpeechText(
+            navLocale,
+            step.text,
+            distanceM,
+            formatDistance(distanceM, navLocale),
+            step.maneuver,
+          ),
+          { locale: navLocale },
+        );
+      };
+
+      if (progress.stepIndex !== lastSpokenStepRef.current) {
+        lastSpokenStepRef.current = progress.stepIndex;
+        speechBandRef.current = { stepIndex: progress.stepIndex, band: d };
+        speakStep(d);
+      } else if (speechBandRef.current.stepIndex === progress.stepIndex) {
+        const reminders = step.maneuver === "elevator" ? [85, 35] : [70];
+        for (const band of reminders) {
+          if (d <= band && speechBandRef.current.band > band + 10) {
+            speechBandRef.current.band = band;
+            speakStep(d);
+            break;
+          }
+        }
+      }
     }
 
     if (arrived) {

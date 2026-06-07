@@ -7,6 +7,7 @@ import {
   type LatLng,
 } from "./geo";
 import { nearestNode } from "./graph";
+import { simplifyForGuidance } from "./polyline-simplify";
 import type { AppLocale } from "@/lib/app-settings";
 import { formatFloorLabel, type ElevatorRecord } from "./elevators";
 import {
@@ -437,7 +438,10 @@ function buildElevatorStepsAtCoord(
     const elevator = graph.elevatorByNodeId.get(nodePath[i]);
     const targetFloor = inferElevatorTargetFloor(graph, nodePath, i, elevator);
     const floorLabel = formatFloorLabel(targetFloor, locale);
-    out.set(coordOffset + i, elevatorTransferText(floorLabel, locale));
+    out.set(
+      coordOffset + i,
+      elevatorTransferText(floorLabel, locale, elevator?.name),
+    );
   }
   return out;
 }
@@ -449,8 +453,8 @@ function hazardFor(type: WalkwayType, locale: AppLocale): string | null {
 function maneuverFromDelta(delta: number): ManeuverKind {
   const a = Math.abs(delta);
   if (a >= 150) return "uturn";
-  if (a < 22) return "straight";
-  if (a < 60) return delta > 0 ? "slight-right" : "slight-left";
+  if (a < 32) return "straight";
+  if (a < 70) return delta > 0 ? "slight-right" : "slight-left";
   return delta > 0 ? "right" : "left";
 }
 
@@ -518,6 +522,60 @@ function consolidateFeatureSteps(steps: RouteStep[], locale: AppLocale): RouteSt
       prev.maneuver = "straight";
       prev.edgeType = featureType;
       prev.hazard = null;
+      formatStepText(prev, locale);
+      continue;
+    }
+
+    out.push(step);
+  }
+
+  return out;
+}
+
+/** 직전 직진이 짧을 때(≤22m) 사소한 회전 안내 생략 */
+function consolidateMicroTurns(steps: RouteStep[], locale: AppLocale): RouteStep[] {
+  const out: RouteStep[] = [];
+
+  for (const step of steps) {
+    const prev = out[out.length - 1];
+    if (
+      prev &&
+      isTurnManeuver(step.maneuver) &&
+      (prev.maneuver === "depart" || prev.maneuver === "straight") &&
+      prev.distance <= 22 &&
+      step.maneuver !== "uturn"
+    ) {
+      prev.distance += step.distance;
+      prev.at = step.at;
+      formatStepText(prev, locale);
+      continue;
+    }
+    out.push(step);
+  }
+
+  return out;
+}
+
+/** 연속 직진·출발 단계 병합 */
+function consolidateStraightSteps(steps: RouteStep[], locale: AppLocale): RouteStep[] {
+  const out: RouteStep[] = [];
+
+  for (const step of steps) {
+    const prev = out[out.length - 1];
+    const mergeable =
+      prev &&
+      step.maneuver === "straight" &&
+      (prev.maneuver === "depart" || prev.maneuver === "straight") &&
+      prev.maneuver !== "elevator" &&
+      step.maneuver !== "elevator";
+
+    if (mergeable) {
+      prev.distance += step.distance;
+      prev.at = step.at;
+      if (step.hazard && !prev.hazard) prev.hazard = step.hazard;
+      if (step.edgeType && step.edgeType !== "path" && prev.edgeType === "path") {
+        prev.edgeType = step.edgeType;
+      }
       formatStepText(prev, locale);
       continue;
     }
@@ -636,7 +694,7 @@ function buildSteps(
     formatStepText(step, locale);
   }
 
-  return consolidateFeatureSteps(steps, locale);
+  return consolidateStraightSteps(consolidateMicroTurns(consolidateFeatureSteps(steps, locale), locale), locale);
 }
 
 function nodePathToRoute(
@@ -682,7 +740,8 @@ function nodePathToRoute(
   }
 
   const elevatorTextAtCoord = buildElevatorStepsAtCoord(graph, nodePath, coordOffset, locale);
-  const steps = buildSteps(coords, fullSegs, locale, elevatorTextAtCoord);
+  const guide = simplifyForGuidance(coords, fullSegs, elevatorTextAtCoord, 14);
+  const steps = buildSteps(guide.coords, guide.segs, locale, guide.elevatorText);
   const segmentTypes = fullSegs.map((s) => s.type);
   const hasStairs = segmentTypes.some((s) => s === "stairs");
   const hasCrosswalk = segmentTypes.some((s) => s === "crosswalk");
