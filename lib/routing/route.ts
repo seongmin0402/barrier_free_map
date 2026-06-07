@@ -69,7 +69,7 @@ const NO_ELEVATOR_PENALTY_M = 130;
 /** 최단 경로에 계단이 많을 때 승강기 미사용 추가 패널티 */
 const NO_ELEVATOR_STAIRS_THRESHOLD_M = 18;
 /** 기준(최단) 경로 선형에서 승강기까지 허용 거리 — “길 위” 승강기 */
-const ELEVATOR_ON_CORRIDOR_M = 48;
+const ELEVATOR_ON_CORRIDOR_M = 55;
 /** 경로에 승강기가 2곳 이상이면 불필요한 우회로 간주 — 추가 패널티 */
 const EXTRA_ELEVATOR_STOP_PENALTY_M = 130;
 
@@ -178,6 +178,33 @@ function dijkstra(
 
 function pathUsesElevator(graph: RoutingGraph, nodePath: string[]): boolean {
   return elevatorsUsedOnPath(graph, nodePath).length > 0;
+}
+
+/** 경로 정점으로 승강기 허브를 지나가는지 (도보로 스쳐 지나가는 경우 포함) */
+function pathVisitsElevatorHub(graph: RoutingGraph, nodePath: string[]): boolean {
+  return elevatorIdsOnPath(graph, nodePath).length > 0;
+}
+
+function pathUsesCorridorElevator(
+  graph: RoutingGraph,
+  nodePath: string[],
+  corridorElevators: Set<string>,
+): boolean {
+  if (!corridorElevators.size) return false;
+  for (const id of elevatorIdsOnPath(graph, nodePath)) {
+    if (corridorElevators.has(id)) return true;
+  }
+  for (const id of elevatorsUsedOnPath(graph, nodePath)) {
+    if (corridorElevators.has(id)) return true;
+  }
+  return false;
+}
+
+/** 안내 문구·지도 표시용 — 허브 경유도 승강기 구간으로 안내 */
+function elevatorsForGuidance(graph: RoutingGraph, nodePath: string[]): string[] {
+  const out = new Set(elevatorsUsedOnPath(graph, nodePath));
+  for (const id of elevatorIdsOnPath(graph, nodePath)) out.add(id);
+  return [...out];
 }
 
 function pathPhysicalDistance(graph: RoutingGraph, nodePath: string[]): number {
@@ -317,7 +344,7 @@ function pathNearBackwardElevator(
   return false;
 }
 
-/** 최단 경로 인근 승강기를 실제로 이용하고, 우회가 작을 때 */
+/** 최단 경로 인근 승강기 허브를 경유하고, 우회가 작을 때 */
 function isComfortElevatorPath(
   graph: RoutingGraph,
   nodePath: string[],
@@ -326,14 +353,14 @@ function isComfortElevatorPath(
   endNode: LatLng,
   corridorElevators: Set<string>,
 ): boolean {
-  if (!pathUsesElevator(graph, nodePath)) return false;
+  if (!pathUsesCorridorElevator(graph, nodePath, corridorElevators)) return false;
   if (pathNearBackwardElevator(graph, nodePath, startNode, endNode)) return false;
 
   const dist = pathPhysicalDistance(graph, nodePath);
   if (!withinElevatorComfortBudget(dist, shortestDist)) return false;
 
-  const used = elevatorsUsedOnPath(graph, nodePath);
-  return used.some((id) => {
+  const hubs = [...elevatorIdsOnPath(graph, nodePath), ...elevatorsUsedOnPath(graph, nodePath)];
+  return hubs.some((id) => {
     if (!corridorElevators.has(id)) return false;
     const n = graph.nodes.get(id)!;
     return progressAlongRoute(n, startNode, endNode) >= 0.08;
@@ -352,6 +379,7 @@ function scorePathCandidate(
   const dist = pathPhysicalDistance(graph, nodePath);
   const stairM = pathStairMeters(graph, nodePath);
   const usesElevator = pathUsesElevator(graph, nodePath);
+  const visitsHub = pathVisitsElevatorHub(graph, nodePath);
   const startNode = graph.nodes.get(startId)!;
   const endNode = graph.nodes.get(endId)!;
   const comfortElevator = isComfortElevatorPath(
@@ -365,9 +393,10 @@ function scorePathCandidate(
 
   let score = dist;
   score += stairM * 12;
-  if (usesElevator) {
+  if (usesElevator || visitsHub) {
     score -= ELEVATOR_SCORE_BONUS_M;
     if (comfortElevator) score -= ELEVATOR_COMFORT_BONUS_M;
+    if (visitsHub && !usesElevator) score -= 70;
   } else if (corridorElevators.size > 0) {
     score += NO_ELEVATOR_PENALTY_M;
     if (referenceStairM >= NO_ELEVATOR_STAIRS_THRESHOLD_M) score += 45;
@@ -507,7 +536,7 @@ function buildElevatorStepsAtCoord(
   coordOffset: number,
   locale: AppLocale,
 ): Map<number, string> {
-  const usedElevators = new Set(elevatorsUsedOnPath(graph, nodePath));
+  const usedElevators = new Set(elevatorsForGuidance(graph, nodePath));
   const out = new Map<number, string>();
   for (let i = 0; i < nodePath.length; i++) {
     if (!usedElevators.has(nodePath[i])) continue;
@@ -1091,8 +1120,8 @@ function pickNodePath(
   const referenceStairM = referencePath ? pathStairMeters(graph, referencePath) : 0;
 
   const elevatorCandidates = candidates.filter((path) => {
-    if (!pathUsesElevator(graph, path)) return false;
-    for (const evId of elevatorsUsedOnPath(graph, path)) {
+    if (!pathVisitsElevatorHub(graph, path) && !pathUsesElevator(graph, path)) return false;
+    for (const evId of elevatorIdsOnPath(graph, path)) {
       const n = graph.nodes.get(evId)!;
       if (progressAlongRoute(n, startNode, endNode) < 0.05) return false;
     }
@@ -1101,10 +1130,56 @@ function pickNodePath(
     if (!withinElevatorExtendedBudget(dist, shortestDist)) return false;
     if (!withinElevatorComfortBudget(dist, shortestDist)) {
       const stairSave = referenceStairM - pathStairMeters(graph, path);
-      if (stairSave < 15) return false;
+      if (stairSave < 12) return false;
     }
     return true;
   });
+
+  /** 최단 경로 근처 승강기가 있으면 해당 허브를 경유하는 경로 우선 */
+  if (corridorElevators.size > 0) {
+    const corridorHubPaths = candidates.filter((path) => {
+      if (!pathUsesCorridorElevator(graph, path, corridorElevators)) return false;
+      if (pathNearBackwardElevator(graph, path, startNode, endNode)) return false;
+      const dist = pathPhysicalDistance(graph, path);
+      if (!withinElevatorComfortBudget(dist, shortestDist)) {
+        if (!withinElevatorExtendedBudget(dist, shortestDist)) return false;
+        if (referenceStairM < 8 && pathStairMeters(graph, path) >= referenceStairM) return false;
+      }
+      return true;
+    });
+
+    if (corridorHubPaths.length > 0) {
+      let bestHub = corridorHubPaths[0];
+      let bestHubScore = scorePathCandidate(
+        graph,
+        bestHub,
+        shortestDist,
+        startId,
+        endId,
+        corridorElevators,
+        referenceStairM,
+      );
+      for (let i = 1; i < corridorHubPaths.length; i++) {
+        const score = scorePathCandidate(
+          graph,
+          corridorHubPaths[i],
+          shortestDist,
+          startId,
+          endId,
+          corridorElevators,
+          referenceStairM,
+        );
+        if (score < bestHubScore) {
+          bestHub = corridorHubPaths[i];
+          bestHubScore = score;
+        }
+      }
+      return {
+        nodePath: bestHub,
+        usesElevator: pathUsesElevator(graph, bestHub) || pathVisitsElevatorHub(graph, bestHub),
+      };
+    }
+  }
 
   const comfortElevatorPaths = elevatorCandidates.filter((path) =>
     isComfortElevatorPath(
@@ -1215,7 +1290,7 @@ function pickNodePath(
 
   return {
     nodePath: best,
-    usesElevator: pathUsesElevator(graph, best),
+    usesElevator: pathUsesElevator(graph, best) || pathVisitsElevatorHub(graph, best),
   };
 }
 
