@@ -34,25 +34,27 @@ type RouteWeightMode = "shortest" | "elevator";
 export function edgeWeight(type: WalkwayType, mode: RouteWeightMode = "shortest"): number {
   switch (type) {
     case "stairs":
-      return mode === "elevator" ? 5.5 : 2.4;
+      return mode === "elevator" ? 6.5 : 2.6;
     case "elevator":
-      return 0.3;
+      return 0.22;
     case "ramp":
-      return 1.05;
+      return mode === "elevator" ? 1.02 : 1.05;
     case "crosswalk":
       return 1.1;
     case "indoor":
-      return mode === "elevator" ? 0.88 : 1;
+      return mode === "elevator" ? 0.82 : 1;
     default:
-      return 1;
+      return mode === "elevator" ? 0.95 : 1;
   }
 }
 
-/** 승강기 우선 — 절대 우회(m) 이내면 무조건 승강기 경로 */
-const ELEVATOR_DETOUR_CLOSE_M = 85;
-/** 그 외 허용 우회 (비율 + 절대 m) */
-const ELEVATOR_DETOUR_RATIO = 1.28;
-const ELEVATOR_DETOUR_EXTRA_M = 50;
+/** 승강기 우선 (유형별 가중치 도입 전 임시 설정) */
+const ELEVATOR_DETOUR_CLOSE_M = 200;
+const ELEVATOR_DETOUR_RATIO = 1.5;
+const ELEVATOR_DETOUR_EXTRA_M = 100;
+/** 승강기 경로에 부여하는 가상 단축 — 거리가 조금 길어도 승강기 경로 선호 */
+const ELEVATOR_SCORE_BONUS_M = 160;
+const NO_ELEVATOR_PENALTY_M = 250;
 
 interface SegmentInfo {
   type: WalkwayType;
@@ -72,7 +74,11 @@ function edgeCost(
 ): number {
   let cost = edge.distance * edgeWeight(edge.type, mode);
   if (mode === "elevator" && (elevatorNodeIds.has(fromId) || elevatorNodeIds.has(toId))) {
-    cost *= 0.75;
+    cost *= 0.65;
+  }
+  // shortest 탐색에서도 승강기 허브 인근은 약간 유리하게 (경유 유도)
+  if (mode === "shortest" && (elevatorNodeIds.has(fromId) || elevatorNodeIds.has(toId))) {
+    cost *= 0.88;
   }
   return cost;
 }
@@ -146,10 +152,85 @@ function pathPhysicalDistance(graph: RoutingGraph, nodePath: string[]): number {
 }
 
 function pathHasStairs(graph: RoutingGraph, nodePath: string[]): boolean {
+  return pathStairMeters(graph, nodePath) > 0;
+}
+
+function pathStairMeters(graph: RoutingGraph, nodePath: string[]): number {
+  let total = 0;
   for (let i = 0; i < nodePath.length - 1; i++) {
-    if (edgeTypeBetween(graph, nodePath[i], nodePath[i + 1]) === "stairs") return true;
+    if (edgeTypeBetween(graph, nodePath[i], nodePath[i + 1]) !== "stairs") continue;
+    const a = graph.nodes.get(nodePath[i]);
+    const b = graph.nodes.get(nodePath[i + 1]);
+    if (!a || !b) continue;
+    total += haversineMeters(a, b);
   }
-  return false;
+  return total;
+}
+
+function mergeNodePaths(first: string[], second: string[]): string[] {
+  if (first[first.length - 1] === second[0]) return [...first, ...second.slice(1)];
+  return [...first, ...second];
+}
+
+function pathSignature(nodePath: string[]): string {
+  return nodePath.join("\0");
+}
+
+function withinElevatorDetourBudget(dist: number, shortestDist: number): boolean {
+  const detour = dist - shortestDist;
+  if (detour <= ELEVATOR_DETOUR_CLOSE_M) return true;
+  return dist <= shortestDist * ELEVATOR_DETOUR_RATIO + ELEVATOR_DETOUR_EXTRA_M;
+}
+
+/** 후보 경로 점수 (낮을수록 좋음) — 승강기 우선 · 계단 최소 */
+function scorePathCandidate(
+  graph: RoutingGraph,
+  nodePath: string[],
+  shortestDist: number,
+): number {
+  const dist = pathPhysicalDistance(graph, nodePath);
+  const stairM = pathStairMeters(graph, nodePath);
+  const usesElevator = pathUsesElevator(nodePath, graph.elevatorNodeIds);
+  let score = dist;
+  score += stairM * 12;
+  if (usesElevator) {
+    score -= ELEVATOR_SCORE_BONUS_M;
+  } else {
+    score += NO_ELEVATOR_PENALTY_M;
+  }
+  const detour = dist - shortestDist;
+  if (detour > ELEVATOR_DETOUR_CLOSE_M) {
+    score += (detour - ELEVATOR_DETOUR_CLOSE_M) * 0.45;
+  }
+  return score;
+}
+
+function collectPathCandidates(
+  graph: RoutingGraph,
+  startId: string,
+  endId: string,
+): string[] {
+  const seen = new Set<string>();
+  const candidates: string[] = [];
+
+  const add = (path: string[] | null) => {
+    if (!path?.length) return;
+    const sig = pathSignature(path);
+    if (seen.has(sig)) return;
+    seen.add(sig);
+    candidates.push(path);
+  };
+
+  add(dijkstra(graph, startId, endId, { mode: "shortest" }));
+  add(dijkstra(graph, startId, endId, { mode: "elevator" }));
+
+  for (const evId of graph.elevatorNodeIds) {
+    const legTo = dijkstra(graph, startId, evId, { mode: "elevator" });
+    const legFrom = dijkstra(graph, evId, endId, { mode: "elevator" });
+    if (legTo && legFrom) add(mergeNodePaths(legTo, legFrom));
+  }
+
+  return candidates;
 }
 
 function edgeTypeBetween(graph: RoutingGraph, from: string, to: string): WalkwayType {
@@ -237,7 +318,10 @@ function isTurnManeuver(m: ManeuverKind): boolean {
 }
 
 function formatStepText(step: RouteStep, locale: AppLocale): void {
-  if (step.maneuver === "elevator") return;
+  if (step.maneuver === "elevator") {
+    step.hazard = null;
+    return;
+  }
 
   const dist = formatDistance(step.distance, locale);
   const featureType =
@@ -466,71 +550,56 @@ function nodePathToRoute(
   return { coords, distance, steps, hasStairs, hasCrosswalk, hasElevator, segmentTypes };
 }
 
-function shouldPreferElevatorRoute(
-  graph: RoutingGraph,
-  shortest: string[],
-  elevatorBiased: string[],
-  shortestDist: number,
-  elevatorDist: number,
-  elevatorUses: boolean,
-): boolean {
-  if (!elevatorUses) return false;
-
-  const detourM = elevatorDist - shortestDist;
-
-  // 우회가 가까우면(≈85m 이내) 승강기 경로 우선
-  if (detourM <= ELEVATOR_DETOUR_CLOSE_M) return true;
-
-  // 최단 경로에 계단이 있고 승강기 경로에는 없으면 우선
-  if (pathHasStairs(graph, shortest) && !pathHasStairs(graph, elevatorBiased)) return true;
-
-  // 그 외 — 허용 우회 범위 안이면 승강기
-  return elevatorDist <= shortestDist * ELEVATOR_DETOUR_RATIO + ELEVATOR_DETOUR_EXTRA_M;
-}
-
 function pickNodePath(
   graph: RoutingGraph,
   startId: string,
   endId: string,
 ): { nodePath: string[]; usesElevator: boolean } | null {
-  const shortest = dijkstra(graph, startId, endId, { mode: "shortest" });
-  if (!shortest) return null;
+  const candidates = collectPathCandidates(graph, startId, endId);
+  if (!candidates.length) return null;
+
+  let shortest = candidates[0];
+  let shortestDist = pathPhysicalDistance(graph, shortest);
+  for (const path of candidates) {
+    const d = pathPhysicalDistance(graph, path);
+    if (d < shortestDist) {
+      shortest = path;
+      shortestDist = d;
+    }
+  }
 
   if (!graph.elevatorNodeIds.size) {
     return { nodePath: shortest, usesElevator: false };
   }
 
-  const elevatorBiased = dijkstra(graph, startId, endId, { mode: "elevator" });
-  if (!elevatorBiased) {
-    return { nodePath: shortest, usesElevator: pathUsesElevator(shortest, graph.elevatorNodeIds) };
-  }
+  const elevatorCandidates = candidates.filter((path) => {
+    if (!pathUsesElevator(path, graph.elevatorNodeIds)) return false;
+    return withinElevatorDetourBudget(pathPhysicalDistance(graph, path), shortestDist);
+  });
 
-  const shortestDist = pathPhysicalDistance(graph, shortest);
-  const elevatorDist = pathPhysicalDistance(graph, elevatorBiased);
-  const elevatorUses = pathUsesElevator(elevatorBiased, graph.elevatorNodeIds);
+  // 승강기 경로가 가능하면 승강기 없는 경로는 후보에서 제외 (임시 — 추후 유형별 가중치로 대체)
+  const pool = elevatorCandidates.length > 0 ? elevatorCandidates : candidates;
 
-  if (
-    shouldPreferElevatorRoute(
-      graph,
-      shortest,
-      elevatorBiased,
-      shortestDist,
-      elevatorDist,
-      elevatorUses,
-    )
-  ) {
-    return { nodePath: elevatorBiased, usesElevator: true };
+  let best = pool[0];
+  let bestScore = scorePathCandidate(graph, best, shortestDist);
+  for (let i = 1; i < pool.length; i++) {
+    const score = scorePathCandidate(graph, pool[i], shortestDist);
+    if (score < bestScore) {
+      best = pool[i];
+      bestScore = score;
+    }
   }
 
   return {
-    nodePath: shortest,
-    usesElevator: pathUsesElevator(shortest, graph.elevatorNodeIds),
+    nodePath: best,
+    usesElevator: pathUsesElevator(best, graph.elevatorNodeIds),
   };
 }
 
 /**
  * 출발/도착 좌표로 보행로 그래프 기반 경로 계산.
- * 승강기 경로가 최단보다 ~85m 이내로만 길면 우선하며, 계단 회피·가중치로도 유도한다.
+ * 승강기 경유가 가능하면 우선하며, 각 승강기별 경로를 비교해 선택한다.
+ * (유형별 가중치는 추후 별도 적용)
  */
 export function computeRoute(
   graph: RoutingGraph,
