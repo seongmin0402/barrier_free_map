@@ -8,33 +8,18 @@ import { CampusMap } from "@/components/barrier-free/campus-map";
 import { RoutePanel } from "@/components/barrier-free/route-panel";
 import { SettingsPanel } from "@/components/barrier-free/settings-panel";
 import { useNavigation } from "@/hooks/use-navigation";
+import { useCampusBuildings } from "@/hooks/use-campus-buildings";
 import { useUi } from "@/hooks/use-ui";
 import { arriveMessage, maneuverLabel, remainingDistanceLabel } from "@/lib/i18n/navigation";
 import { formatDistance } from "@/lib/routing/geo";
-import type { BarrierBuilding } from "@/lib/building-types";
 
 export default function RoutePage() {
   const router = useRouter();
   const { locale, settings, updateSettings } = useAppSettings();
   const ui = useUi();
-  const [buildings, setBuildings] = useState<BarrierBuilding[]>([]);
+  const { buildings } = useCampusBuildings(ui.page.loadError);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [sheetVh, setSheetVh] = useState(86);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/data/buildings.json")
-      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-      .then((data: BarrierBuilding[]) => {
-        if (!cancelled) setBuildings(Array.isArray(data) ? data : []);
-      })
-      .catch(() => {
-        if (!cancelled) setBuildings([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const nav = useNavigation(buildings);
   const setNavOpen = nav.setOpen;

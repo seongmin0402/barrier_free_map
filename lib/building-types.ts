@@ -1,4 +1,4 @@
-export type AccessibilityLevel = "A" | "B" | "C";
+export type AccessibilityLevel = "A" | "B" | "C" | "unknown";
 
 export interface FloorPhotoGroupClient {
   floor: string;

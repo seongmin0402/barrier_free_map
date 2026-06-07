@@ -10,7 +10,7 @@ import { SettingsPanel } from "@/components/barrier-free/settings-panel";
 import { MobileSidebarToggle } from "@/components/barrier-free/mobile-sidebar-toggle";
 import { useAppSettings } from "@/components/app-settings-provider";
 import { useUi } from "@/hooks/use-ui";
-import type { BarrierBuilding } from "@/lib/building-types";
+import { useCampusBuildings } from "@/hooks/use-campus-buildings";
 
 const facilitySearchTerms: Record<string, string[]> = {
   elevator: ["elevator", "엘리베이터", "승강기"],
@@ -28,32 +28,7 @@ export default function BarrierFreeMapPage() {
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [buildings, setBuildings] = useState<BarrierBuilding[]>([]);
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/data/buildings.json")
-      .then((r) => {
-        if (!r.ok) throw new Error(`${r.status}`);
-        return r.json();
-      })
-      .then((data: BarrierBuilding[]) => {
-        if (!cancelled) {
-          setBuildings(Array.isArray(data) ? data : []);
-          setLoadError(null);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setBuildings([]);
-          setLoadError(ui.page.loadError);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { buildings, loadError } = useCampusBuildings(ui.page.loadError);
 
   const filteredBuildings = useMemo(() => {
     return buildings.filter((building) => {

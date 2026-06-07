@@ -35,6 +35,7 @@ import { useUi } from "@/hooks/use-ui";
 import { remainingDistanceLabel } from "@/lib/i18n/navigation";
 import { formatDistance } from "@/lib/routing/geo";
 import { ROUTE_LEGEND } from "@/lib/routing/style";
+import { isUnsurveyedBuilding } from "@/lib/merge-campus-buildings";
 import type { ComputedRoute, ManeuverKind, RoutePoint, RouteStep } from "@/lib/routing/types";
 
 type WhichPoint = "origin" | "destination";
@@ -136,7 +137,7 @@ function PointField({
     const list = q
       ? buildings.filter((b) => b.name.toLowerCase().includes(q))
       : buildings;
-    return list.slice(0, 30);
+    return list.slice(0, 50);
   }, [buildings, query]);
 
   const dotColor = which === "origin" ? "bg-green-600" : "bg-red-600";
@@ -190,14 +191,19 @@ function PointField({
                 <button
                   key={b.id}
                   type="button"
-                  className="block w-full truncate px-2.5 py-1.5 text-left text-sm hover:bg-accent"
+                  className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm hover:bg-accent"
                   onClick={() => {
                     onSelectBuilding(b);
                     setQuery("");
                     setOpenList(false);
                   }}
                 >
-                  {b.name}
+                  <span className="min-w-0 flex-1 truncate">{b.name}</span>
+                  {isUnsurveyedBuilding(b) ? (
+                    <span className="shrink-0 rounded bg-[#1a1a1a] px-1.5 py-0.5 text-[10px] font-medium text-white">
+                      {ui.gradeUnsurveyed}
+                    </span>
+                  ) : null}
                 </button>
               ))}
             </div>

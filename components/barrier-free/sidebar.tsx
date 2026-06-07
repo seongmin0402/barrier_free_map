@@ -6,11 +6,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useUi } from "@/hooks/use-ui";
+import type { AccessibilityLevel } from "@/lib/building-types";
 
 interface Building {
   id: string;
   name: string;
-  accessibilityLevel: "A" | "B" | "C";
+  accessibilityLevel: AccessibilityLevel;
   facilities: string[];
 }
 
@@ -24,10 +25,11 @@ interface SidebarProps {
   onRequestClose: () => void;
 }
 
-const accessibilityColors = {
+const accessibilityColors: Record<AccessibilityLevel, string> = {
   A: "bg-[oklch(0.65_0.18_160)] text-white",
   B: "bg-[oklch(0.70_0.18_85)] text-foreground",
   C: "bg-[oklch(0.55_0.22_25)] text-white",
+  unknown: "bg-[#1a1a1a] text-white",
 };
 
 export function Sidebar({
@@ -121,11 +123,15 @@ export function Sidebar({
                       ) : null}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {ui.sidebar.facilities(building.facilities.filter((f) => f !== "charging").length)}
+                      {building.accessibilityLevel === "unknown"
+                        ? ui.gradeUnsurveyed
+                        : ui.sidebar.facilities(building.facilities.filter((f) => f !== "charging").length)}
                     </p>
                   </div>
                   <Badge className={cn("shrink-0", accessibilityColors[building.accessibilityLevel])}>
-                    {building.accessibilityLevel}
+                    {building.accessibilityLevel === "unknown"
+                      ? ui.gradeUnsurveyed
+                      : building.accessibilityLevel}
                   </Badge>
                   <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                 </button>
@@ -148,6 +154,10 @@ export function Sidebar({
             <div className="flex items-center gap-1.5">
               <span className="h-3 w-3 rounded-full bg-[oklch(0.55_0.22_25)]" />
               <span className="text-xs text-muted-foreground">{ui.sidebar.gradeC}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="h-3 w-3 rounded-full bg-[#1a1a1a]" />
+              <span className="text-xs text-muted-foreground">{ui.gradeUnsurveyed}</span>
             </div>
           </div>
         </div>

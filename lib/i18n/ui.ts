@@ -99,6 +99,7 @@ export type UiText = {
     floorPhotosHint: string;
     photosCount: (n: number) => string;
     naverMap: string;
+    unsurveyedNotice: string;
     gradeLine: (floor: string, level: string, label: string, desc: string) => string;
     enlargedImage: string;
   };
@@ -290,6 +291,7 @@ const ko: UiText = {
     floorPhotosHint: "사진을 누르면 크게 볼 수 있습니다.",
     photosCount: (n) => `사진 ${n}장`,
     naverMap: "네이버 지도에서 보기 · 길찾기",
+    unsurveyedNotice: "이 건물은 아직 베리어프리 조사가 완료되지 않았습니다. 길 안내는 이용할 수 있으나, 접근성 상세 정보는 제공되지 않습니다.",
     gradeLine: (floor, level, label, desc) => `${floor} · 등급 ${level} ${label} · ${desc}`,
     enlargedImage: "확대 이미지",
   },
@@ -487,6 +489,8 @@ const en: UiText = {
     floorPhotosHint: "Tap a photo to enlarge.",
     photosCount: (n) => `${n} photos`,
     naverMap: "Open in Naver Map · Directions",
+    unsurveyedNotice:
+      "This building has not been surveyed for barrier-free access yet. You can still get directions, but detailed accessibility information is not available.",
     gradeLine: (floor, level, label, desc) => `${floor} · Grade ${level} ${label} · ${desc}`,
     enlargedImage: "Enlarged image",
   },

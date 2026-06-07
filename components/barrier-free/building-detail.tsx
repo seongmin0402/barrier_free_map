@@ -26,6 +26,7 @@ import { useUi } from "@/hooks/use-ui";
 import { sortFloorPhotoGroups, sortFloorPhotoSummary, sortFloorTokens } from "@/lib/floor-sort";
 import type { UiText } from "@/lib/i18n/ui";
 import type { BarrierBuilding } from "@/lib/building-types";
+import { isUnsurveyedBuilding } from "@/lib/merge-campus-buildings";
 
 interface BuildingDetailProps {
   building: BarrierBuilding | null;
@@ -36,6 +37,7 @@ const gradeColors = {
   A: "bg-[#22A557] text-white",
   B: "bg-[#F5A623] text-foreground",
   C: "bg-[#DC3545] text-white",
+  unknown: "bg-[#1a1a1a] text-white",
 } as const;
 
 function FacilityStatusCard({
@@ -143,6 +145,25 @@ function BuildingFullSections({
     floorSummarySorted ||
     floorsWithPhotos.length > 0 ||
     building.thresholdPresent;
+
+  if (isUnsurveyedBuilding(building)) {
+    return (
+      <div className="space-y-4">
+        <p className="rounded-lg border border-dashed border-border bg-muted/30 px-3 py-4 text-sm text-muted-foreground">
+          {ui.building.unsurveyedNotice}
+        </p>
+        <div className="flex gap-2 pt-1">
+          <Button variant="outline" className="flex-1" type="button" onClick={onClose}>
+            {ui.building.close}
+          </Button>
+          <Button className="flex-1 gap-1.5" type="button" onClick={openNaverRoute}>
+            <Navigation className="h-4 w-4" />
+            {ui.building.naverMap}
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -294,7 +315,8 @@ export function BuildingDetail({ building, onClose }: BuildingDetailProps) {
 
   if (!building) return null;
 
-  const grade = ui.grade[building.accessibilityLevel];
+  const unsurveyed = isUnsurveyedBuilding(building);
+  const grade = unsurveyed ? null : ui.grade[building.accessibilityLevel];
 
   return (
     <>
@@ -317,7 +339,7 @@ export function BuildingDetail({ building, onClose }: BuildingDetailProps) {
                 )}
                 aria-hidden
               >
-                {building.accessibilityLevel}
+                {unsurveyed ? "—" : building.accessibilityLevel}
               </div>
               <div className="min-w-0 flex-1">
                 <DialogTitle className="text-base leading-snug sm:text-lg">{building.name}</DialogTitle>
@@ -326,9 +348,13 @@ export function BuildingDetail({ building, onClose }: BuildingDetailProps) {
                     variant="secondary"
                     className={cn("px-1.5 py-0 text-[10px]", gradeColors[building.accessibilityLevel])}
                   >
-                    {building.accessibilityLevel} {grade.label}
+                    {unsurveyed
+                      ? ui.gradeUnsurveyed
+                      : `${building.accessibilityLevel} ${grade?.label ?? ""}`}
                   </Badge>
-                  <span className="text-xs text-muted-foreground">{sortedFloorLabel}</span>
+                  {!unsurveyed ? (
+                    <span className="text-xs text-muted-foreground">{sortedFloorLabel}</span>
+                  ) : null}
                 </div>
               </div>
             </div>
