@@ -95,6 +95,17 @@ export function elevatorTransferText(
     : `승강기를 이용해 ${floorLabel}으로 이동하세요`;
 }
 
+/** 횡단보도 — 회전 안내와 같은 “Xm 앞” 표현 */
+export function crosswalkAheadText(distance: string, locale: AppLocale): string {
+  return locale === "en"
+    ? `In ${distance}, cross the crosswalk`
+    : `${distance} 앞 횡단보도를 건너세요`;
+}
+
+export function crosswalkNowText(locale: AppLocale): string {
+  return locale === "en" ? "Cross the crosswalk" : "횡단보도를 건너세요";
+}
+
 /** GPS 추적 중 단계별 음성 — 거리 예고 + 승강기 전체 문장 */
 export function navStepSpeechText(
   locale: AppLocale,
@@ -104,6 +115,10 @@ export function navStepSpeechText(
   maneuver: ManeuverKind,
 ): string {
   if (maneuver === "arrive") return arriveMessage(locale);
+
+  if (maneuver === "crosswalk") {
+    return distanceM > 12 ? stepText : crosswalkNowText(locale);
+  }
 
   const withDistance =
     distanceM > 12
@@ -144,9 +159,7 @@ export function featureFollowText(
   locale: AppLocale,
 ): string | null {
   if (type === "crosswalk") {
-    return locale === "en"
-      ? `Cross the crosswalk for ${distance}`
-      : `횡단보도를 ${distance} 구간에서 건너세요`;
+    return null;
   }
   if (type === "ramp") {
     return locale === "en"

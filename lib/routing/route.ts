@@ -14,6 +14,8 @@ import {
   aheadTurnText,
   arriveMessage,
   continueStraightPlaceholder,
+  crosswalkAheadText,
+  crosswalkNowText,
   departStraightText,
   elevatorTransferText,
   featureFollowText,
@@ -512,6 +514,15 @@ function formatStepText(step: RouteStep, locale: AppLocale): void {
 
   const dist = formatDistance(step.distance, locale);
 
+  if (step.maneuver === "crosswalk") {
+    step.text =
+      step.distance > 1
+        ? crosswalkAheadText(dist, locale)
+        : crosswalkNowText(locale);
+    step.hazard = null;
+    return;
+  }
+
   if (isGuidanceManeuver(step.maneuver)) {
     const follow = featureFollowText(step.edgeType, dist, locale);
     if (follow) {
@@ -565,7 +576,8 @@ function consolidateFeatureSteps(steps: RouteStep[], locale: AppLocale): RouteSt
       prev &&
       featureType &&
       prevFeature === featureType &&
-      prev.maneuver === step.maneuver
+      prev.maneuver === step.maneuver &&
+      step.maneuver !== "crosswalk"
     ) {
       prev.distance += step.distance;
       prev.at = step.at;
@@ -679,20 +691,36 @@ function buildSteps(
     const featureRun = featureAtSegStart.get(i);
     if (featureRun) {
       const last = steps[steps.length - 1];
-      last.distance += pendingDist;
-      if (pendingHazard && !last.hazard) last.hazard = pendingHazard;
+      const approach = pendingDist;
+      const approachHazard = pendingHazard;
       pendingDist = 0;
       pendingHazard = null;
 
       const maneuver = guidanceManeuverFor(featureRun.type)!;
-      steps.push({
-        text: featureFollowText(featureRun.type, formatDistance(featureRun.distance, locale), locale) ?? "",
-        distance: featureRun.distance,
-        at: coords[featureRun.endSeg],
-        maneuver,
-        edgeType: featureRun.type,
-        hazard: null,
-      });
+
+      if (featureRun.type === "crosswalk") {
+        steps.push({
+          text: crosswalkAheadText(formatDistance(approach, locale), locale),
+          distance: approach,
+          at: coords[featureRun.startSeg],
+          maneuver,
+          edgeType: featureRun.type,
+          hazard: null,
+        });
+      } else {
+        last.distance += approach;
+        if (approachHazard && !last.hazard) last.hazard = approachHazard;
+        steps.push({
+          text:
+            featureFollowText(featureRun.type, formatDistance(featureRun.distance, locale), locale) ??
+            "",
+          distance: featureRun.distance,
+          at: coords[featureRun.endSeg],
+          maneuver,
+          edgeType: featureRun.type,
+          hazard: null,
+        });
+      }
 
       if (featureRun.endSeg >= segs.length) {
         steps.push({
