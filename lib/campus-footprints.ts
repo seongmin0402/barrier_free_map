@@ -54,7 +54,7 @@ export function footprintStrokeOptions(
     strokeWeight: selected ? 3 : 1.5,
     strokeOpacity: selected ? 1 : 0.88,
     fillColor: selected ? FOOTPRINT_FILL_SELECTED : FOOTPRINT_FILL_COLOR,
-    fillOpacity: selected ? 0.88 : 0.72,
+    fillOpacity: selected ? 0.55 : 0.38,
     zIndex: selected ? 220 : 50,
     clickable: true,
   };
