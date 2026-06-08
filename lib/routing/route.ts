@@ -7,6 +7,7 @@ import {
   projectOnSegment,
   type LatLng,
 } from "./geo";
+import { tryFixedRoutePair } from "./fixed-routes";
 import { nearestNode, rankEntrancesForBuilding } from "./graph";
 import { walkPathLengthBetween, walkPolylineLength } from "./polyline-simplify";
 import type { AppLocale } from "@/lib/app-settings";
@@ -1508,7 +1509,11 @@ export function computeRoutePair(
   origin: RoutePoint,
   destination: RoutePoint,
   locale: AppLocale = "ko",
+  elevators: ElevatorRecord[] = [],
 ): RoutePairResult {
+  const fixed = tryFixedRoutePair(graph, entrances, elevators, origin, destination, locale);
+  if (fixed) return fixed;
+
   const fastEndpoints = { from: origin.point, to: destination.point };
   const comfortEndpoints = resolveComfortRouteEndpoints(
     graph,

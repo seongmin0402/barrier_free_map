@@ -224,8 +224,8 @@ export function useNavigation(buildings: BarrierBuilding[]) {
 
   const routePair = useMemo(() => {
     if (!origin || !destination || !graph.nodes.size) return null;
-    return computeRoutePair(graph, entranceList, origin, destination, locale);
-  }, [graph, origin, destination, locale, entranceList]);
+    return computeRoutePair(graph, entranceList, origin, destination, locale, elevators);
+  }, [graph, origin, destination, locale, entranceList, elevators]);
 
   const routeFast = routePair?.fast ?? null;
   const routeComfort = routePair?.comfort ?? null;

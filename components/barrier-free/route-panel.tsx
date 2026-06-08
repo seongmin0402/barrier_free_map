@@ -729,7 +729,7 @@ export function RoutePanel(props: RoutePanelProps) {
           </div>
         )}
 
-        {routeFast && routeComfort && onRouteProfileChange ? (
+        {routeFast && routeComfort && routeFast !== routeComfort && onRouteProfileChange ? (
           <RouteProfilePicker
             fast={routeFast}
             comfort={routeComfort}
