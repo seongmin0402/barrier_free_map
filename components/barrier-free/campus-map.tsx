@@ -1640,34 +1640,21 @@ export function CampusMap({
 
   const overlayTransitionClass =
     "transition-[bottom] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]";
-  const safeBottomMobile = "max(0.375rem,env(safe-area-inset-bottom))";
-  const safeBottomDesktop = "max(0.25rem,env(safe-area-inset-bottom))";
-  const naverClearanceMobile = "1.75rem";
-  const naverClearanceDesktop = "1.125rem";
-  const zoomBlockMobile = "2.25rem";
-  const zoomBlockDesktop = "4.5rem";
-  const auxGap = "0.5rem";
 
-  const exploreZoomOverlayClass = cn(
+  const exploreOverlayBottomClass = cn(
     overlayTransitionClass,
-    `bottom-[calc(${safeBottomMobile}+${naverClearanceMobile})]`,
-    `sm:bottom-[calc(${safeBottomDesktop}+${naverClearanceDesktop})]`,
-  );
-
-  const exploreAuxOverlayClass = cn(
-    overlayTransitionClass,
-    `bottom-[calc(${safeBottomMobile}+${naverClearanceMobile}+${zoomBlockMobile}+${auxGap})]`,
-    `sm:bottom-[calc(${safeBottomDesktop}+${naverClearanceDesktop}+${zoomBlockDesktop}+${auxGap})]`,
+    "bottom-[calc(env(safe-area-inset-bottom,0px)+1.75rem)]",
+    "sm:bottom-[calc(env(safe-area-inset-bottom,0px)+1.125rem)]",
   );
 
   const routeOverlayBottomClass = cn(
     overlayTransitionClass,
     "max-sm:bottom-[calc(var(--route-sheet-vh)*1vh+0.625rem)]",
-    `sm:bottom-[calc(${safeBottomDesktop}+${naverClearanceDesktop})]`,
+    "sm:bottom-[calc(env(safe-area-inset-bottom,0px)+1.125rem)]",
   );
 
   const leftOverlayBottomClass =
-    mapLayout === "route" ? routeOverlayBottomClass : exploreAuxOverlayClass;
+    mapLayout === "route" ? routeOverlayBottomClass : exploreOverlayBottomClass;
 
   const zoomControlButtons = (
     <div className="flex overflow-hidden rounded-lg border border-border bg-card/95 shadow-md backdrop-blur-sm sm:flex-col">
@@ -1798,132 +1785,134 @@ export function CampusMap({
           )}
         </div>
 
-        {/* 우측: 줌(구석) · 경로 · 안내 */}
+        {/* 우측: 줌 · 지도설정 · 경로 · 안내 */}
         {mapLayout === "explore" ? (
           <div
             className={cn(
-              "pointer-events-auto absolute right-2 sm:right-2",
-              exploreZoomOverlayClass,
+              "pointer-events-auto absolute right-2 flex flex-col items-end gap-2 sm:right-3",
+              exploreOverlayBottomClass,
+            )}
+          >
+            {geoHintMessage && (
+              <div className="max-w-[14rem] rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive shadow-md">
+                {geoHintMessage}
+              </div>
+            )}
+            {controlsOpen && (
+              <div className="w-[min(86vw,18rem)] rounded-lg border border-border bg-card/95 p-2 shadow-lg backdrop-blur-sm">
+                <p className="mb-1 px-1 text-[10px] font-medium text-muted-foreground">{ui.map.mapOptions}</p>
+                <div className="mb-2 flex flex-wrap gap-1">
+                  {mapTypeButtons.map((opt) => (
+                    <Button
+                      key={opt.id}
+                      type="button"
+                      size="sm"
+                      variant={mapTypeKey === opt.id ? "default" : "secondary"}
+                      className="h-7 flex-1 text-xs"
+                      disabled={!sdkLoaded}
+                      onClick={() => applyMapType(opt.id)}
+                    >
+                      {opt.label}
+                    </Button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-1">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="h-8 gap-1 text-xs"
+                    onClick={showCampusOverview}
+                    aria-label={ui.map.campusOverview}
+                  >
+                    <Maximize2 className="h-4 w-4" />
+                    {ui.map.campusOverview}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={locationTracking ? "default" : "secondary"}
+                    size="sm"
+                    className="h-8 gap-1 text-xs"
+                    onClick={() => {
+                      if (locationTracking) stopLocationTracking();
+                      else setLocationDialogOpen(true);
+                    }}
+                    disabled={!sdkLoaded}
+                    aria-label={ui.map.myLocation}
+                  >
+                    <Locate className="h-4 w-4" />
+                    {ui.map.myLocation}
+                  </Button>
+                </div>
+              </div>
+            )}
+            <Button
+              type="button"
+              variant={controlsOpen ? "default" : "secondary"}
+              size="icon"
+              onClick={() => setControlsOpen((prev) => !prev)}
+              className="h-9 w-9 shadow-md"
+              aria-label={controlsOpen ? ui.map.mapOptionsClose : ui.map.mapOptionsOpen}
+            >
+              <SlidersHorizontal className="h-4 w-4 sm:h-5 sm:w-5" />
+            </Button>
+            {zoomControlButtons}
+          </div>
+        ) : (
+          <div
+            className={cn(
+              "pointer-events-auto absolute right-3 flex items-end gap-1.5 sm:right-4 sm:flex-col sm:items-end sm:gap-2",
+              routeOverlayBottomClass,
             )}
           >
             {zoomControlButtons}
-          </div>
-        ) : null}
-
-        <div
-          className={cn(
-            "pointer-events-auto absolute flex items-end gap-1.5 sm:right-4 sm:flex-col sm:items-end sm:gap-2",
-            mapLayout === "explore" ? "right-3" : "right-3 sm:right-4",
-            mapLayout === "explore" ? exploreAuxOverlayClass : routeOverlayBottomClass,
-          )}
-        >
-          {mapLayout === "route" ? zoomControlButtons : null}
-          {geoHintMessage && (
-            <div className="max-w-[14rem] rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive shadow-md">
-              {geoHintMessage}
-            </div>
-          )}
-          {controlsOpen && mapLayout !== "route" && (
-            <div className="w-[min(86vw,18rem)] rounded-lg border border-border bg-card/95 p-2 shadow-lg backdrop-blur-sm">
-              <p className="mb-1 px-1 text-[10px] font-medium text-muted-foreground">{ui.map.mapOptions}</p>
-              <div className="mb-2 flex flex-wrap gap-1">
-                {mapTypeButtons.map((opt) => (
-                  <Button
-                    key={opt.id}
-                    type="button"
-                    size="sm"
-                    variant={mapTypeKey === opt.id ? "default" : "secondary"}
-                    className="h-7 flex-1 text-xs"
-                    disabled={!sdkLoaded}
-                    onClick={() => applyMapType(opt.id)}
-                  >
-                    {opt.label}
-                  </Button>
-                ))}
+            {geoHintMessage && (
+              <div className="max-w-[14rem] rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive shadow-md">
+                {geoHintMessage}
               </div>
-              <div className="grid grid-cols-2 gap-1">
+            )}
+            <div className="flex flex-row items-center gap-1.5 sm:flex-col sm:items-end sm:gap-2">
+              {navigationMode && (
+                <Button
+                  type="button"
+                  variant={followPaused ? "default" : "secondary"}
+                  size="icon"
+                  onClick={handleNavigationLocatePress}
+                  className={cn("h-9 w-9 shadow-md", followPaused && "ring-2 ring-primary/40")}
+                  aria-label={followPaused ? ui.route.resumeFollow : ui.map.myLocationTitle}
+                  title={followPaused ? ui.route.resumeFollow : ui.map.myLocationTitle}
+                >
+                  <Locate className="h-4 w-4 sm:h-5 sm:w-5" />
+                </Button>
+              )}
+              {routeLine && routeLine.length >= 2 && (
                 <Button
                   type="button"
                   variant="secondary"
-                  size="sm"
-                  className="h-8 gap-1 text-xs"
-                  onClick={showCampusOverview}
-                  aria-label={ui.map.campusOverview}
+                  size="icon"
+                  onClick={fitRouteOnMap}
+                  className="h-9 w-9 shadow-md"
+                  aria-label={ui.route.fitRoute}
+                  title={ui.route.fitRoute}
                 >
-                  <Maximize2 className="h-4 w-4" />
-                  {ui.map.campusOverview}
+                  <Route className="h-4 w-4 sm:h-5 sm:w-5" />
                 </Button>
+              )}
+              {directionsHref && directionsLabel ? (
                 <Button
-                  type="button"
-                  variant={locationTracking ? "default" : "secondary"}
-                  size="sm"
-                  className="h-8 gap-1 text-xs"
-                  onClick={() => {
-                    if (locationTracking) stopLocationTracking();
-                    else setLocationDialogOpen(true);
-                  }}
-                  disabled={!sdkLoaded}
-                  aria-label={ui.map.myLocation}
+                  asChild
+                  size="lg"
+                  className="h-11 gap-2 rounded-full px-4 shadow-lg ring-2 ring-primary/25"
                 >
-                  <Locate className="h-4 w-4" />
-                  {ui.map.myLocation}
+                  <Link href={directionsHref}>
+                    <Navigation className="h-4 w-4 shrink-0" />
+                    <span className="text-sm font-semibold">{directionsLabel}</span>
+                  </Link>
                 </Button>
-              </div>
+              ) : null}
             </div>
-          )}
-          <div className="flex flex-row items-center gap-1.5 sm:flex-col sm:items-end sm:gap-2">
-            {navigationMode && (
-              <Button
-                type="button"
-                variant={followPaused ? "default" : "secondary"}
-                size="icon"
-                onClick={handleNavigationLocatePress}
-                className={cn("h-9 w-9 shadow-md", followPaused && "ring-2 ring-primary/40")}
-                aria-label={followPaused ? ui.route.resumeFollow : ui.map.myLocationTitle}
-                title={followPaused ? ui.route.resumeFollow : ui.map.myLocationTitle}
-              >
-                <Locate className="h-4 w-4 sm:h-5 sm:w-5" />
-              </Button>
-            )}
-            {routeLine && routeLine.length >= 2 && (
-              <Button
-                type="button"
-                variant="secondary"
-                size="icon"
-                onClick={fitRouteOnMap}
-                className="h-9 w-9 shadow-md"
-                aria-label={ui.route.fitRoute}
-                title={ui.route.fitRoute}
-              >
-                <Route className="h-4 w-4 sm:h-5 sm:w-5" />
-              </Button>
-            )}
-            {mapLayout !== "route" ? (
-              <Button
-                type="button"
-                variant={controlsOpen ? "default" : "secondary"}
-                size="icon"
-                onClick={() => setControlsOpen((prev) => !prev)}
-                className="h-9 w-9 shadow-md"
-                aria-label={controlsOpen ? ui.map.mapOptionsClose : ui.map.mapOptionsOpen}
-              >
-                <SlidersHorizontal className="h-4 w-4 sm:h-5 sm:w-5" />
-              </Button>
-            ) : null}
-            {directionsHref && directionsLabel && mapLayout !== "explore" ? (
-              <Button
-                asChild
-                size="lg"
-                className="h-11 gap-2 rounded-full px-4 shadow-lg ring-2 ring-primary/25"
-              >
-                <Link href={directionsHref}>
-                  <Navigation className="h-4 w-4 shrink-0" />
-                  <span className="text-sm font-semibold">{directionsLabel}</span>
-                </Link>
-              </Button>
-            ) : null}
           </div>
-        </div>
+        )}
 
         {mapLayout === "explore" && directionsHref && directionsLabel ? (
           <div
