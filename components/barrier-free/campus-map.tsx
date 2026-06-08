@@ -1638,13 +1638,60 @@ export function CampusMap({
 
   const scriptSrc = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${encodeURIComponent(clientId)}`;
 
-  const overlayBottomClass = cn(
-    "transition-[bottom] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
-    mapLayout === "route"
-      ? "max-sm:bottom-[calc(var(--route-sheet-vh)*1vh+0.625rem)] sm:bottom-[max(0.75rem,env(safe-area-inset-bottom))]"
-      : mapLayout === "explore" && directionsHref
-        ? "max-sm:bottom-[max(0.75rem,env(safe-area-inset-bottom))] sm:bottom-[calc(max(0.75rem,env(safe-area-inset-bottom))+4.25rem)]"
-        : "bottom-[max(0.75rem,env(safe-area-inset-bottom))]",
+  const overlayTransitionClass =
+    "transition-[bottom] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]";
+  const safeBottomMobile = "max(0.375rem,env(safe-area-inset-bottom))";
+  const safeBottomDesktop = "max(0.25rem,env(safe-area-inset-bottom))";
+  const naverClearanceMobile = "1.75rem";
+  const naverClearanceDesktop = "1.125rem";
+  const zoomBlockMobile = "2.25rem";
+  const zoomBlockDesktop = "4.5rem";
+  const auxGap = "0.5rem";
+
+  const exploreZoomOverlayClass = cn(
+    overlayTransitionClass,
+    `bottom-[calc(${safeBottomMobile}+${naverClearanceMobile})]`,
+    `sm:bottom-[calc(${safeBottomDesktop}+${naverClearanceDesktop})]`,
+  );
+
+  const exploreAuxOverlayClass = cn(
+    overlayTransitionClass,
+    `bottom-[calc(${safeBottomMobile}+${naverClearanceMobile}+${zoomBlockMobile}+${auxGap})]`,
+    `sm:bottom-[calc(${safeBottomDesktop}+${naverClearanceDesktop}+${zoomBlockDesktop}+${auxGap})]`,
+  );
+
+  const routeOverlayBottomClass = cn(
+    overlayTransitionClass,
+    "max-sm:bottom-[calc(var(--route-sheet-vh)*1vh+0.625rem)]",
+    `sm:bottom-[calc(${safeBottomDesktop}+${naverClearanceDesktop})]`,
+  );
+
+  const leftOverlayBottomClass =
+    mapLayout === "route" ? routeOverlayBottomClass : exploreAuxOverlayClass;
+
+  const zoomControlButtons = (
+    <div className="flex overflow-hidden rounded-lg border border-border bg-card/95 shadow-md backdrop-blur-sm sm:flex-col">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        onClick={() => zoomDelta(1)}
+        className="h-9 w-9 rounded-none border-r border-border hover:bg-secondary sm:border-r-0 sm:border-b"
+        aria-label={ui.map.zoomIn}
+      >
+        <Plus className="h-4 w-4" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        onClick={() => zoomDelta(-1)}
+        className="h-9 w-9 rounded-none hover:bg-secondary"
+        aria-label={ui.map.zoomOut}
+      >
+        <Minus className="h-4 w-4" />
+      </Button>
+    </div>
   );
 
   const mapBannerClass = cn(
@@ -1726,7 +1773,7 @@ export function CampusMap({
           className={cn(
             "pointer-events-auto absolute left-3 hidden flex-col gap-2 sm:left-4 sm:flex",
             mapLayout === "route" && "max-sm:hidden",
-            overlayBottomClass,
+            leftOverlayBottomClass,
           )}
         >
           {routeLine && routeLine.length >= 2 && routeSegments && (
@@ -1751,35 +1798,26 @@ export function CampusMap({
           )}
         </div>
 
-        {/* 우측: 줌·경로·안내 (모바일 길찾기는 최소 버튼만) */}
+        {/* 우측: 줌(구석) · 경로 · 안내 */}
+        {mapLayout === "explore" ? (
+          <div
+            className={cn(
+              "pointer-events-auto absolute right-2 sm:right-2",
+              exploreZoomOverlayClass,
+            )}
+          >
+            {zoomControlButtons}
+          </div>
+        ) : null}
+
         <div
           className={cn(
-            "pointer-events-auto absolute right-3 flex items-end gap-1.5 sm:right-4 sm:flex-col sm:items-end sm:gap-2",
-            overlayBottomClass,
+            "pointer-events-auto absolute flex items-end gap-1.5 sm:right-4 sm:flex-col sm:items-end sm:gap-2",
+            mapLayout === "explore" ? "right-3" : "right-3 sm:right-4",
+            mapLayout === "explore" ? exploreAuxOverlayClass : routeOverlayBottomClass,
           )}
         >
-          <div className="flex overflow-hidden rounded-lg border border-border bg-card/95 shadow-md backdrop-blur-sm sm:flex-col">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={() => zoomDelta(1)}
-              className="h-9 w-9 rounded-none border-r border-border hover:bg-secondary sm:border-r-0 sm:border-b"
-              aria-label={ui.map.zoomIn}
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={() => zoomDelta(-1)}
-              className="h-9 w-9 rounded-none hover:bg-secondary"
-              aria-label={ui.map.zoomOut}
-            >
-              <Minus className="h-4 w-4" />
-            </Button>
-          </div>
+          {mapLayout === "route" ? zoomControlButtons : null}
           {geoHintMessage && (
             <div className="max-w-[14rem] rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive shadow-md">
               {geoHintMessage}
