@@ -158,6 +158,57 @@ const W_0234: LngLat[] = [
   [127.137646924572806, 36.46835281756271],
 ];
 
+const W_0232: LngLat[] = [
+  [127.137836890270336, 36.467599634014839],
+  [127.137925246408713, 36.467739376169405],
+];
+
+const W_0230: LngLat[] = [
+  [127.137864051572777, 36.46683264241863],
+  [127.137780931382693, 36.466983225996437],
+  [127.137651342379712, 36.467205867690524],
+  [127.137571821855175, 36.467409560595236],
+  [127.13758249822186, 36.467495123298185],
+  [127.137628517043964, 36.46752176910335],
+  [127.137836890270336, 36.467599634014839],
+];
+
+const W_0003: LngLat[] = [
+  [127.137864051572777, 36.46683264241863],
+  [127.13789200693401, 36.466753593711175],
+];
+
+const W_0004: LngLat[] = [
+  [127.13789200693401, 36.466753593711175],
+  [127.137962346229926, 36.466776075461858],
+];
+
+const W_0006: LngLat[] = [
+  [127.137962346229926, 36.466776075461858],
+  [127.137945212298888, 36.466675995360333],
+];
+
+const W_0007: LngLat[] = [
+  [127.137945212298888, 36.466675995360333],
+  [127.137880283718019, 36.466505931413238],
+];
+
+const W_0009: LngLat[] = [
+  [127.137880283718019, 36.466505931413238],
+  [127.137951975692857, 36.466400411804379],
+  [127.138084538212098, 36.46631773654655],
+  [127.138369953432203, 36.46619045999045],
+];
+
+const W_0355: LngLat[] = [
+  [127.138369953432203, 36.46619045999045],
+  [127.138395168983749, 36.466239284488786],
+  [127.138319008453891, 36.466279404767903],
+  [127.138335328567422, 36.466299124905092],
+  [127.138450929371729, 36.466246764540806],
+  [127.138507995398811, 36.466254190708995],
+];
+
 /**
  * 중앙도서관 1층 정문 → 남쪽 직진 → 공주대학로 횡단 → 남측 인도 서향 → 캠퍼스 서쪽
  * (w_0170·w_0161 횡단 후 w_0187·w_0194·w_0531·w_0234 — 북측 인도·교양관 북측 우회 없음)
@@ -182,32 +233,22 @@ function buildLibraryToCampusWestLeg(locale: AppLocale): ComputedRoute | null {
 }
 
 /**
- * 실외 구간: 비전하우스·인문관 (보행 그래프)
+ * w_0234 끝 → 인문관 정문 (비전하우스 정문 미경유, 서측 보행로만)
  */
-function buildOutdoorLeg(
-  graph: RoutingGraph,
-  visionA: LatLng,
-  humanitiesMain: LatLng,
-  locale: AppLocale,
-): ComputedRoute | null {
-  const w0234Vision = toLatLng(W_0234[0]);
-
-  const parts: ComputedRoute[] = [];
-
-  try {
-
-    const toVision = walkLeg(graph, w0234Vision, visionA, locale);
-    if (!toVision) throw new Error("w_0234 to vision failed");
-    parts.push(toVision);
-
-    const toHumanities = walkLeg(graph, visionA, humanitiesMain, locale);
-    if (!toHumanities) throw new Error("vision to humanities failed");
-    parts.push(toHumanities);
-  } catch {
-    return null;
-  }
-
-  return mergeComputedRoutes(parts);
+function buildOutdoorLeg(locale: AppLocale): ComputedRoute | null {
+  return polylineFromChains(
+    [
+      { type: "path", reverse: true, coords: W_0232 },
+      { type: "path", reverse: true, coords: W_0230 },
+      { type: "crosswalk", coords: W_0003 },
+      { type: "path", coords: W_0004 },
+      { type: "path", coords: W_0006 },
+      { type: "path", coords: W_0007 },
+      { type: "path", coords: W_0009 },
+      { type: "ramp", coords: W_0355 },
+    ],
+    locale,
+  );
 }
 
 function entrancePoint(entrances: BuildingEntrance[], id: string): LatLng {
@@ -390,7 +431,6 @@ export function buildDreamToHumanitiesRoute(
   const sanhakMain = entrancePoint(entrances, "e_0074");
   const libraryRear3F = entrancePoint(entrances, "e_0029");
   const libraryMain1F = entrancePoint(entrances, "e_0028");
-  const visionA = entrancePoint(entrances, "e_0014");
   const humanitiesMain = entrancePoint(entrances, "e_0004");
 
   const evSanhak = elevatorById(elevators, "ev_004");
@@ -429,8 +469,8 @@ export function buildDreamToHumanitiesRoute(
     const libraryToCampusWest = buildLibraryToCampusWestLeg(locale);
     if (!libraryToCampusWest) throw new Error("library to campus west failed");
     legs.push(libraryToCampusWest);
-    // 11–12. 비전하우스 → 인문관
-    const outdoor = buildOutdoorLeg(graph, visionA, humanitiesMain, locale);
+    // 11. 인문관 (비전하우스 정문 옆길 제외)
+    const outdoor = buildOutdoorLeg(locale);
     if (!outdoor) throw new Error("fixed route outdoor leg failed");
     legs.push(outdoor);
   } catch {
