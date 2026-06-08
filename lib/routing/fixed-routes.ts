@@ -19,12 +19,207 @@ const HUMANITIES_BUILDING_ID = "b-0";
 
 const JOIN_M = 4;
 
-/** 열린광장·운동장 서쪽 보행로 (웅비학생회관 건물 밖 — w_0194/w_0198/w_0240) */
-const GYOYANG_TO_PLAZA_PATH: LatLng = { lat: 36.469489684530373, lng: 127.138403842158638 };
-const OPEN_PLAZA_WEST: LatLng = { lat: 36.469669686937969, lng: 127.138319903827153 };
-const FIELD_WEST_CROSS: LatLng = { lat: 36.469760280096828, lng: 127.13819988673913 };
-const FIELD_NW_CORNER: LatLng = { lat: 36.469688634535423, lng: 127.138096436426693 };
-const FIELD_SOUTH_WEST: LatLng = { lat: 36.468655983717589, lng: 127.137449964014081 };
+type LngLat = [number, number];
+
+interface WalkwayChain {
+  coords: LngLat[];
+  type: WalkwayType;
+  reverse?: boolean;
+}
+
+/** GeoJSON [lng,lat] → 앱 좌표 */
+function toLatLng([lng, lat]: LngLat): LatLng {
+  return { lat, lng };
+}
+
+function flattenWalkways(chains: WalkwayChain[]): { coords: LatLng[]; segmentTypes: WalkwayType[] } {
+  const coords: LatLng[] = [];
+  const segmentTypes: WalkwayType[] = [];
+
+  for (const chain of chains) {
+    const pts = chain.reverse ? [...chain.coords].reverse() : chain.coords;
+    for (let i = 0; i < pts.length; i++) {
+      const pt = toLatLng(pts[i]);
+      if (coords.length && haversineMeters(coords[coords.length - 1], pt) <= JOIN_M) continue;
+      if (coords.length > 0) segmentTypes.push(chain.type);
+      coords.push(pt);
+    }
+  }
+
+  return { coords, segmentTypes };
+}
+
+/** Dijkstra 없이 보행로 좌표를 그대로 경로로 사용 */
+function polylineRoute(
+  chains: WalkwayChain[],
+  locale: AppLocale,
+  start: LatLng,
+  end: LatLng,
+): ComputedRoute | null {
+  const { coords, segmentTypes } = flattenWalkways(chains);
+  if (!coords.length) return null;
+
+  const merged: LatLng[] = [start];
+  const mergedTypes: WalkwayType[] = [];
+
+  for (let i = 0; i < coords.length; i++) {
+    const pt = coords[i];
+    if (haversineMeters(merged[merged.length - 1], pt) <= JOIN_M) continue;
+    mergedTypes.push(i === 0 ? "path" : (segmentTypes[i - 1] ?? "path"));
+    merged.push(pt);
+  }
+
+  if (haversineMeters(merged[merged.length - 1], end) > JOIN_M) {
+    mergedTypes.push("path");
+    merged.push(end);
+  } else {
+    merged[merged.length - 1] = end;
+  }
+
+  if (merged.length < 2) return null;
+
+  let distance = 0;
+  for (let i = 0; i < merged.length - 1; i++) {
+    distance += haversineMeters(merged[i], merged[i + 1]);
+  }
+
+  const hasStairs = mergedTypes.some((t) => t === "stairs");
+  const hasCrosswalk = mergedTypes.some((t) => t === "crosswalk");
+  const hasRamp = mergedTypes.some((t) => t === "ramp");
+
+  return {
+    coords: merged,
+    distance,
+    steps: [
+      {
+        text: locale === "en" ? "Follow the guided campus route" : "안내 경로를 따라 이동하세요",
+        distance,
+        at: merged[0],
+        maneuver: "depart",
+        edgeType: mergedTypes[0] ?? "path",
+        hazard: hasRamp ? (locale === "en" ? "Ramp ahead" : "경사로 구간") : null,
+      },
+      {
+        text: "",
+        distance: 0,
+        at: merged[merged.length - 1],
+        maneuver: "arrive",
+        edgeType: mergedTypes[mergedTypes.length - 1] ?? "path",
+        hazard: null,
+      },
+    ],
+    hasStairs,
+    hasCrosswalk,
+    hasElevator: false,
+    segmentTypes: mergedTypes,
+  };
+}
+
+/**
+ * 교양관 서쪽 → 열린광장 서측 → 운동장 남서 코너 → 비전하우스 → 인문관
+ * (사진 검은 선 동선 — w_0198·w_0240 북측·웅비학생회관 방면 미경유)
+ */
+function buildOutdoorPolylineLeg(
+  gyoyangWest: LatLng,
+  visionA: LatLng,
+  humanitiesMain: LatLng,
+  locale: AppLocale,
+): ComputedRoute | null {
+  return polylineRoute(
+    [
+      // 교양 서쪽 후문 경사로 (w_0387)
+      {
+        type: "ramp",
+        coords: [
+          [127.139304338469103, 36.469560738162265],
+          [127.139283637665557, 36.469523579839269],
+          [127.139268447744172, 36.469530918225523],
+        ],
+      },
+      // 교양 서측 횡단 (w_0194)
+      {
+        type: "path",
+        coords: [
+          [127.139121735783249, 36.469233890916342],
+          [127.138637985925399, 36.469328629390311],
+          [127.138492198297016, 36.469407972773183],
+          [127.138403842158638, 36.469489684530373],
+          [127.138358191487129, 36.469597449179872],
+          [127.138319903827153, 36.469669686937969],
+        ],
+      },
+      // 열린광장 서쪽 도로 남하 (w_0531 역방향)
+      {
+        type: "path",
+        reverse: true,
+        coords: [
+          [127.137646924572806, 36.46835281756271],
+          [127.137709198414484, 36.468430012968518],
+          [127.138073532339604, 36.469249521589347],
+          [127.13805136993561, 36.46945096366295],
+          [127.138048020082039, 36.469497888022268],
+          [127.138182245526849, 36.469666922040567],
+          [127.138319903827153, 36.469669686937969],
+        ],
+      },
+      // 서측 도로 → 운동장 서남단 (w_0531/w_0240 연결)
+      {
+        type: "path",
+        coords: [
+          [127.137646924572806, 36.46835281756271],
+          [127.137449964014081, 36.468655983717589],
+        ],
+      },
+      // 운동장 서측 남하 (w_0240 하단)
+      {
+        type: "path",
+        coords: [
+          [127.137449964014081, 36.468655983717589],
+          [127.137410203751799, 36.468551770485561],
+          [127.137391059921796, 36.468419135260355],
+          [127.137391059921796, 36.468196497050762],
+          [127.137418671215102, 36.467750034458938],
+        ],
+      },
+      // 운동장 남서 → 비전하우스 (w_0234·w_0367)
+      {
+        type: "path",
+        coords: [
+          [127.137418671215102, 36.467750034458938],
+          [127.137925246408713, 36.467739376169405],
+          [visionA.lng, visionA.lat],
+          [127.137914938192566, 36.467487129554833],
+          [127.138052269376843, 36.467247505270919],
+        ],
+      },
+      // 비전 → 인문관 (w_0009 + w_0355 경사로)
+      {
+        type: "path",
+        coords: [
+          [127.138052269376843, 36.467247505270919],
+          [127.137880283718019, 36.466505931413238],
+          [127.137951975692857, 36.466400411804379],
+          [127.138084538212098, 36.46631773654655],
+          [127.138369953432203, 36.46619045999045],
+        ],
+      },
+      {
+        type: "ramp",
+        coords: [
+          [127.138369953432203, 36.46619045999045],
+          [127.138395168983749, 36.466239284488786],
+          [127.138319008453891, 36.466279404767903],
+          [127.138335328567422, 36.466299124905092],
+          [127.138450929371729, 36.466246764540806],
+          [127.138507995398811, 36.466254190708995],
+        ],
+      },
+    ],
+    locale,
+    gyoyangWest,
+    humanitiesMain,
+  );
+}
 
 function entrancePoint(entrances: BuildingEntrance[], id: string): LatLng {
   const hit = entrances.find((e) => e.id === id);
@@ -196,18 +391,12 @@ export function buildDreamToHumanitiesRoute(
     legs.push(elevatorLeg(evLibrary.point, evLibrary, "1F", locale));
     // 9. 도서관 1층 정문
     pushWalk(evLibrary.point, libraryMain1F);
-    // 10. 교양관 서쪽 후문 (경사로 인도 — w_0387)
+    // 10. 교양관 서쪽 후문까지
     pushWalk(libraryMain1F, gyoyangRearWest);
-    // 11. 열린광장 서측 — 운동장 서쪽 보행로 (웅비학생회관 내부·출입구 미경유)
-    pushWalk(gyoyangRearWest, GYOYANG_TO_PLAZA_PATH);
-    pushWalk(GYOYANG_TO_PLAZA_PATH, OPEN_PLAZA_WEST);
-    pushWalk(OPEN_PLAZA_WEST, FIELD_WEST_CROSS);
-    // 12. 운동장 가로지름 (서측) → 비전하우스 방향
-    pushWalk(FIELD_WEST_CROSS, FIELD_NW_CORNER);
-    pushWalk(FIELD_NW_CORNER, FIELD_SOUTH_WEST);
-    pushWalk(FIELD_SOUTH_WEST, visionA);
-    // 13. 인문사회과학대학관
-    pushWalk(visionA, humanitiesMain);
+    // 11–13. 실외 구간 — 사진 검은 선과 동일한 보행로 좌표 고정
+    const outdoor = buildOutdoorPolylineLeg(gyoyangRearWest, visionA, humanitiesMain, locale);
+    if (!outdoor) throw new Error("fixed route outdoor leg failed");
+    legs.push(outdoor);
   } catch {
     return null;
   }
