@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { cn } from "@/lib/utils";
 import { Header } from "@/components/barrier-free/header";
 import { Sidebar } from "@/components/barrier-free/sidebar";
 import { CampusMap } from "@/components/barrier-free/campus-map";
@@ -98,58 +99,57 @@ export default function BarrierFreeMapPage() {
         />
 
         <main className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col">
-          <CampusMap
-            buildings={filteredBuildings}
-            selectedBuilding={selectedBuildingId}
-            onBuildingSelect={handleBuildingSelect}
-            showFacilityPins={filters.length > 0}
-            showAllFootprints={filters.length === 0}
-            mapLayout="explore"
-            directionsHref="/route"
-            directionsLabel={ui.page.directions}
-          />
-
-          {/* 모바일: 메뉴 + 필터 (목록 열리면 필터 숨김) */}
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-30 p-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:hidden">
-            {!isSidebarOpen ? (
-              <div className="pointer-events-auto grid w-full grid-cols-[auto_1fr] gap-x-2 gap-y-1.5 animate-in fade-in duration-200">
-                <MobileSidebarToggle
-                  embedded
-                  isOpen={isSidebarOpen}
-                  onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
-                  className="row-start-1 self-start"
-                />
-                <FacilityFilterBar
-                  embedded
-                  compact
-                  showHint={false}
-                  filters={filters}
-                  onFilterChange={setFilters}
-                  className="col-start-2 row-start-1 min-w-0"
-                />
-                <FacilityFilterMapHint
-                  filters={filters}
-                  compact
-                  className="col-span-2 row-start-2"
-                />
-              </div>
-            ) : (
-              <div className="pointer-events-auto">
+          <div className="shrink-0 border-b border-border bg-card px-2 py-2 sm:px-3">
+            {isSidebarOpen ? (
+              <div className="md:hidden">
                 <MobileSidebarToggle
                   embedded
                   isOpen={isSidebarOpen}
                   onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
                 />
               </div>
-            )}
+            ) : null}
+            <div
+              className={cn(
+                "flex items-start gap-2",
+                isSidebarOpen && "max-md:hidden",
+              )}
+            >
+              <MobileSidebarToggle
+                embedded
+                isOpen={isSidebarOpen}
+                onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
+                className="md:hidden"
+              />
+              <FacilityFilterBar
+                embedded
+                showHint={false}
+                filters={filters}
+                onFilterChange={setFilters}
+                className="min-w-0 flex-1"
+              />
+            </div>
+            <FacilityFilterMapHint
+              filters={filters}
+              className={cn(
+                "mt-1.5 bg-transparent px-0 py-0 shadow-none backdrop-blur-none md:mt-2",
+                isSidebarOpen && "max-md:hidden",
+              )}
+            />
           </div>
 
-          {/* 데스크톱: 필터만 상단 */}
-          <FacilityFilterBar
-            filters={filters}
-            onFilterChange={setFilters}
-            className="top-3 right-3 left-3 hidden md:flex"
-          />
+          <div className="relative min-h-0 flex-1">
+            <CampusMap
+              buildings={filteredBuildings}
+              selectedBuilding={selectedBuildingId}
+              onBuildingSelect={handleBuildingSelect}
+              showFacilityPins={filters.length > 0}
+              showAllFootprints={filters.length === 0}
+              mapLayout="explore"
+              directionsHref="/route"
+              directionsLabel={ui.page.directions}
+            />
+          </div>
 
           <BuildingDetail building={selectedBuilding} onClose={() => setSelectedBuildingId(null)} />
         </main>

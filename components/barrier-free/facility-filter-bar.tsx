@@ -40,7 +40,7 @@ export function FacilityFilterMapHint({ filters, compact = false, className }: F
   return (
     <p
       className={cn(
-        "rounded-lg bg-card/90 px-2.5 py-1 text-[11px] leading-snug text-muted-foreground shadow-md backdrop-blur-sm sm:text-xs",
+        "text-[11px] leading-snug text-muted-foreground sm:text-xs",
         className,
       )}
       aria-live="polite"
@@ -95,7 +95,12 @@ export function FacilityFilterBar({
       )}
     >
       <div
-        className="pointer-events-auto flex gap-1 overflow-x-auto overscroll-x-contain rounded-xl bg-card/90 p-1.5 shadow-lg backdrop-blur-sm [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden sm:gap-1.5"
+        className={cn(
+          "pointer-events-auto flex gap-1 overflow-x-auto overscroll-x-contain rounded-xl p-1.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden sm:gap-1.5",
+          embedded
+            ? "bg-muted/50"
+            : "bg-card/90 shadow-lg backdrop-blur-sm",
+        )}
         role="toolbar"
         aria-label={ui.filterBar.ariaLabel}
       >
