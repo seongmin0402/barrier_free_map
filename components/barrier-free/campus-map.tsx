@@ -26,10 +26,15 @@ import {
   NAV_CAMERA_MIN_INTERVAL_MS,
   NAV_FOLLOW_ZOOM,
   NAV_HEADING_LERP,
+  NAV_HEADING_LERP_MOBILE,
+  NAV_MARKER_FRAME_MS_DESKTOP,
+  NAV_MARKER_FRAME_MS_MOBILE,
+  NAV_MARKER_HEADING_STEP_MOBILE,
   NAV_POS_LERP,
+  NAV_POS_LERP_MOBILE,
+  isMobileNavViewport,
   shouldRecenterEdgeFollow,
 } from "@/lib/routing/nav-camera";
-import { preloadRouteTiles } from "@/lib/routing/nav-tile-preload";
 import type { DeviceHeadingSnapshot, NavMotionSnapshot } from "@/lib/device-orientation";
 import { compassAgeMs } from "@/lib/device-orientation";
 import { segmentColor } from "@/lib/routing/style";
@@ -241,12 +246,12 @@ function syncRoutePolylines(
   segmentRefs.current.length = spans.length;
 }
 
+/** 안내 중 — null→첫 GPS·안내 종료만 리렌더, 이후 위치는 liveUserPositionRef */
 function liveUserPosNeedsRender(prev: LatLng | null | undefined, next: LatLng | null | undefined): boolean {
   if (prev === next) return false;
   if (!prev && next) return true;
   if (prev && !next) return true;
-  if (!prev || !next) return false;
-  return prev.lat !== next.lat || prev.lng !== next.lng;
+  return false;
 }
 
 function campusMapPropsAreEqual(prev: CampusMapProps, next: CampusMapProps): boolean {
@@ -589,8 +594,6 @@ function CampusMapInner({
   const lastAppliedCamRef = useRef<{ lat: number; lng: number; heading: number } | null>(null);
   const navFollowSessionRef = useRef(false);
   const navBootstrapDoneRef = useRef(false);
-  const tilePreloadCancelRef = useRef<(() => void) | null>(null);
-  const tilePreloadDoneRef = useRef(false);
   const lastRouteDrawSigRef = useRef("");
   const lastCameraApplyAtRef = useRef(0);
   const mapIsIdleRef = useRef(true);
@@ -1344,53 +1347,6 @@ function CampusMapInner({
     }
   }, [sdkLoaded, navigationMode, followUser, followPaused, mapReadyEpoch]);
 
-  /** GPS 대기 중 경로 코리더 타일 프리로드 (GPS 수신 후 취소) */
-  useEffect(() => {
-    const hasGps =
-      liveUserPosition != null || liveUserPosRefProp.current?.current != null;
-    if (
-      !sdkLoaded ||
-      !followUser ||
-      !navigationMode ||
-      followPaused ||
-      hasGps ||
-      !routeLine ||
-      routeLine.length < 2 ||
-      tilePreloadDoneRef.current
-    ) {
-      return;
-    }
-
-    const map = mapInstanceRef.current;
-    const maps = window.naver?.maps as NMaps | undefined;
-    if (!map || !maps?.LatLng || !navBootstrapDoneRef.current) return;
-
-    tilePreloadDoneRef.current = true;
-    const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
-    tilePreloadCancelRef.current?.();
-    tilePreloadCancelRef.current = preloadRouteTiles(
-      map as Parameters<typeof preloadRouteTiles>[0],
-      (lat, lng) => new LatLngCtor(lat, lng),
-      routeLine,
-      () => {
-        programmaticCameraRef.current = true;
-      },
-    );
-
-    return () => {
-      tilePreloadCancelRef.current?.();
-      tilePreloadCancelRef.current = null;
-    };
-  }, [
-    sdkLoaded,
-    followUser,
-    navigationMode,
-    followPaused,
-    liveUserPosition,
-    routeLine,
-    mapReadyEpoch,
-  ]);
-
   /** 경로가 생기면 경로 전체가 보이도록 맞춤 (안내 중에는 카메라 루프가 담당) */
   useEffect(() => {
     if (!sdkLoaded || followUser) return;
@@ -1439,9 +1395,6 @@ function CampusMapInner({
     if (navFollowSessionRef.current) return;
     navFollowSessionRef.current = true;
     navBootstrapDoneRef.current = false;
-    tilePreloadDoneRef.current = false;
-    tilePreloadCancelRef.current?.();
-    tilePreloadCancelRef.current = null;
 
     setFollowPaused(false);
     navZoomSetRef.current = false;
@@ -1551,8 +1504,6 @@ function CampusMapInner({
     });
     navSnapPendingRef.current = false;
     navBootstrapDoneRef.current = true;
-    tilePreloadCancelRef.current?.();
-    tilePreloadCancelRef.current = null;
 
     const maps = window.naver?.maps as NMaps | undefined;
     const map = mapInstanceRef.current;
@@ -1688,10 +1639,11 @@ function CampusMapInner({
     }
 
     let lastFrameTime = performance.now();
-    const isMobileNav =
-      typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches;
-    const minFrameMs = isMobileNav ? 50 : 32;
-    const markerHeadingThreshold = isMobileNav ? 8 : 4;
+    const isMobileNav = isMobileNavViewport();
+    const minFrameMs = isMobileNav ? NAV_MARKER_FRAME_MS_MOBILE : NAV_MARKER_FRAME_MS_DESKTOP;
+    const posLerp = isMobileNav ? NAV_POS_LERP_MOBILE : NAV_POS_LERP;
+    const headLerp = isMobileNav ? NAV_HEADING_LERP_MOBILE : NAV_HEADING_LERP;
+    const markerHeadingThreshold = isMobileNav ? NAV_MARKER_HEADING_STEP_MOBILE : 4;
 
     const tick = (now: number) => {
       if (minFrameMs > 0 && now - lastCameraFrameRef.current < minFrameMs) {
@@ -1727,14 +1679,14 @@ function CampusMapInner({
         display = { ...target };
         navSnapPendingRef.current = false;
       } else {
-        const posT = 1 - (1 - NAV_POS_LERP) ** dt;
+        const posT = 1 - (1 - posLerp) ** dt;
         display = lerpLatLng(display, target, posT);
       }
       displayPosRef.current = display;
 
       const tHeading = resolveFusedHeading();
       if (Number.isFinite(tHeading)) {
-        const headT = 1 - (1 - NAV_HEADING_LERP) ** dt;
+        const headT = 1 - (1 - headLerp) ** dt;
         displayHeadingRef.current = lerpAngleDeg(displayHeadingRef.current, tHeading, headT);
       }
 
@@ -1831,23 +1783,41 @@ function CampusMapInner({
 
     let frame: number | null = null;
     let lastTick = 0;
-    const isMobile =
-      typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches;
-    const minMs = isMobile ? 50 : 32;
+    let lastFrameTime = performance.now();
+    const isMobile = isMobileNavViewport();
+    const minMs = isMobile ? NAV_MARKER_FRAME_MS_MOBILE : NAV_MARKER_FRAME_MS_DESKTOP;
+    const posLerp = isMobile ? NAV_POS_LERP_MOBILE : NAV_POS_LERP;
 
     const tick = (now: number) => {
       if (now - lastTick >= minMs) {
         lastTick = now;
+        const dt = Math.min(48, now - lastFrameTime) / 16.67;
+        lastFrameTime = now;
+
         const freshPos = liveUserPosRefProp.current?.current;
         if (freshPos) targetPosRef.current = freshPos;
 
         const map = mapInstanceRef.current;
         const maps = window.naver?.maps as NMaps | undefined;
-        const pos = targetPosRef.current;
-        if (map && maps?.LatLng && pos && navUserMarkerRef.current?.setPosition) {
-          const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
-          navUserMarkerRef.current.setPosition(new LatLngCtor(pos.lat, pos.lng));
+        const target = targetPosRef.current;
+        if (!map || !maps?.LatLng || !target || !navUserMarkerRef.current?.setPosition) {
+          frame = requestAnimationFrame(tick);
+          return;
         }
+
+        let display = displayPosRef.current;
+        if (!display) {
+          display = { ...target };
+        } else {
+          const posT = 1 - (1 - posLerp) ** dt;
+          display = lerpLatLng(display, target, posT);
+        }
+        displayPosRef.current = display;
+
+        const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
+        navUserMarkerRef.current.setPosition(
+          new LatLngCtor(display.lat, display.lng),
+        );
       }
       frame = requestAnimationFrame(tick);
     };

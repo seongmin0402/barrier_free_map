@@ -95,13 +95,12 @@ function RoutePageMapInner({
   );
 }
 
-/** 안내 중에도 null→첫 GPS 수신 시에는 지도에 마커가 바로 뜨도록 허용 */
+/** 안내 중 — null→첫 GPS·안내 종료만 리렌더, 이후 위치는 userPosRef */
 function navUserPosNeedsRender(prev: LatLng | null, next: LatLng | null): boolean {
   if (prev === next) return false;
   if (!prev && next) return true;
   if (prev && !next) return true;
-  if (!prev || !next) return false;
-  return prev.lat !== next.lat || prev.lng !== next.lng;
+  return false;
 }
 
 function mapPropsAreEqual(prev: RoutePageMapProps, next: RoutePageMapProps): boolean {

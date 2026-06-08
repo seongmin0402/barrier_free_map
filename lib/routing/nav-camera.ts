@@ -169,9 +169,25 @@ export const NAV_EDGE_MARGIN_RATIO = 0.24;
 export const NAV_CAMERA_MIN_INTERVAL_MS = 900;
 export const NAV_MAP_ROTATION_SCALE = 1.38;
 
-/** rAF 추적 보간 (60fps 기준) */
+/** rAF 추적 보간 — 데스크톱(길안내 거의 미사용) */
 export const NAV_POS_LERP = 0.28;
 export const NAV_HEADING_LERP = 0.22;
+
+/** iOS/Android 마커 — 60fps + 약간 빠른 보간으로 GPS 사이를 부드럽게 채움 */
+export const NAV_MARKER_FRAME_MS_MOBILE = 16;
+export const NAV_MARKER_FRAME_MS_DESKTOP = 32;
+export const NAV_POS_LERP_MOBILE = 0.36;
+export const NAV_HEADING_LERP_MOBILE = 0.28;
+export const NAV_MARKER_HEADING_STEP_MOBILE = 3;
+
+/** 터치 기기·좁은 뷰포트 — 모바일 길안내 튜닝 대상 */
+export function isMobileNavViewport(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia("(max-width: 639px)").matches ||
+    window.matchMedia("(hover: none) and (pointer: coarse)").matches
+  );
+}
 
 export type NavigationCameraMap = {
   setCenter?: (ll: unknown) => void;
