@@ -18,6 +18,18 @@ export function nodeKey(lng: number, lat: number): string {
 
 const ELEVATOR_SNAP_M = 22;
 
+/** QGIS 오타(stais 등) 포함 보행로 종류 정규화 */
+export function normalizeWalkwayType(raw: string | null | undefined): string {
+  const t = String(raw ?? "path")
+    .trim()
+    .toLowerCase();
+  if (t === "crosswalk") return "crosswalk";
+  if (t === "ramp") return "ramp";
+  if (t === "stairs" || t === "stais" || t === "staisr" || t.startsWith("stair")) return "stairs";
+  if (t === "elevator" || t === "indoor") return t;
+  return "path";
+}
+
 function addBidirectionalEdge(
   adjacency: Map<string, GraphEdge[]>,
   from: string,
@@ -76,7 +88,7 @@ export function buildWalkwayGraph(
   };
 
   for (const feature of collection.features) {
-    const type = String(feature.properties?.type ?? "path");
+    const type = normalizeWalkwayType(feature.properties?.type);
     const props = feature.properties as { floor?: string; slope_pct?: number | null } | undefined;
     const floorRaw = props?.floor;
     const floor =

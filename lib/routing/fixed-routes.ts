@@ -177,7 +177,7 @@ function buildLibraryToGyoyangFrontLeg(locale: AppLocale): ComputedRoute | null 
       { type: "path", coords: W_0189 },
       { type: "path", reverse: true, coords: W_0191 },
       { type: "stairs", reverse: true, coords: W_0190 },
-      { type: "path", reverse: true, coords: W_0188 },
+      { type: "crosswalk", reverse: true, coords: W_0188 },
       { type: "path", coords: W_0192 },
     ],
     locale,
@@ -298,21 +298,22 @@ function mergeComputedRoutes(parts: ComputedRoute[]): ComputedRoute | null {
       continue;
     }
 
-    let skip = 0;
+    let fromIdx = 0;
     if (part.coords.length && haversineMeters(coords[coords.length - 1], part.coords[0]) <= JOIN_M) {
-      skip = 1;
+      fromIdx = 1;
     }
-    const addedCoords = part.coords.slice(skip);
-    if (addedCoords.length >= 1) {
-      for (let i = 0; i < addedCoords.length - 1; i++) {
-        const segIdx = skip + i;
-        if (segIdx < part.segmentTypes.length) {
-          segmentTypes.push(part.segmentTypes[segIdx]);
-        } else {
-          segmentTypes.push("path");
-        }
+
+    for (let i = fromIdx; i < part.coords.length; i++) {
+      const pt = part.coords[i];
+      if (coords.length && haversineMeters(coords[coords.length - 1], pt) <= JOIN_M) continue;
+
+      const typeIdx = i - 1;
+      if (typeIdx >= 0 && typeIdx < part.segmentTypes.length) {
+        segmentTypes.push(part.segmentTypes[typeIdx]);
+      } else if (coords.length > 0) {
+        segmentTypes.push("path");
       }
-      coords.push(...addedCoords);
+      coords.push(pt);
     }
 
     for (const step of part.steps) {
@@ -323,6 +324,11 @@ function mergeComputedRoutes(parts: ComputedRoute[]): ComputedRoute | null {
   }
 
   if (coords.length < 2) return null;
+
+  while (segmentTypes.length < coords.length - 1) segmentTypes.push("path");
+  if (segmentTypes.length > coords.length - 1) {
+    segmentTypes.length = coords.length - 1;
+  }
 
   const last = coords[coords.length - 1];
   steps.push({
