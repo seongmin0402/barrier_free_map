@@ -444,11 +444,22 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     }
 
     clearWatch();
-    setUserPos(null);
+    const originGps =
+      origin?.kind === "gps" && origin.point ? { ...origin.point } : null;
+    if (originGps) {
+      userPosRef.current = originGps;
+      firstGpsFixRef.current = originGps;
+      prevGpsRef.current = originGps;
+      gpsSmootherRef.current.filter(originGps, 12);
+      setUserPos(originGps);
+    } else {
+      setUserPos(null);
+      firstGpsFixRef.current = null;
+      prevGpsRef.current = null;
+      gpsSmootherRef.current.reset();
+    }
     setUserHeading(null);
-    prevGpsRef.current = null;
     lastGpsHeadingRef.current = null;
-    gpsSmootherRef.current.reset();
     speechPhaseRef.current = { stepIndex: -1, phase: "far" };
     metricsTargetRef.current = null;
     metricsDisplayRef.current = null;
@@ -462,7 +473,6 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     setCurrentStepIndex(0);
     lastSpokenStepRef.current = -1;
     lastLiveStepIndexRef.current = -1;
-    firstGpsFixRef.current = null;
     navigationStartedAtRef.current = Date.now();
     navDestPointRef.current = route.coords[route.coords.length - 1] ?? destination?.point ?? null;
     setNavigationRoute(route);
@@ -560,21 +570,22 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       setGeoError(msg);
     };
 
-    // 캐시된 위치로 마커를 먼저 띄운 뒤 고정밀 watch로 정밀 추적
-    navigator.geolocation.getCurrentPosition(
-      applyGpsReading,
-      () => {
-        /* 캐시 없음 — watchPosition 첫 fix까지 대기 */
-      },
-      { enableHighAccuracy: false, maximumAge: 10000, timeout: 6000 },
-    );
+    if (!originGps) {
+      navigator.geolocation.getCurrentPosition(
+        applyGpsReading,
+        () => {
+          /* 캐시 없음 — watchPosition 첫 fix까지 대기 */
+        },
+        { enableHighAccuracy: true, maximumAge: 4000, timeout: 8000 },
+      );
+    }
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       applyGpsReading,
       onGpsError,
       { enableHighAccuracy: true, maximumAge: 800, timeout: 25000 },
     );
-  }, [activeRoute, destination, clearWatch, requestCompassPermission]);
+  }, [activeRoute, destination, origin, clearWatch, requestCompassPermission]);
 
   // GPS 갱신 → 진행 상황 계산 + 음성 안내 + 경로 이탈 재탐색
   useEffect(() => {

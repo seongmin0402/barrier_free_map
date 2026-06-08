@@ -577,6 +577,7 @@ function CampusMapInner({
   const lastCameraFrameRef = useRef(0);
   const lastAppliedCamRef = useRef<{ lat: number; lng: number; heading: number } | null>(null);
   const navFollowSessionRef = useRef(false);
+  const navBootstrapDoneRef = useRef(false);
   const lastRouteDrawSigRef = useRef("");
   const lastCameraApplyAtRef = useRef(0);
   const mapIsIdleRef = useRef(true);
@@ -1360,6 +1361,7 @@ function CampusMapInner({
     }
     if (navFollowSessionRef.current) return;
     navFollowSessionRef.current = true;
+    navBootstrapDoneRef.current = false;
 
     setFollowPaused(false);
     navZoomSetRef.current = false;
@@ -1378,36 +1380,78 @@ function CampusMapInner({
     targetHeadingRef.current = seedHeading;
   }, [followUser, navigationMode]);
 
-  /** GPS 수신 전 출발점·경로 시작점으로 미리 맞춤 */
+  /** GPS 수신 전 — 출발 지점·경로 방향으로 길안내 화면 즉시 맞춤 (전체 경로 fitBounds 대신) */
   useEffect(() => {
     const hasGps =
       liveUserPosition != null || liveUserPosRefProp.current?.current != null;
-    if (!sdkLoaded || !followUser || !navigationMode || hasGps || followPaused) return;
-    const map = mapInstanceRef.current;
-    const maps = window.naver?.maps as NMaps | undefined;
-    if (!map || !maps?.LatLng) return;
-
-    const seed = originPoint ?? (routeLine && routeLine.length > 0 ? routeLine[0] : null);
-    const m = map as { setCenter?: (ll: unknown) => void; setZoom?: (z: number) => void; relayout?: () => void };
-
-    if (routeLine && routeLine.length >= 2) {
-      fitToPoints(maps as NMaps, map, routeLine, { padding: 70, maxZoom: 17 });
-    } else if (seed) {
-      const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
-      m.setCenter?.(new LatLngCtor(seed.lat, seed.lng));
-      m.setZoom?.(NAV_FOLLOW_ZOOM);
-    } else {
+    if (
+      !sdkLoaded ||
+      !followUser ||
+      !navigationMode ||
+      hasGps ||
+      followPaused ||
+      navBootstrapDoneRef.current
+    ) {
       return;
     }
 
-    requestAnimationFrame(() => {
+    const map = mapInstanceRef.current;
+    const maps = window.naver?.maps as NMaps | undefined;
+    if (!map || !maps?.LatLng || !maps?.Point) return;
+
+    const seed = originPoint ?? (routeLine && routeLine.length > 0 ? routeLine[0] : null);
+    if (!seed) return;
+
+    const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
+    const PointCtor = maps.Point as new (x: number, y: number) => unknown;
+    const heading = routeHeadingRef.current ?? userHeadingRef.current ?? 0;
+    const bottomObstructionVh =
+      mapLayout === "route" &&
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 639px)").matches
+        ? mobileSheetVhRef.current
+        : 0;
+
+    try {
+      programmaticCameraRef.current = true;
+      mapIsIdleRef.current = false;
+      applyNavigationCamera(
+        map as Parameters<typeof applyNavigationCamera>[0],
+        (lat, lng) => new LatLngCtor(lat, lng),
+        (x, y) => new PointCtor(x, y),
+        seed,
+        heading,
+        {
+          snap: true,
+          bottomObstructionVh,
+          adjustViewport: true,
+          lookAheadHeadingDeg: heading,
+        },
+      );
+      viewportAdjustedRef.current = true;
+      navZoomSetRef.current = true;
+      navBootstrapDoneRef.current = true;
       try {
-        m.relayout?.();
+        (map as { relayout?: () => void }).relayout?.();
       } catch {
         /* ignore */
       }
-    });
-  }, [sdkLoaded, followUser, navigationMode, liveUserPosition, followPaused, originPoint, routeLine, mapReadyEpoch]);
+    } catch {
+      /* ignore */
+    } finally {
+      programmaticCameraRef.current = false;
+    }
+  }, [
+    sdkLoaded,
+    followUser,
+    navigationMode,
+    liveUserPosition,
+    followPaused,
+    originPoint,
+    routeLine,
+    mapReadyEpoch,
+    mapLayout,
+  ]);
 
   /** 첫 GPS 수신 시 즉시 사용자 위치로 맞춤 */
   useEffect(() => {
@@ -1416,15 +1460,41 @@ function CampusMapInner({
     if (hasNavCenteredRef.current) return;
 
     const heading = resolveFusedHeading();
+    const cameraHeading = routeHeadingRef.current ?? heading;
     displayPosRef.current = { ...firstPos };
     targetPosRef.current = firstPos;
 
     queueNavCamera(firstPos, heading, {
       snap: true,
-      adjustViewport: true,
+      adjustViewport: !viewportAdjustedRef.current,
       force: true,
     });
     navSnapPendingRef.current = false;
+    navBootstrapDoneRef.current = true;
+
+    const maps = window.naver?.maps as NMaps | undefined;
+    const map = mapInstanceRef.current;
+    const MarkerCtor = maps?.Marker as
+      | (new (opts: Record<string, unknown>) => {
+          setMap: (t: unknown) => void;
+          setPosition?: (p: unknown) => void;
+        })
+      | undefined;
+    const PointCtor = maps?.Point as (new (x: number, y: number) => unknown) | undefined;
+    const LatLngCtor = maps?.LatLng as new (lat: number, lng: number) => unknown;
+    if (map && MarkerCtor && PointCtor && LatLngCtor && !navUserMarkerRef.current) {
+      const ll = new LatLngCtor(firstPos.lat, firstPos.lng);
+      navUserMarkerRef.current = new MarkerCtor({
+        map,
+        position: ll,
+        zIndex: 500,
+        icon: {
+          content: navArrowHtml(cameraHeading),
+          anchor: new PointCtor(14, 14),
+        },
+      }) as typeof navUserMarkerRef.current;
+      lastMarkerHeadingRef.current = cameraHeading;
+    }
   }, [
     sdkLoaded,
     followUser,
