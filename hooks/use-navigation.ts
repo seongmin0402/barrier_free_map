@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useAppSettings } from "@/components/app-settings-provider";
 import type { BarrierBuilding } from "@/lib/building-types";
 import {
@@ -43,6 +43,13 @@ import type {
 } from "@/lib/routing/types";
 
 type WhichPoint = "origin" | "destination";
+
+export type NavMetricsSnapshot = {
+  remaining: number;
+  distanceToNext: number;
+};
+
+export type NavMetricsDisplayRef = RefObject<NavMetricsSnapshot | null>;
 
 const VOICE_STORAGE_KEY = "barrier-free-voice-enabled";
 
@@ -779,6 +786,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     liveAnnouncement,
     userPos,
     userPosRef,
+    metricsDisplayRef,
     userHeading,
     routeHeading,
     deviceHeadingRef,
