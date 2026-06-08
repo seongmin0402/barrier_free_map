@@ -2,17 +2,14 @@
 
 import { useEffect } from "react";
 import { Building2, ChevronRight, X } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useUi } from "@/hooks/use-ui";
 import { shortBuildingName } from "@/lib/building-display-name";
-import type { AccessibilityLevel } from "@/lib/building-types";
 
 interface Building {
   id: string;
   name: string;
-  accessibilityLevel: AccessibilityLevel;
   facilities: string[];
 }
 
@@ -25,13 +22,6 @@ interface SidebarProps {
   isOpen: boolean;
   onRequestClose: () => void;
 }
-
-const accessibilityColors: Record<AccessibilityLevel, string> = {
-  A: "bg-[oklch(0.65_0.18_160)] text-white",
-  B: "bg-[oklch(0.70_0.18_85)] text-foreground",
-  C: "bg-[oklch(0.55_0.22_25)] text-white",
-  unknown: "bg-[#1a1a1a] text-white",
-};
 
 export function Sidebar({
   buildings,
@@ -126,52 +116,14 @@ export function Sidebar({
                         <span className="sr-only">{ui.sidebar.selected}</span>
                       ) : null}
                     </p>
-                    <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
-                      <span>
-                        {building.accessibilityLevel === "unknown"
-                          ? ui.gradeUnsurveyed
-                          : ui.sidebar.facilities(building.facilities.filter((f) => f !== "charging").length)}
-                      </span>
-                      {building.accessibilityLevel !== "unknown" ? (
-                        <Badge
-                          className={cn("h-5 px-1.5 py-0 text-[10px] sm:hidden", accessibilityColors[building.accessibilityLevel])}
-                        >
-                          {building.accessibilityLevel}
-                        </Badge>
-                      ) : null}
+                    <p className="text-xs text-muted-foreground">
+                      {ui.sidebar.facilities(building.facilities.filter((f) => f !== "charging").length)}
                     </p>
                   </div>
-                  <Badge className={cn("mt-0.5 hidden shrink-0 sm:inline-flex", accessibilityColors[building.accessibilityLevel])}>
-                    {building.accessibilityLevel === "unknown"
-                      ? ui.gradeUnsurveyed
-                      : building.accessibilityLevel}
-                  </Badge>
                   <ChevronRight className="mt-2 hidden h-4 w-4 shrink-0 text-muted-foreground sm:block" />
                 </button>
               ))
             )}
-          </div>
-        </div>
-
-        <div className="border-t border-border bg-muted/50 p-4">
-          <h3 className="mb-2 text-xs font-medium text-muted-foreground">{ui.sidebar.accessibilityGrade}</h3>
-          <div className="flex flex-wrap gap-x-2 gap-y-1.5">
-            <div className="flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded-full bg-[oklch(0.65_0.18_160)]" />
-              <span className="text-xs text-muted-foreground">{ui.sidebar.gradeA}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded-full bg-[oklch(0.70_0.18_85)]" />
-              <span className="text-xs text-muted-foreground">{ui.sidebar.gradeB}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded-full bg-[oklch(0.55_0.22_25)]" />
-              <span className="text-xs text-muted-foreground">{ui.sidebar.gradeC}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded-full bg-[#1a1a1a]" />
-              <span className="text-xs text-muted-foreground">{ui.gradeUnsurveyed}</span>
-            </div>
           </div>
         </div>
       </aside>
