@@ -294,7 +294,11 @@ function mergeComputedRoutes(parts: ComputedRoute[]): ComputedRoute | null {
     if (!coords.length) {
       coords.push(...part.coords);
       segmentTypes.push(...part.segmentTypes);
-      for (const step of part.steps) steps.push(step);
+      for (const step of part.steps) {
+        // 경유 구간(산학연구관 등)의 도착 단계는 제외 — 최종 목적지에만 arrive 유지
+        if (step.maneuver === "arrive") continue;
+        steps.push(step);
+      }
       continue;
     }
 
