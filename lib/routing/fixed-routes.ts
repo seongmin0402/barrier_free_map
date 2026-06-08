@@ -91,7 +91,7 @@ function polylineFromChains(chains: WalkwayChain[], locale: AppLocale): Computed
   };
 }
 
-/** 도서관 정문 → 교양관 앞 (w_0189) — 웅비학생회관 북측 우회 없음 */
+/** 중앙도서관 정문·횡단·서측 보행로 좌표 (bb_4326 walkways) */
 const W_0382: LngLat[] = [
   [127.140534697696651, 36.469289549783831],
   [127.140584139961561, 36.469311155058556],
@@ -166,8 +166,11 @@ const W_0234: LngLat[] = [
   [127.137646924572806, 36.46835281756271],
 ];
 
-/** 중앙도서관 1층 정문 → 교양관 앞 횡단로 (w_0192/w_0194 시작점) */
-function buildLibraryToGyoyangFrontLeg(locale: AppLocale): ComputedRoute | null {
+/**
+ * 중앙도서관 1층 정문 → 직진 → 횡단보도 → 서측 도로 → 캠퍼스 서쪽 동선
+ * (w_0382·w_0165·w_0189 직진/횡단/서향 후 w_0194·w_0531·w_0234)
+ */
+function buildLibraryToCampusWestLeg(locale: AppLocale): ComputedRoute | null {
   return polylineFromChains(
     [
       { type: "path", reverse: true, coords: W_0382 },
@@ -179,14 +182,16 @@ function buildLibraryToGyoyangFrontLeg(locale: AppLocale): ComputedRoute | null 
       { type: "stairs", reverse: true, coords: W_0190 },
       { type: "crosswalk", reverse: true, coords: W_0188 },
       { type: "path", coords: W_0192 },
+      { type: "path", coords: W_0194 },
+      { type: "path", reverse: true, coords: W_0531 },
+      { type: "path", reverse: true, coords: W_0234 },
     ],
     locale,
   );
 }
 
 /**
- * 실외 구간: 끝점이 맞닿은 보행로만 좌표 고정, 나머지는 그래프 경로
- * (w_0194 → w_0531 → w_0234 는 노드 공유)
+ * 실외 구간: 비전하우스·인문관 (보행 그래프)
  */
 function buildOutdoorLeg(
   graph: RoutingGraph,
@@ -199,16 +204,6 @@ function buildOutdoorLeg(
   const parts: ComputedRoute[] = [];
 
   try {
-    const campusWest = polylineFromChains(
-      [
-        { type: "path", coords: W_0194 },
-        { type: "path", reverse: true, coords: W_0531 },
-        { type: "path", reverse: true, coords: W_0234 },
-      ],
-      locale,
-    );
-    if (!campusWest) throw new Error("w_0194/w_0531/w_0234 chain failed");
-    parts.push(campusWest);
 
     const toVision = walkLeg(graph, w0234Vision, visionA, locale);
     if (!toVision) throw new Error("w_0234 to vision failed");
@@ -439,11 +434,11 @@ export function buildDreamToHumanitiesRoute(
     legs.push(elevatorLeg(evLibrary.point, evLibrary, "1F", locale));
     // 9. 도서관 1층 정문
     pushWalk(evLibrary.point, libraryMain1F);
-    // 10. 교양관 앞 횡단 (w_0189) — 웅비학생회관 방면 미경유
-    const libraryToGyoyang = buildLibraryToGyoyangFrontLeg(locale);
-    if (!libraryToGyoyang) throw new Error("library to gyoyang front failed");
-    legs.push(libraryToGyoyang);
-    // 11–13. 실외 — 연결된 보행로 좌표 고정 + 그래프 경로로만 이음
+    // 10. 도서관 정문 직진 → 횡단보도 → 서측 도로 → 열린광장 서쪽 (웅비 미경유)
+    const libraryToCampusWest = buildLibraryToCampusWestLeg(locale);
+    if (!libraryToCampusWest) throw new Error("library to campus west failed");
+    legs.push(libraryToCampusWest);
+    // 11–12. 비전하우스 → 인문관
     const outdoor = buildOutdoorLeg(graph, visionA, humanitiesMain, locale);
     if (!outdoor) throw new Error("fixed route outdoor leg failed");
     legs.push(outdoor);
