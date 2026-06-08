@@ -14,6 +14,7 @@ import { useUi } from "@/hooks/use-ui";
 import { NavLiveRegion } from "@/components/barrier-free/nav-live-region";
 import { arriveMessage, remainingDistanceLabel } from "@/lib/i18n/navigation";
 import { formatDistance } from "@/lib/routing/geo";
+import { cn } from "@/lib/utils";
 
 export default function RoutePage() {
   const router = useRouter();
@@ -67,7 +68,40 @@ export default function RoutePage() {
           label={ui.route.navLiveLabel}
         />
 
-        {/* 데스크톱 안내 배너 — 모바일은 패널·live region에서 표시 */}
+        {/* 모바일 실시간 안내 — 지도 좌상단 */}
+        {nav.navigating && (
+          <div
+            className={cn(
+              "pointer-events-none absolute z-40 max-w-[min(calc(100%-1.5rem),18rem)] sm:hidden",
+              "left-3 top-[max(0.75rem,env(safe-area-inset-top))]",
+            )}
+          >
+            <div className="rounded-xl bg-blue-600 px-3 py-2.5 text-white shadow-xl ring-1 ring-blue-500/40">
+              {!nav.userPos ? (
+                <>
+                  <p className="text-sm font-semibold leading-tight">{ui.route.navActive}</p>
+                  <p className="mt-0.5 text-xs text-blue-100">{ui.route.acquiringGps}</p>
+                </>
+              ) : isArrive && currentStep ? (
+                <p className="text-base font-bold leading-tight">{arriveMessage(locale)}</p>
+              ) : (
+                <>
+                  <p className="text-2xl font-extrabold tabular-nums leading-none">
+                    {formatDistance(nav.distanceToNext ?? 0, locale)}
+                  </p>
+                  <p className="mt-1 line-clamp-2 text-sm font-medium leading-snug">{bannerText}</p>
+                  {nav.remaining != null && !isArrive ? (
+                    <p className="mt-1 text-[11px] text-blue-100">
+                      {remainingDistanceLabel(locale)} {formatDistance(nav.remaining, locale)}
+                    </p>
+                  ) : null}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* 데스크톱 안내 배너 */}
         {nav.navigating && (
           <div className="absolute left-[calc(22rem+0.75rem)] top-3 z-40 hidden max-w-xs rounded-xl bg-blue-600 px-4 py-3 text-white shadow-xl sm:block">
             <div className="flex items-start gap-3">

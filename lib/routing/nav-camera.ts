@@ -218,7 +218,7 @@ export function applyNavigationCamera(
   }
 
   const heading = Number.isFinite(headingDeg) ? headingDeg : 0;
-  const lookAheadM = 35;
+  const lookAheadM = 42;
   const ahead = navigationCenterForUser(user, heading, lookAheadM);
   map.setCenter?.(createLatLng(ahead.lat, ahead.lng));
 
@@ -235,7 +235,7 @@ export function applyNavigationCamera(
     const obstructionVh = Math.max(0, options.bottomObstructionVh ?? 0);
     const obstructionPx = (obstructionVh / 100) * size.height;
     const visibleH = Math.max(size.height * 0.22, size.height - obstructionPx);
-    const targetUserY = obstructionPx + visibleH * 0.7;
+    const targetUserY = obstructionPx + visibleH * 0.4;
     const targetUserX = size.width * 0.5;
 
     const panX = targetUserX - userOffset.x;

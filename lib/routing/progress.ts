@@ -72,7 +72,7 @@ export function computeProgress(
   let stepIndex = 0;
   for (let i = 0; i < steps.length; i++) {
     const along = stepAlong(steps[i]);
-    if (along > bestAlong + 8) {
+    if (along > bestAlong + 14) {
       stepIndex = i;
       break;
     }

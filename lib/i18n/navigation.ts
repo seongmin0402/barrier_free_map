@@ -108,39 +108,106 @@ export function crosswalkNowText(locale: AppLocale): string {
   return locale === "en" ? "Cross the crosswalk" : "횡단보도를 건너세요";
 }
 
-/** GPS 추적 중 단계별 음성 — 거리 예고 + 승강기 전체 문장 */
+export type NavSpeechPhase = "far" | "approaching" | "imminent" | "now";
+
+const PHASE_ORDER: NavSpeechPhase[] = ["far", "approaching", "imminent", "now"];
+
+export function navSpeechPhase(distanceM: number): NavSpeechPhase {
+  if (distanceM <= 10) return "now";
+  if (distanceM <= 30) return "imminent";
+  if (distanceM <= 65) return "approaching";
+  return "far";
+}
+
+export function navSpeechPhaseRank(phase: NavSpeechPhase): number {
+  return PHASE_ORDER.indexOf(phase);
+}
+
+function turnSpeech(
+  locale: AppLocale,
+  maneuver: ManeuverKind,
+  phase: NavSpeechPhase,
+  distanceLabel: string,
+): string {
+  const turn = maneuverLabel(maneuver, locale);
+  if (phase === "far") {
+    return locale === "en" ? `In ${distanceLabel}, ${turn}` : `${distanceLabel} 앞 ${turn}`;
+  }
+  if (phase === "approaching") {
+    return locale === "en" ? `Soon, ${turn}` : `곧 ${turn}입니다`;
+  }
+  return locale === "en" ? `${turn} now` : `지금 ${turn}`;
+}
+
+function hazardSpeech(
+  locale: AppLocale,
+  maneuver: ManeuverKind,
+  phase: NavSpeechPhase,
+  distanceLabel: string,
+  stepText: string,
+): string {
+  if (maneuver === "stairs") {
+    if (phase === "far") {
+      return locale === "en"
+        ? `In ${distanceLabel}, stairs ahead`
+        : `${distanceLabel} 앞 계단 구간이 있습니다`;
+    }
+    if (phase === "approaching") {
+      return locale === "en" ? "Stairs coming up soon" : "곧 계단이 있습니다";
+    }
+    return locale === "en" ? "There are stairs" : "계단이 있습니다";
+  }
+  if (maneuver === "ramp") {
+    if (phase === "far") {
+      return locale === "en" ? `In ${distanceLabel}, ramp ahead` : `${distanceLabel} 앞 경사로가 있습니다`;
+    }
+    if (phase === "approaching") {
+      return locale === "en" ? "Ramp coming up soon" : "곧 경사로가 있습니다";
+    }
+    return locale === "en" ? "Use the ramp" : "경사로가 있습니다";
+  }
+  if (maneuver === "crosswalk") {
+    if (phase === "now" || phase === "imminent") return crosswalkNowText(locale);
+    if (phase === "approaching") {
+      return locale === "en" ? "Crosswalk coming up soon" : "곧 횡단보도입니다";
+    }
+    return crosswalkAheadText(distanceLabel, locale);
+  }
+  return stepText;
+}
+
+/** GPS 추적 중 단계별 음성 — 거리·단계(멀리/곧/지금)별 예고 */
 export function navStepSpeechText(
   locale: AppLocale,
   stepText: string,
   distanceM: number,
   distanceLabel: string,
   maneuver: ManeuverKind,
+  phase: NavSpeechPhase = navSpeechPhase(distanceM),
 ): string {
   if (maneuver === "arrive") return arriveMessage(locale);
 
-  if (maneuver === "crosswalk") {
-    return distanceM > 12 ? stepText : crosswalkNowText(locale);
-  }
-
-  const withDistance =
-    distanceM > 12
+  if (maneuver === "elevator" || maneuver === "straight") {
+    return phase === "far" && distanceM > 12
       ? locale === "en"
         ? `In ${distanceLabel}, ${stepText}`
         : `${distanceLabel} 앞, ${stepText}`
       : stepText;
-
-  if (maneuver === "elevator" || maneuver === "straight" || isGuidanceManeuver(maneuver)) {
-    return withDistance;
   }
 
-  const turn = maneuverLabel(maneuver, locale);
-  return distanceM > 12
-    ? locale === "en"
-      ? `In ${distanceLabel}, ${turn}`
-      : `${distanceLabel} 앞 ${turn}`
-    : locale === "en"
-      ? `${turn} now`
-      : `지금 ${turn}`;
+  if (isGuidanceManeuver(maneuver)) {
+    return hazardSpeech(locale, maneuver, phase, distanceLabel, stepText);
+  }
+
+  if (maneuver === "depart") {
+    return phase === "far" && distanceM > 12
+      ? locale === "en"
+        ? `In ${distanceLabel}, ${stepText}`
+        : `${distanceLabel} 앞, ${stepText}`
+      : stepText;
+  }
+
+  return turnSpeech(locale, maneuver, phase, distanceLabel);
 }
 
 /** 경사로·계단·횡단보도 등 — 구간 단위 한 줄 안내 */

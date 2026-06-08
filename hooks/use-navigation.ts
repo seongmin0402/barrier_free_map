@@ -5,9 +5,12 @@ import { useAppSettings } from "@/components/app-settings-provider";
 import type { BarrierBuilding } from "@/lib/building-types";
 import {
   arriveMessage,
+  navSpeechPhase,
+  navSpeechPhaseRank,
   navStepSpeechText,
   offRouteRerouteSpeech,
   routePreviewSpeechText,
+  type NavSpeechPhase,
 } from "@/lib/i18n/navigation";
 import { getUi } from "@/lib/i18n/ui";
 import type { LatLng } from "@/lib/routing/geo";
@@ -110,11 +113,21 @@ export function useNavigation(buildings: BarrierBuilding[]) {
   const watchIdRef = useRef<number | null>(null);
   const lastSpokenStepRef = useRef<number>(-1);
   const lastLiveStepIndexRef = useRef<number>(-1);
-  /** 단계별 거리 예고 음성 (120m → 60m) */
-  const speechBandRef = useRef<{ stepIndex: number; band: number }>({
+  const speechPhaseRef = useRef<{ stepIndex: number; phase: NavSpeechPhase }>({
     stepIndex: -1,
-    band: Infinity,
+    phase: "far",
   });
+  const metricsTargetRef = useRef<{
+    remaining: number;
+    distanceToNext: number;
+    stepIndex: number;
+  } | null>(null);
+  const metricsDisplayRef = useRef<{
+    remaining: number;
+    distanceToNext: number;
+  } | null>(null);
+  const metricsAnimRef = useRef<number | null>(null);
+  const lastMetricsUiAtRef = useRef(0);
   const gpsSmootherRef = useRef(createGpsSmoother());
   const navigationStartedAtRef = useRef<number>(0);
   const firstGpsFixRef = useRef<LatLng | null>(null);
@@ -143,21 +156,23 @@ export function useNavigation(buildings: BarrierBuilding[]) {
   const OFF_ROUTE_THRESHOLD_M = 40;
   const REROUTE_COOLDOWN_MS = 8000;
 
-  /** 목적지까지 실제 거리 + 최소 안내 시간을 만족할 때만 도착 처리 */
+  /** 목적지까지 실제 거리 + 경로 잔여 + 최소 이동을 만족할 때만 도착 처리 */
   const hasArrived = useCallback(
-    (activeRoute: ComputedRoute, pos: LatLng, offRoute: number) => {
+    (activeRoute: ComputedRoute, pos: LatLng, offRoute: number, remainingAlong: number) => {
       const sinceStartMs = Date.now() - navigationStartedAtRef.current;
-      if (sinceStartMs < 8000) return false;
+      if (sinceStartMs < 12000) return false;
+      if (remainingAlong > 18) return false;
 
       const dest = activeRoute.coords[activeRoute.coords.length - 1];
       const distToDest = haversineMeters(pos, dest);
-      if (distToDest > 22) return false;
-      if (offRoute > 45) return false;
+      if (distToDest > 14) return false;
+      if (offRoute > 32) return false;
 
-      // 첫 GPS와 거의 같으면 캐시된 좌표로 즉시 도착 처리하지 않음
       if (firstGpsFixRef.current) {
         const moved = haversineMeters(firstGpsFixRef.current, pos);
-        if (moved < 8 && sinceStartMs < 15000) return false;
+        const minTravel = Math.min(Math.max(activeRoute.distance * 0.15, 25), 120);
+        if (activeRoute.distance > 50 && moved < minTravel) return false;
+        if (moved < 12 && sinceStartMs < 20000) return false;
       }
 
       return true;
@@ -363,7 +378,9 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     prevGpsRef.current = null;
     lastGpsHeadingRef.current = null;
     gpsSmootherRef.current.reset();
-    speechBandRef.current = { stepIndex: -1, band: Infinity };
+    speechPhaseRef.current = { stepIndex: -1, phase: "far" };
+    metricsTargetRef.current = null;
+    metricsDisplayRef.current = null;
     setRemaining(null);
     setDistanceToNext(null);
     navigationStartedAtRef.current = 0;
@@ -389,7 +406,9 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     prevGpsRef.current = null;
     lastGpsHeadingRef.current = null;
     gpsSmootherRef.current.reset();
-    speechBandRef.current = { stepIndex: -1, band: Infinity };
+    speechPhaseRef.current = { stepIndex: -1, phase: "far" };
+    metricsTargetRef.current = null;
+    metricsDisplayRef.current = null;
     navMotionRef.current = {
       gpsHeading: null,
       speedMps: null,
@@ -476,7 +495,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
         prevGpsRef.current = here;
 
         const now = Date.now();
-        if (isFirstFix || now - lastUiPosUpdateRef.current >= 380) {
+        if (isFirstFix || now - lastUiPosUpdateRef.current >= 280) {
           lastUiPosUpdateRef.current = now;
           setUserPos(here);
         }
@@ -513,7 +532,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     if (alongRoute != null) setRouteHeading(alongRoute);
 
     const navLocale = localeRef.current;
-    const arrived = hasArrived(activeRoute, userPos, progress.offRoute);
+    const arrived = hasArrived(activeRoute, userPos, progress.offRoute, progress.remaining);
     const sinceStartMs = Date.now() - navigationStartedAtRef.current;
 
     // 경로 이탈 → 현재 위치에서 목적지까지 즉시 재탐색
@@ -535,6 +554,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
           setDistanceToNext(null);
           setRerouteNotice(true);
           lastLiveStepIndexRef.current = -1;
+          speechPhaseRef.current = { stepIndex: -1, phase: "far" };
           navSpeechBlockedUntilRef.current = Date.now() + 5500;
 
           const departStep =
@@ -551,49 +571,51 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     }
 
     setCurrentStepIndex(progress.stepIndex);
-    setRemaining(progress.remaining);
-    setDistanceToNext(progress.distanceToNext);
+    metricsTargetRef.current = {
+      remaining: progress.remaining,
+      distanceToNext: progress.distanceToNext,
+      stepIndex: progress.stepIndex,
+    };
 
     const step = activeRoute.steps[progress.stepIndex];
     if (!step) return;
 
     const speechAllowed = Date.now() >= navSpeechBlockedUntilRef.current;
     const d = progress.distanceToNext;
+    const phase = navSpeechPhase(d);
+    const distLabel = formatDistance(d, navLocale);
 
     if (step.maneuver !== "arrive" && step.maneuver !== "depart") {
       const liveText = navStepSpeechText(
         navLocale,
         step.text,
         d,
-        formatDistance(d, navLocale),
+        distLabel,
         step.maneuver,
+        phase,
       );
 
       if (progress.stepIndex !== lastLiveStepIndexRef.current) {
         lastLiveStepIndexRef.current = progress.stepIndex;
         setLiveAnnouncement(liveText);
+      } else if (speechPhaseRef.current.stepIndex === progress.stepIndex) {
+        const prevRank = navSpeechPhaseRank(speechPhaseRef.current.phase);
+        const nextRank = navSpeechPhaseRank(phase);
+        if (nextRank > prevRank) {
+          setLiveAnnouncement(liveText);
+        }
       }
 
       if (speechAllowed) {
-        const isGuidance =
-          step.maneuver === "elevator" ||
-          step.maneuver === "crosswalk" ||
-          step.maneuver === "ramp" ||
-          step.maneuver === "stairs";
+        const isNewStep = progress.stepIndex !== lastSpokenStepRef.current;
+        const phaseAdvanced =
+          speechPhaseRef.current.stepIndex === progress.stepIndex &&
+          navSpeechPhaseRank(phase) > navSpeechPhaseRank(speechPhaseRef.current.phase);
 
-        if (progress.stepIndex !== lastSpokenStepRef.current) {
+        if (isNewStep || phaseAdvanced) {
           lastSpokenStepRef.current = progress.stepIndex;
-          speechBandRef.current = { stepIndex: progress.stepIndex, band: d };
+          speechPhaseRef.current = { stepIndex: progress.stepIndex, phase };
           announce(liveText);
-        } else if (speechBandRef.current.stepIndex === progress.stepIndex) {
-          const reminders = isGuidance ? [85, 35] : [70];
-          for (const band of reminders) {
-            if (d <= band && speechBandRef.current.band > band + 10) {
-              speechBandRef.current.band = band;
-              announce(liveText);
-              break;
-            }
-          }
         }
       }
     }
@@ -603,6 +625,54 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       stopNav();
     }
   }, [navigating, navigationRoute, userPos, stopNav, hasArrived, announce]);
+
+  /** 남은 거리·다음 안내 거리 부드럽게 보간 */
+  useEffect(() => {
+    if (!navigating) {
+      if (metricsAnimRef.current != null) {
+        cancelAnimationFrame(metricsAnimRef.current);
+        metricsAnimRef.current = null;
+      }
+      metricsTargetRef.current = null;
+      metricsDisplayRef.current = null;
+      return;
+    }
+
+    const METRIC_LERP = 0.16;
+    const tick = () => {
+      const target = metricsTargetRef.current;
+      if (target) {
+        const prev = metricsDisplayRef.current;
+        const nextRemaining =
+          prev == null ? target.remaining : prev.remaining + (target.remaining - prev.remaining) * METRIC_LERP;
+        const nextDist =
+          prev == null
+            ? target.distanceToNext
+            : prev.distanceToNext + (target.distanceToNext - prev.distanceToNext) * METRIC_LERP;
+
+        metricsDisplayRef.current = {
+          remaining: nextRemaining,
+          distanceToNext: nextDist,
+        };
+
+        const now = Date.now();
+        if (now - lastMetricsUiAtRef.current >= 120) {
+          lastMetricsUiAtRef.current = now;
+          setRemaining(Math.round(nextRemaining));
+          setDistanceToNext(Math.max(0, Math.round(nextDist)));
+        }
+      }
+      metricsAnimRef.current = requestAnimationFrame(tick);
+    };
+
+    metricsAnimRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (metricsAnimRef.current != null) {
+        cancelAnimationFrame(metricsAnimRef.current);
+        metricsAnimRef.current = null;
+      }
+    };
+  }, [navigating]);
 
   useEffect(() => {
     if (!rerouteNotice) return;

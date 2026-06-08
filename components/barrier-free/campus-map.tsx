@@ -1003,6 +1003,7 @@ export function CampusMap({
       lastSheetVhForViewportRef.current = mobileSheetVh;
       if (followUser && navigationMode) {
         viewportAdjustedRef.current = false;
+        hasNavCenteredRef.current = false;
       }
     }
   }, [mobileSheetVh, followUser, navigationMode]);
