@@ -80,8 +80,8 @@ function FacilityStatusCard({
       className={cn(
         "flex flex-col items-center rounded-xl border p-3 text-center transition-colors",
         available
-          ? "border-2 border-[#005D91] bg-[#005D91]/12 shadow-md ring-1 ring-[#005D91]/20"
-          : "border border-dashed border-muted-foreground/25 bg-muted/25 opacity-65",
+          ? "border-2 border-[#005D91] bg-white shadow-md ring-1 ring-[#005D91]/20"
+          : "border border-dashed border-muted-foreground/25 bg-white/60 opacity-65",
       )}
     >
       <div

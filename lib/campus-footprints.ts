@@ -20,9 +20,9 @@ export interface FootprintFeatureCollection {
 }
 
 /** 등급 무관 단색 폴리곤 */
-export const FOOTPRINT_FILL_COLOR = "#005D91";
+export const FOOTPRINT_FILL_COLOR = "#FFFFFF";
 export const FOOTPRINT_STROKE_COLOR = "#004A73";
-export const FOOTPRINT_FILL_SELECTED = "#0078B8";
+export const FOOTPRINT_FILL_SELECTED = "#FFFFFF";
 export const FOOTPRINT_STROKE_SELECTED = "#005D91";
 
 /** @deprecated 등급별 색상 미사용 — 하위 호환용 */
@@ -54,7 +54,7 @@ export function footprintStrokeOptions(
     strokeWeight: selected ? 3 : 1.5,
     strokeOpacity: selected ? 1 : 0.88,
     fillColor: selected ? FOOTPRINT_FILL_SELECTED : FOOTPRINT_FILL_COLOR,
-    fillOpacity: selected ? 0.55 : 0.38,
+    fillOpacity: selected ? 0.92 : 0.85,
     zIndex: selected ? 220 : 50,
     clickable: true,
   };
