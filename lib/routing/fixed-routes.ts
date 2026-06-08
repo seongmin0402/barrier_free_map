@@ -19,6 +19,13 @@ const HUMANITIES_BUILDING_ID = "b-0";
 
 const JOIN_M = 4;
 
+/** 열린광장·운동장 서쪽 보행로 (웅비학생회관 건물 밖 — w_0194/w_0198/w_0240) */
+const GYOYANG_TO_PLAZA_PATH: LatLng = { lat: 36.469489684530373, lng: 127.138403842158638 };
+const OPEN_PLAZA_WEST: LatLng = { lat: 36.469669686937969, lng: 127.138319903827153 };
+const FIELD_WEST_CROSS: LatLng = { lat: 36.469760280096828, lng: 127.13819988673913 };
+const FIELD_NW_CORNER: LatLng = { lat: 36.469688634535423, lng: 127.138096436426693 };
+const FIELD_SOUTH_WEST: LatLng = { lat: 36.468655983717589, lng: 127.137449964014081 };
+
 function entrancePoint(entrances: BuildingEntrance[], id: string): LatLng {
   const hit = entrances.find((e) => e.id === id);
   if (!hit) throw new Error(`entrance ${id} not found`);
@@ -154,8 +161,7 @@ export function buildDreamToHumanitiesRoute(
   const sanhakMain = entrancePoint(entrances, "e_0074");
   const libraryRear3F = entrancePoint(entrances, "e_0029");
   const libraryMain1F = entrancePoint(entrances, "e_0028");
-  const gyoyangWest = entrancePoint(entrances, "e_0030");
-  const plazaSouth = entrancePoint(entrances, "e_0042");
+  const gyoyangRearWest = entrancePoint(entrances, "e_0033");
   const visionA = entrancePoint(entrances, "e_0014");
   const humanitiesMain = entrancePoint(entrances, "e_0004");
 
@@ -190,12 +196,16 @@ export function buildDreamToHumanitiesRoute(
     legs.push(elevatorLeg(evLibrary.point, evLibrary, "1F", locale));
     // 9. 도서관 1층 정문
     pushWalk(evLibrary.point, libraryMain1F);
-    // 10. 교양관 방향 (경사로 인도)
-    pushWalk(libraryMain1F, gyoyangWest);
-    // 11. 열린광장·운동장 쪽
-    pushWalk(gyoyangWest, plazaSouth);
-    // 12. 비전하우스
-    pushWalk(plazaSouth, visionA);
+    // 10. 교양관 서쪽 후문 (경사로 인도 — w_0387)
+    pushWalk(libraryMain1F, gyoyangRearWest);
+    // 11. 열린광장 서측 — 운동장 서쪽 보행로 (웅비학생회관 내부·출입구 미경유)
+    pushWalk(gyoyangRearWest, GYOYANG_TO_PLAZA_PATH);
+    pushWalk(GYOYANG_TO_PLAZA_PATH, OPEN_PLAZA_WEST);
+    pushWalk(OPEN_PLAZA_WEST, FIELD_WEST_CROSS);
+    // 12. 운동장 가로지름 (서측) → 비전하우스 방향
+    pushWalk(FIELD_WEST_CROSS, FIELD_NW_CORNER);
+    pushWalk(FIELD_NW_CORNER, FIELD_SOUTH_WEST);
+    pushWalk(FIELD_SOUTH_WEST, visionA);
     // 13. 인문사회과학대학관
     pushWalk(visionA, humanitiesMain);
   } catch {
