@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useMemo, useState, type RefObject } from "react";
+import { useEffect, useRef, useCallback, useMemo, useState, memo, type RefObject } from "react";
 import Script from "next/script";
 import { Plus, Minus, Locate, Maximize2, SlidersHorizontal, Route, Navigation } from "lucide-react";
 import Link from "next/link";
@@ -99,6 +99,190 @@ function escapeHtml(s: string) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function routeDrawSignature(
+  line: LatLng[] | null,
+  segments: string[] | null | undefined,
+  origin: LatLng | null | undefined,
+  dest: LatLng | null | undefined,
+): string {
+  if (!line || line.length < 2) return "";
+  const first = line[0];
+  const last = line[line.length - 1];
+  const mid = line[Math.floor(line.length / 2)];
+  const o = origin ? `${origin.lat},${origin.lng}` : "";
+  const d = dest ? `${dest.lat},${dest.lng}` : "";
+  return `${line.length}:${first.lat},${first.lng}:${mid.lat},${mid.lng}:${last.lat},${last.lng}:${segments?.length ?? 0}|${o}|${d}`;
+}
+
+function shouldHideFootprintsInNav(): boolean {
+  return (
+    typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches
+  );
+}
+
+type NaverRoutePolyline = {
+  setMap: (t: unknown) => void;
+  setPath?: (path: unknown) => void;
+};
+
+interface RouteColorSpan {
+  start: number;
+  end: number;
+  color: string;
+}
+
+function buildRouteColorSpans(
+  pathLen: number,
+  segments: string[] | null | undefined,
+): RouteColorSpan[] {
+  if (pathLen < 2) return [];
+  const colorAt = (i: number) => segmentColor(segments?.[i] ?? "path");
+  const spans: RouteColorSpan[] = [];
+  let start = 0;
+  for (let i = 0; i < pathLen - 1; i++) {
+    const isLast = i === pathLen - 2;
+    const colorChanges = !isLast && colorAt(i + 1) !== colorAt(i);
+    if (isLast || colorChanges) {
+      spans.push({ start, end: i + 1, color: colorAt(start) });
+      start = i + 1;
+    }
+  }
+  return spans;
+}
+
+function clearRoutePolylines(
+  outline: NaverRoutePolyline | null,
+  segments: NaverRoutePolyline[],
+): void {
+  try {
+    outline?.setMap(null);
+  } catch {
+    /* ignore */
+  }
+  for (const seg of segments) {
+    try {
+      seg.setMap(null);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function syncRoutePolylines(
+  map: unknown,
+  LatLngCtor: new (lat: number, lng: number) => unknown,
+  PolylineCtor: new (opts: Record<string, unknown>) => NaverRoutePolyline,
+  path: unknown[],
+  spans: RouteColorSpan[],
+  outlineRef: { current: NaverRoutePolyline | null },
+  segmentRefs: { current: NaverRoutePolyline[] },
+): void {
+  if (path.length < 2) {
+    clearRoutePolylines(outlineRef.current, segmentRefs.current);
+    outlineRef.current = null;
+    segmentRefs.current = [];
+    return;
+  }
+
+  if (outlineRef.current?.setPath) {
+    outlineRef.current.setPath(path);
+  } else {
+    try {
+      outlineRef.current?.setMap(null);
+    } catch {
+      /* ignore */
+    }
+    outlineRef.current = new PolylineCtor({
+      map,
+      path,
+      strokeColor: "#ffffff",
+      strokeOpacity: 0.9,
+      strokeWeight: 11,
+      strokeLineCap: "round",
+      strokeLineJoin: "round",
+      zIndex: 300,
+    });
+  }
+
+  while (segmentRefs.current.length > spans.length) {
+    const extra = segmentRefs.current.pop();
+    try {
+      extra?.setMap(null);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  for (let i = 0; i < spans.length; i++) {
+    const span = spans[i];
+    const slice = path.slice(span.start, span.end + 1);
+    let poly = segmentRefs.current[i];
+    if (poly?.setPath) {
+      poly.setPath(slice);
+    } else {
+      poly = new PolylineCtor({
+        map,
+        path: slice,
+        strokeColor: span.color,
+        strokeOpacity: 0.95,
+        strokeWeight: 6,
+        strokeLineCap: "round",
+        strokeLineJoin: "round",
+        zIndex: 301,
+      });
+      segmentRefs.current[i] = poly;
+      continue;
+    }
+    segmentRefs.current[i] = poly;
+  }
+  segmentRefs.current.length = spans.length;
+}
+
+function campusMapPropsAreEqual(prev: CampusMapProps, next: CampusMapProps): boolean {
+  const skipVolatileNav =
+    prev.followUser &&
+    prev.navigationMode &&
+    next.followUser &&
+    next.navigationMode;
+
+  const stableKeys: (keyof CampusMapProps)[] = [
+    "buildings",
+    "selectedBuilding",
+    "showFacilityPins",
+    "showAllFootprints",
+    "routeLine",
+    "routeSegments",
+    "originPoint",
+    "destPoint",
+    "pickMode",
+    "followUser",
+    "navigationMode",
+    "mapLayout",
+    "mobileSheetVh",
+    "elevators",
+    "routeElevatorIds",
+    "directionsHref",
+    "directionsLabel",
+    "onBuildingSelect",
+    "onMapPick",
+    "liveUserPositionRef",
+    "deviceHeadingRef",
+    "navMotionRef",
+  ];
+
+  for (const key of stableKeys) {
+    if (prev[key] !== next[key]) return false;
+  }
+
+  if (!skipVolatileNav) {
+    if (prev.liveUserPosition !== next.liveUserPosition) return false;
+    if (prev.userHeading !== next.userHeading) return false;
+    if (prev.routeHeading !== next.routeHeading) return false;
+  }
+
+  return true;
 }
 
 type NMaps = NonNullable<Window["naver"]>["maps"];
@@ -310,7 +494,7 @@ function navArrowHtml(headingDeg = 0) {
   </div>`;
 }
 
-export function CampusMap({
+function CampusMapInner({
   buildings,
   selectedBuilding,
   onBuildingSelect,
@@ -341,7 +525,8 @@ export function CampusMap({
   const clientId = process.env.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID ?? "";
   const containerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<unknown>(null);
-  const routePolylineRef = useRef<Array<{ setMap: (t: unknown) => void }>>([]);
+  const routeOutlineRef = useRef<NaverRoutePolyline | null>(null);
+  const routeSegmentPolylinesRef = useRef<NaverRoutePolyline[]>([]);
   const routeMarkersRef = useRef<Array<{ setMap: (t: unknown) => void }>>([]);
   const elevatorMarkersRef = useRef<Array<{ setMap: (t: unknown) => void }>>([]);
   const navUserMarkerRef = useRef<{
@@ -381,6 +566,9 @@ export function CampusMap({
   liveUserPosRefProp.current = liveUserPositionRef;
   const lastCameraFrameRef = useRef(0);
   const lastAppliedCamRef = useRef<{ lat: number; lng: number; heading: number } | null>(null);
+  const navFollowSessionRef = useRef(false);
+  const lastRouteDrawSigRef = useRef("");
+  const lastCameraApplyAtRef = useRef(0);
   mobileSheetVhRef.current = mobileSheetVh;
   const userHeadingRef = useRef(userHeading);
   const routeHeadingRef = useRef(routeHeading);
@@ -505,14 +693,9 @@ export function CampusMap({
     });
     footprintPolygonsRef.current = [];
 
-    routePolylineRef.current.forEach((p) => {
-      try {
-        p.setMap(null);
-      } catch {
-        /* ignore */
-      }
-    });
-    routePolylineRef.current = [];
+    clearRoutePolylines(routeOutlineRef.current, routeSegmentPolylinesRef.current);
+    routeOutlineRef.current = null;
+    routeSegmentPolylinesRef.current = [];
     routeMarkersRef.current.forEach((m) => {
       try {
         m.setMap(null);
@@ -726,11 +909,6 @@ export function CampusMap({
     const map = mapInstanceRef.current;
     if (!map) return;
 
-    const hideFootprintsOnMobileNav =
-      navigationMode &&
-      typeof window !== "undefined" &&
-      window.matchMedia("(max-width: 639px)").matches;
-
     footprintPolygonsRef.current.forEach(({ poly }) => {
       try {
         poly.setMap(null);
@@ -739,19 +917,6 @@ export function CampusMap({
       }
     });
     footprintPolygonsRef.current = [];
-
-    if (hideFootprintsOnMobileNav) {
-      return () => {
-        footprintPolygonsRef.current.forEach(({ poly }) => {
-          try {
-            poly.setMap(null);
-          } catch {
-            /* ignore */
-          }
-        });
-        footprintPolygonsRef.current = [];
-      };
-    }
 
     const maps = window.naver?.maps as NMaps | undefined;
     const PolygonCtor = maps?.Polygon as
@@ -806,7 +971,21 @@ export function CampusMap({
       });
       footprintPolygonsRef.current = [];
     };
-  }, [sdkLoaded, footprintCollection, mapReadyEpoch, buildings, showAllFootprints, navigationMode, ui]);
+  }, [sdkLoaded, footprintCollection, mapReadyEpoch, buildings, showAllFootprints, ui]);
+
+  /** 모바일 길안내 중 건물 폴리곤만 숨김 (재생성 없이 setMap 토글) */
+  useEffect(() => {
+    if (!sdkLoaded || footprintPolygonsRef.current.length === 0) return;
+    const map = mapInstanceRef.current;
+    const targetMap = navigationMode && shouldHideFootprintsInNav() ? null : map;
+    for (const { poly } of footprintPolygonsRef.current) {
+      try {
+        poly.setMap(targetMap);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [sdkLoaded, navigationMode, mapReadyEpoch]);
 
   /** 선택 변경 시 폴리곤 테두리만 갱신 */
   useEffect(() => {
@@ -859,24 +1038,26 @@ export function CampusMap({
     const maps = window.naver?.maps as NMaps | undefined;
     if (!map || !maps?.LatLng) return;
 
+    const drawSig = routeDrawSignature(routeLine, routeSegments, originPoint, destPoint);
+    const routeUnchanged =
+      drawSig.length > 0 &&
+      drawSig === lastRouteDrawSigRef.current &&
+      routeOutlineRef.current != null;
+
     const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
     const PolylineCtor = maps.Polyline as
-      | (new (opts: Record<string, unknown>) => { setMap: (t: unknown) => void })
+      | (new (opts: Record<string, unknown>) => NaverRoutePolyline)
       | undefined;
     const MarkerCtor = maps.Marker as
       | (new (opts: Record<string, unknown>) => { setMap: (t: unknown) => void })
       | undefined;
     const PointCtor = maps.Point as (new (x: number, y: number) => unknown) | undefined;
 
-    // 기존 경로/마커 제거
-    routePolylineRef.current.forEach((p) => {
-      try {
-        p.setMap(null);
-      } catch {
-        /* ignore */
-      }
-    });
-    routePolylineRef.current = [];
+    if (routeUnchanged) {
+      return;
+    }
+    lastRouteDrawSigRef.current = drawSig;
+
     routeMarkersRef.current.forEach((m) => {
       try {
         m.setMap(null);
@@ -888,41 +1069,20 @@ export function CampusMap({
 
     if (routeLine && routeLine.length >= 2 && PolylineCtor) {
       const path = routeLine.map((p) => new LatLngCtor(p.lat, p.lng));
-      // 흰색 외곽선 (가독성)
-      const outline = new PolylineCtor({
+      const spans = buildRouteColorSpans(path.length, routeSegments);
+      syncRoutePolylines(
         map,
+        LatLngCtor,
+        PolylineCtor,
         path,
-        strokeColor: "#ffffff",
-        strokeOpacity: 0.9,
-        strokeWeight: 11,
-        strokeLineCap: "round",
-        strokeLineJoin: "round",
-        zIndex: 300,
-      });
-      routePolylineRef.current.push(outline);
-
-      // 구간 종류별 색상으로 본선을 나눠 그림 (횡단보도/계단/경사로 구분)
-      const colorAt = (i: number) => segmentColor(routeSegments?.[i] ?? "path");
-      let start = 0;
-      for (let i = 0; i < path.length - 1; i++) {
-        const isLast = i === path.length - 2;
-        const colorChanges = !isLast && colorAt(i + 1) !== colorAt(i);
-        if (isLast || colorChanges) {
-          const groupPath = path.slice(start, i + 2);
-          const seg = new PolylineCtor({
-            map,
-            path: groupPath,
-            strokeColor: colorAt(start),
-            strokeOpacity: 0.95,
-            strokeWeight: 6,
-            strokeLineCap: "round",
-            strokeLineJoin: "round",
-            zIndex: 301,
-          });
-          routePolylineRef.current.push(seg);
-          start = i + 1;
-        }
-      }
+        spans,
+        routeOutlineRef,
+        routeSegmentPolylinesRef,
+      );
+    } else {
+      clearRoutePolylines(routeOutlineRef.current, routeSegmentPolylinesRef.current);
+      routeOutlineRef.current = null;
+      routeSegmentPolylinesRef.current = [];
     }
 
     if (MarkerCtor && PointCtor) {
@@ -947,14 +1107,9 @@ export function CampusMap({
     }
 
     return () => {
-      routePolylineRef.current.forEach((p) => {
-        try {
-          p.setMap(null);
-        } catch {
-          /* ignore */
-        }
-      });
-      routePolylineRef.current = [];
+      clearRoutePolylines(routeOutlineRef.current, routeSegmentPolylinesRef.current);
+      routeOutlineRef.current = null;
+      routeSegmentPolylinesRef.current = [];
       routeMarkersRef.current.forEach((m) => {
         try {
           m.setMap(null);
@@ -1072,23 +1227,29 @@ export function CampusMap({
     if (Number.isFinite(h)) targetHeadingRef.current = h;
   }, [userHeading, routeHeading, resolveFusedHeading]);
 
-  /** 안내 시작/종료 시 추적 상태 초기화 */
+  /** 안내 시작/종료 시 추적 상태 초기화 (방향 갱신마다 리셋하지 않음) */
   useEffect(() => {
-    if (followUser && navigationMode) {
-      setFollowPaused(false);
-      navZoomSetRef.current = false;
-      navSnapPendingRef.current = true;
-      hasNavCenteredRef.current = false;
-      viewportAdjustedRef.current = false;
-      displayPosRef.current = null;
-      targetPosRef.current = null;
-      lastMarkerHeadingRef.current = null;
-      lastAppliedCamRef.current = null;
-      const seedHeading = routeHeading ?? userHeading ?? 0;
-      displayHeadingRef.current = seedHeading;
-      targetHeadingRef.current = seedHeading;
+    const active = followUser && navigationMode;
+    if (!active) {
+      navFollowSessionRef.current = false;
+      return;
     }
-  }, [followUser, navigationMode, routeHeading, userHeading]);
+    if (navFollowSessionRef.current) return;
+    navFollowSessionRef.current = true;
+
+    setFollowPaused(false);
+    navZoomSetRef.current = false;
+    navSnapPendingRef.current = true;
+    hasNavCenteredRef.current = false;
+    viewportAdjustedRef.current = false;
+    displayPosRef.current = null;
+    targetPosRef.current = null;
+    lastMarkerHeadingRef.current = null;
+    lastAppliedCamRef.current = null;
+    const seedHeading = routeHeadingRef.current ?? userHeadingRef.current ?? 0;
+    displayHeadingRef.current = seedHeading;
+    targetHeadingRef.current = seedHeading;
+  }, [followUser, navigationMode]);
 
   /** GPS 수신 전 출발점·경로 시작점으로 미리 맞춤 */
   useEffect(() => {
@@ -1229,6 +1390,10 @@ export function CampusMap({
       return;
     }
 
+    if (followUser && navigationMode && !followPaused && navUserMarkerRef.current?.setPosition) {
+      return;
+    }
+
     const pos = displayPosRef.current ?? liveUserPosition;
     const ll = new LatLngCtor(pos.lat, pos.lng);
     const h = displayHeadingRef.current;
@@ -1242,7 +1407,7 @@ export function CampusMap({
         icon: { content: navArrowHtml(h), anchor: new PointCtor(14, 14) },
       }) as typeof navUserMarkerRef.current;
     }
-  }, [sdkLoaded, mapReadyEpoch, liveUserPosition]);
+  }, [sdkLoaded, mapReadyEpoch, liveUserPosition, followUser, navigationMode, followPaused]);
 
   /** 부드러운 추적 + 방향 회전 (requestAnimationFrame) */
   useEffect(() => {
@@ -1257,10 +1422,11 @@ export function CampusMap({
     let lastFrameTime = performance.now();
     const isMobileNav =
       typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches;
-    const minFrameMs = isMobileNav ? 33 : 0;
-    const markerHeadingThreshold = isMobileNav ? 6 : 2;
-    const camMoveSkipM = isMobileNav ? 0.4 : 0.25;
-    const camHeadingSkipDeg = isMobileNav ? 5 : 2;
+    const minFrameMs = isMobileNav ? 50 : 32;
+    const markerHeadingThreshold = isMobileNav ? 8 : 4;
+    const camMoveSkipM = isMobileNav ? 1.8 : 1.0;
+    const camHeadingSkipDeg = isMobileNav ? 10 : 6;
+    const camApplyMinMs = isMobileNav ? 140 : 90;
 
     const tick = (now: number) => {
       if (minFrameMs > 0 && now - lastCameraFrameRef.current < minFrameMs) {
@@ -1345,7 +1511,12 @@ export function CampusMap({
         haversineMeters(lastCam, display) < camMoveSkipM &&
         Math.abs(((headingForCam - lastCam.heading + 540) % 360) - 180) < camHeadingSkipDeg;
 
-      if (skipCamera) {
+      const camDue =
+        shouldSnap ||
+        needsViewportAdjust ||
+        now - lastCameraApplyAtRef.current >= camApplyMinMs;
+
+      if (skipCamera || !camDue) {
         navAnimFrameRef.current = requestAnimationFrame(tick);
         return;
       }
@@ -1386,6 +1557,7 @@ export function CampusMap({
           }
         }
         navZoomSetRef.current = true;
+        lastCameraApplyAtRef.current = now;
         lastAppliedCamRef.current = {
           lat: display.lat,
           lng: display.lng,
@@ -1404,6 +1576,7 @@ export function CampusMap({
     return () => {
       if (navAnimFrameRef.current != null) cancelAnimationFrame(navAnimFrameRef.current);
       navAnimFrameRef.current = null;
+      lastCameraApplyAtRef.current = 0;
     };
   }, [sdkLoaded, followUser, navigationMode, followPaused, mapReadyEpoch, mapLayout]);
 
@@ -2020,3 +2193,5 @@ export function CampusMap({
     </div>
   );
 }
+
+export const CampusMap = memo(CampusMapInner, campusMapPropsAreEqual);

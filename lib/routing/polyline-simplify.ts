@@ -172,3 +172,25 @@ export function simplifyForGuidance(
 
   return { coords: guideCoords, segs: guideSegs, elevatorText: guideElevator };
 }
+
+/** 지도 폴리라인 표시용 — 횡단·계단·경사로 경계 유지, 좌표 수 축소 */
+export function simplifyForMapDisplay(
+  coords: LatLng[],
+  segmentTypes: WalkwayType[],
+  toleranceM = 4,
+): { coords: LatLng[]; segmentTypes: WalkwayType[] } {
+  if (coords.length < 2) {
+    return { coords: [...coords], segmentTypes: [...segmentTypes] };
+  }
+
+  const segs = segmentTypes.map((type) => ({ type }));
+  const mustKeep = boundaryMustKeep(coords, segs);
+  const kept = douglasPeuckerIndices(coords, toleranceM, mustKeep);
+  const mapCoords = kept.map((i) => coords[i]);
+  const mapSegs: WalkwayType[] = [];
+  for (let k = 0; k < kept.length - 1; k++) {
+    mapSegs.push(dominantSegType(coords, segs, kept[k], kept[k + 1]));
+  }
+
+  return { coords: mapCoords, segmentTypes: mapSegs };
+}

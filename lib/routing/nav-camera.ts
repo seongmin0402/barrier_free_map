@@ -200,6 +200,9 @@ function isValidLatLng(user: LatLng): boolean {
 /**
  * 길안내 카메라 — setCenter(look-ahead) + (snap 시 1회) panBy 뷰포트 보정.
  * 반환값은 지도 회전 transform-origin(픽셀)입니다.
+ *
+ * 타일 재로딩을 줄이려면 호출 측(campus-map rAF)에서 이동·방향 임계값·최소 간격으로
+ * setCenter 빈도를 제한하고, panBy는 최초 뷰포트 보정(adjustViewport) 1회만 사용한다.
  */
 export function applyNavigationCamera(
   map: NavigationCameraMap,

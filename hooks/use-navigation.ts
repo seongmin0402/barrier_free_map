@@ -130,6 +130,9 @@ export function useNavigation(buildings: BarrierBuilding[]) {
   } | null>(null);
   const metricsAnimRef = useRef<number | null>(null);
   const lastMetricsUiAtRef = useRef(0);
+  const lastProgressUiAtRef = useRef(0);
+  const lastProgressStepRef = useRef(-1);
+  const lastProgressComputeAtRef = useRef(0);
   const gpsSmootherRef = useRef(createGpsSmoother());
   const navigationStartedAtRef = useRef<number>(0);
   const firstGpsFixRef = useRef<LatLng | null>(null);
@@ -415,6 +418,9 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     firstGpsFixRef.current = null;
     navSpeechBlockedUntilRef.current = 0;
     lastRerouteAtRef.current = 0;
+    lastProgressUiAtRef.current = 0;
+    lastProgressStepRef.current = -1;
+    lastProgressComputeAtRef.current = 0;
     navDestPointRef.current = null;
     setOffRouteM(null);
     setRerouteNotice(false);
@@ -526,14 +532,15 @@ export function useNavigation(buildings: BarrierBuilding[]) {
         prevGpsRef.current = here;
 
         const now = Date.now();
-        if (isFirstFix || now - lastUiPosUpdateRef.current >= 280) {
+        if (isFirstFix || now - lastUiPosUpdateRef.current >= 420) {
           lastUiPosUpdateRef.current = now;
           setUserPos(here);
         }
 
         if (heading != null) {
           lastGpsHeadingRef.current = heading;
-          if (now - lastUiHeadingUpdateRef.current >= 280) {
+          routeHeadingNavRef.current = heading;
+          if (isFirstFix || now - lastUiHeadingUpdateRef.current >= 500) {
             lastUiHeadingUpdateRef.current = now;
             setUserHeading(heading);
           }
@@ -554,13 +561,15 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     const activeRoute = navigationRoute;
     if (!navigating || !activeRoute || !userPos) return;
 
+    const computeNow = Date.now();
+    if (computeNow - lastProgressComputeAtRef.current < 280) return;
+    lastProgressComputeAtRef.current = computeNow;
+
     const progress = computeProgress(activeRoute, userPos);
     if (!progress) return;
 
-    setOffRouteM(progress.offRoute);
-
     const alongRoute = headingAlongRoute(activeRoute, progress);
-    if (alongRoute != null) setRouteHeading(alongRoute);
+    if (alongRoute != null) routeHeadingNavRef.current = alongRoute;
 
     const navLocale = localeRef.current;
     const arrived = hasArrived(activeRoute, userPos, progress.offRoute, progress.remaining);
@@ -604,12 +613,21 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       }
     }
 
-    setCurrentStepIndex(progress.stepIndex);
     metricsTargetRef.current = {
       remaining: progress.remaining,
       distanceToNext: progress.distanceToNext,
       stepIndex: progress.stepIndex,
     };
+
+    const progressNow = Date.now();
+    const stepChanged = progress.stepIndex !== lastProgressStepRef.current;
+    if (stepChanged || progressNow - lastProgressUiAtRef.current >= 400) {
+      lastProgressUiAtRef.current = progressNow;
+      lastProgressStepRef.current = progress.stepIndex;
+      setCurrentStepIndex(progress.stepIndex);
+      setOffRouteM(progress.offRoute);
+      if (alongRoute != null) setRouteHeading(alongRoute);
+    }
 
     const step = activeRoute.steps[progress.stepIndex];
     if (!step) return;
@@ -694,7 +712,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
         };
 
         const now = Date.now();
-        if (now - lastMetricsUiAtRef.current >= 120) {
+        if (now - lastMetricsUiAtRef.current >= 220) {
           lastMetricsUiAtRef.current = now;
           setRemaining(Math.round(nextRemaining));
           setDistanceToNext(Math.max(0, Math.round(nextDist)));

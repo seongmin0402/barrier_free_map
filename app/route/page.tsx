@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { parseRouteLaunchSearch } from "@/lib/routing/route-launch";
 import { Navigation } from "lucide-react";
@@ -14,6 +14,7 @@ import { useUi } from "@/hooks/use-ui";
 import { NavLiveRegion } from "@/components/barrier-free/nav-live-region";
 import { arriveMessage, remainingDistanceLabel } from "@/lib/i18n/navigation";
 import { formatDistance } from "@/lib/routing/geo";
+import { simplifyForMapDisplay } from "@/lib/routing/polyline-simplify";
 import { cn } from "@/lib/utils";
 
 export default function RoutePage() {
@@ -48,6 +49,23 @@ export default function RoutePage() {
     nav.close();
     router.push("/");
   };
+
+  const mapRouteDisplay = useMemo(() => {
+    const route = nav.route;
+    if (!route?.coords || route.coords.length < 2) {
+      return { coords: null, segmentTypes: null };
+    }
+    return simplifyForMapDisplay(route.coords, route.segmentTypes ?? []);
+  }, [nav.route]);
+
+  const mapOriginPoint = useMemo(
+    () => nav.routeEndpoints?.from ?? nav.origin?.point ?? null,
+    [nav.routeEndpoints, nav.origin],
+  );
+  const mapDestPoint = useMemo(
+    () => nav.routeEndpoints?.to ?? nav.destination?.point ?? null,
+    [nav.routeEndpoints, nav.destination],
+  );
 
   const currentStep = nav.route?.steps[nav.currentStepIndex] ?? null;
   const isArrive = currentStep?.maneuver === "arrive";
@@ -138,10 +156,10 @@ export default function RoutePage() {
           buildings={buildings}
           selectedBuilding={null}
           onBuildingSelect={nav.handleBuildingSelect}
-          routeLine={nav.route?.coords ?? null}
-          routeSegments={nav.route?.segmentTypes ?? null}
-          originPoint={nav.routeEndpoints?.from ?? nav.origin?.point ?? null}
-          destPoint={nav.routeEndpoints?.to ?? nav.destination?.point ?? null}
+          routeLine={mapRouteDisplay.coords}
+          routeSegments={mapRouteDisplay.segmentTypes}
+          originPoint={mapOriginPoint}
+          destPoint={mapDestPoint}
           liveUserPosition={nav.navigating ? nav.userPos : null}
           liveUserPositionRef={nav.userPosRef}
           pickMode={nav.pickMode}

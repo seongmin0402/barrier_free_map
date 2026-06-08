@@ -251,6 +251,43 @@ function buildOutdoorLeg(locale: AppLocale): ComputedRoute | null {
   );
 }
 
+/** 인문관 정문 → w_0234 (buildOutdoorLeg 역방향) */
+function buildHumanitiesOutdoorLeg(locale: AppLocale): ComputedRoute | null {
+  return polylineFromChains(
+    [
+      { type: "ramp", reverse: true, coords: W_0355 },
+      { type: "path", reverse: true, coords: W_0009 },
+      { type: "path", reverse: true, coords: W_0007 },
+      { type: "path", reverse: true, coords: W_0006 },
+      { type: "path", reverse: true, coords: W_0004 },
+      { type: "crosswalk", reverse: true, coords: W_0003 },
+      { type: "path", coords: W_0230 },
+      { type: "path", coords: W_0232 },
+    ],
+    locale,
+  );
+}
+
+/** 열린광장 서쪽 → 중앙도서관 정문 (buildLibraryToCampusWestLeg 역방향) */
+function buildCampusWestToLibraryLeg(locale: AppLocale): ComputedRoute | null {
+  return polylineFromChains(
+    [
+      { type: "path", coords: W_0234 },
+      { type: "path", coords: W_0531 },
+      { type: "path", reverse: true, coords: W_0194 },
+      { type: "path", reverse: true, coords: W_0192 },
+      { type: "path", reverse: true, coords: W_0187 },
+      { type: "path", reverse: true, coords: W_0163 },
+      { type: "path", reverse: true, coords: W_0162 },
+      { type: "path", coords: W_0160 },
+      { type: "crosswalk", coords: W_0161 },
+      { type: "path", coords: W_0170 },
+      { type: "path", coords: W_0382 },
+    ],
+    locale,
+  );
+}
+
 function entrancePoint(entrances: BuildingEntrance[], id: string): LatLng {
   const hit = entrances.find((e) => e.id === id);
   if (!hit) throw new Error(`entrance ${id} not found`);
@@ -492,12 +529,106 @@ export function buildDreamToHumanitiesRoute(
   return merged;
 }
 
+/** 인문사회과학대학관 → 드림하우스 (동일 현장 동선 역방향) */
+export function buildHumanitiesToDreamRoute(
+  graph: RoutingGraph,
+  entrances: BuildingEntrance[],
+  elevators: ElevatorRecord[],
+  locale: AppLocale,
+): ComputedRoute | null {
+  if (!graph.nodes.size) return null;
+
+  const dreamEntrance = entrancePoint(entrances, "e_0077");
+  const sanhakB1 = entrancePoint(entrances, "e_0075");
+  const sanhakMain = entrancePoint(entrances, "e_0074");
+  const libraryRear3F = entrancePoint(entrances, "e_0029");
+  const libraryMain1F = entrancePoint(entrances, "e_0028");
+  const humanitiesMain = entrancePoint(entrances, "e_0004");
+
+  const evSanhak = elevatorById(elevators, "ev_004");
+  const evMirae = elevatorById(elevators, "ev_003");
+  const evLibrary = elevatorById(elevators, "ev_001");
+
+  const legs: ComputedRoute[] = [];
+
+  const pushWalk = (from: LatLng, to: LatLng, beforeElevator = false) => {
+    let leg = walkLeg(graph, from, to, locale);
+    if (!leg) throw new Error("fixed route walk leg failed");
+    if (beforeElevator) leg = withoutElevatorSteps(leg);
+    legs.push(leg);
+  };
+
+  try {
+    // 1. 인문관 정문 → 열린광장 서쪽 (비전하우스 미경유)
+    const humanitiesOutdoor = buildHumanitiesOutdoorLeg(locale);
+    if (!humanitiesOutdoor) throw new Error("humanities outdoor leg failed");
+    legs.push(humanitiesOutdoor);
+    // 2. 서쪽 → 중앙도서관 1층 정문
+    const campusWestToLibrary = buildCampusWestToLibraryLeg(locale);
+    if (!campusWestToLibrary) throw new Error("campus west to library failed");
+    legs.push(campusWestToLibrary);
+    // 3. 도서관 정문 → 승강기
+    pushWalk(libraryMain1F, evLibrary.point, true);
+    // 4. 도서관 승강기 1F → 3F
+    legs.push(elevatorLeg(evLibrary.point, evLibrary, "3F", locale));
+    // 5. 도서관 3층 후문(경사로) 방향
+    pushWalk(evLibrary.point, libraryRear3F);
+    // 6. 미래융합 승강기
+    pushWalk(libraryRear3F, evMirae.point, true);
+    // 7. 미래융합 2F → B1
+    legs.push(elevatorLeg(evMirae.point, evMirae, "B1", locale));
+    // 8. 산학 정문 방향
+    pushWalk(evMirae.point, sanhakMain);
+    // 9. 산학 승강기 1F → B1
+    pushWalk(sanhakMain, evSanhak.point, true);
+    legs.push(elevatorLeg(evSanhak.point, evSanhak, "B1", locale));
+    // 10. 산학 B1 → 드림하우스 B동입구
+    pushWalk(evSanhak.point, dreamEntrance);
+  } catch {
+    return null;
+  }
+
+  const merged = mergeComputedRoutes(legs);
+  if (!merged) return null;
+
+  if (merged.steps[0]?.maneuver === "depart") {
+    merged.steps[0].text = locale === "en" ? "Follow the guided campus route" : "안내 경로를 따라 이동하세요";
+  }
+  const arrive = merged.steps[merged.steps.length - 1];
+  if (arrive?.maneuver === "arrive") {
+    arrive.text = arriveMessage(locale);
+  }
+
+  return merged;
+}
+
+function isDreamHumanitiesBuildingPair(
+  originId: string | undefined,
+  destinationId: string | undefined,
+): boolean {
+  const o = normalizeBuildingId(originId ?? "");
+  const d = normalizeBuildingId(destinationId ?? "");
+  return (
+    (o === DREAM_BUILDING_ID && d === HUMANITIES_BUILDING_ID) ||
+    (o === HUMANITIES_BUILDING_ID && d === DREAM_BUILDING_ID)
+  );
+}
+
 export function isDreamToHumanitiesPair(origin: RoutePoint, destination: RoutePoint): boolean {
   return (
     origin.kind === "building" &&
     destination.kind === "building" &&
     normalizeBuildingId(origin.buildingId) === DREAM_BUILDING_ID &&
     normalizeBuildingId(destination.buildingId) === HUMANITIES_BUILDING_ID
+  );
+}
+
+export function isHumanitiesToDreamPair(origin: RoutePoint, destination: RoutePoint): boolean {
+  return (
+    origin.kind === "building" &&
+    destination.kind === "building" &&
+    normalizeBuildingId(origin.buildingId) === HUMANITIES_BUILDING_ID &&
+    normalizeBuildingId(destination.buildingId) === DREAM_BUILDING_ID
   );
 }
 
@@ -509,14 +640,26 @@ export function tryFixedRoutePair(
   destination: RoutePoint,
   locale: AppLocale,
 ): RoutePairResult | null {
-  if (!isDreamToHumanitiesPair(origin, destination)) return null;
-
-  const route = buildDreamToHumanitiesRoute(graph, entrances, elevators, locale);
-  if (!route) return null;
+  if (
+    origin.kind !== "building" ||
+    destination.kind !== "building" ||
+    !isDreamHumanitiesBuildingPair(origin.buildingId, destination.buildingId)
+  ) {
+    return null;
+  }
 
   const dreamEntrance = entrancePoint(entrances, "e_0077");
   const humanitiesMain = entrancePoint(entrances, "e_0004");
-  const endpoints = { from: dreamEntrance, to: humanitiesMain };
+
+  const toHumanities = isDreamToHumanitiesPair(origin, destination);
+  const route = toHumanities
+    ? buildDreamToHumanitiesRoute(graph, entrances, elevators, locale)
+    : buildHumanitiesToDreamRoute(graph, entrances, elevators, locale);
+  if (!route) return null;
+
+  const endpoints = toHumanities
+    ? { from: dreamEntrance, to: humanitiesMain }
+    : { from: humanitiesMain, to: dreamEntrance };
 
   return {
     fast: route,
