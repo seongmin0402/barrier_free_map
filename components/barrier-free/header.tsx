@@ -1,6 +1,7 @@
 "use client";
 
-import { Search, Settings, Accessibility } from "lucide-react";
+import Image from "next/image";
+import { Search, Settings } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,19 +32,15 @@ export function Header({ onSettingsClick, searchQuery, onSearchChange }: HeaderP
   return (
     <header className="flex flex-col gap-2 border-b border-border bg-card px-3 py-2.5 shadow-sm sm:flex-row sm:items-center sm:gap-4 sm:px-4 sm:py-3">
       <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start">
-        <div className="flex min-w-0 flex-1 items-center gap-2 sm:flex-initial sm:gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground sm:h-10 sm:w-10">
-            <Accessibility className="h-4 w-4 sm:h-5 sm:w-5" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="truncate text-sm font-bold leading-tight text-foreground sm:text-lg">
-              {ui.header.university}
-            </h1>
-            <p className="truncate text-[10px] text-muted-foreground sm:text-xs">
-              <span className="sm:hidden">{ui.header.subtitleShort}</span>
-              <span className="hidden sm:inline">{ui.header.subtitleFull}</span>
-            </p>
-          </div>
+        <div className="flex min-w-0 flex-1 items-center sm:flex-initial">
+          <Image
+            src="/logo.png"
+            alt={`${ui.header.university} ${ui.header.subtitleFull}`}
+            width={240}
+            height={48}
+            className="h-9 w-auto max-w-[11rem] object-contain object-left sm:h-10 sm:max-w-[13rem]"
+            priority
+          />
         </div>
 
         <Button

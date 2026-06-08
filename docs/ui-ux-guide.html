@@ -1,0 +1,1315 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>베리어프리맵 — UI/UX + 기술 가이드</title>
+  <style>
+    :root {
+      --bg: #f0f4f8;
+      --card: #ffffff;
+      --text: #1a2332;
+      --muted: #5c6b7a;
+      --border: #e2e8f0;
+      --primary: #2563eb;
+      --primary-soft: #dbeafe;
+      --green: #059669;
+      --green-soft: #d1fae5;
+      --amber: #d97706;
+      --amber-soft: #fef3c7;
+      --red: #dc2626;
+      --red-soft: #fee2e2;
+      --teal: #0d9488;
+      --teal-soft: #ccfbf1;
+      --purple: #7c3aed;
+      --purple-soft: #ede9fe;
+      --tech-bg: #0f172a;
+      --tech-text: #e2e8f0;
+      --tech-muted: #94a3b8;
+      --tech-accent: #38bdf8;
+      --shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      font-size: 15px;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 45%, #0d9488 100%);
+      color: #fff;
+      padding: 2.75rem 2rem 2.25rem;
+      text-align: center;
+    }
+    .hero h1 { font-size: 1.8rem; font-weight: 800; letter-spacing: -0.02em; }
+    .hero p { margin-top: 0.5rem; opacity: 0.92; font-size: 0.95rem; max-width: 560px; margin-inline: auto; }
+    .hero-tags { display: flex; flex-wrap: wrap; gap: 0.45rem; justify-content: center; margin-top: 1.1rem; }
+    .hero-tag {
+      background: rgba(255,255,255,0.14);
+      border: 1px solid rgba(255,255,255,0.22);
+      padding: 0.28rem 0.7rem;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+    .hero-tag.tech { background: rgba(56,189,248,0.25); border-color: rgba(56,189,248,0.4); }
+    .hero-link { display: inline-block; margin-top: 1rem; color: #bfdbfe; font-size: 0.88rem; text-decoration: underline; }
+
+    .wrap { max-width: 1140px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+
+    .toc {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 2rem;
+      box-shadow: var(--shadow);
+    }
+    .toc h2 { font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 0.7rem; }
+    .toc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.45rem; }
+    .toc a {
+      display: flex; align-items: center; gap: 0.45rem;
+      text-decoration: none; color: var(--text);
+      padding: 0.4rem 0.6rem; border-radius: 8px;
+      font-size: 0.88rem; font-weight: 500;
+      transition: background 0.15s;
+    }
+    .toc a:hover { background: var(--primary-soft); color: var(--primary); }
+    .toc-num {
+      width: 1.45rem; height: 1.45rem;
+      background: var(--primary-soft); color: var(--primary);
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.72rem; font-weight: 700; flex-shrink: 0;
+    }
+
+    section { margin-bottom: 2.75rem; scroll-margin-top: 1rem; }
+    .section-head { display: flex; align-items: center; gap: 0.7rem; margin-bottom: 0.35rem; }
+    .section-num {
+      width: 2.1rem; height: 2.1rem;
+      background: var(--primary); color: #fff;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 0.95rem; flex-shrink: 0;
+    }
+    .section-head h2 { font-size: 1.3rem; font-weight: 800; letter-spacing: -0.02em; }
+    .section-lead { color: var(--muted); margin-bottom: 1.1rem; font-size: 0.93rem; }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.15rem 1.35rem;
+      box-shadow: var(--shadow);
+      margin-bottom: 0.85rem;
+    }
+    .card h3 { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.65rem; }
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.85rem; }
+
+    /* Tech panel */
+    .tech {
+      background: var(--tech-bg);
+      color: var(--tech-text);
+      border-radius: var(--radius);
+      padding: 1.15rem 1.35rem;
+      margin-top: 1rem;
+      font-size: 0.86rem;
+      border: 1px solid #1e293b;
+    }
+    .tech-header {
+      display: flex; align-items: center; gap: 0.5rem;
+      font-size: 0.72rem; font-weight: 800;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--tech-accent);
+      margin-bottom: 0.75rem;
+    }
+    .tech-header::before { content: "⚙"; }
+    .tech-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; margin-bottom: 0.75rem; }
+    .tech-cell h4 { font-size: 0.72rem; color: var(--tech-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem; }
+    .tech-cell p, .tech-cell ul { font-size: 0.84rem; }
+    .tech-cell ul { list-style: none; }
+    .tech-cell li { padding: 0.15rem 0; }
+    .tech-cell li::before { content: "· "; color: var(--tech-accent); }
+    .file-tag {
+      display: inline-block;
+      background: #1e293b;
+      color: #7dd3fc;
+      padding: 0.12rem 0.45rem;
+      border-radius: 5px;
+      font-family: ui-monospace, "Cascadia Code", monospace;
+      font-size: 0.78rem;
+      margin: 0.1rem 0.15rem 0.1rem 0;
+    }
+    pre.code {
+      background: #020617;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 0.85rem 1rem;
+      overflow-x: auto;
+      font-family: ui-monospace, "Cascadia Code", monospace;
+      font-size: 0.78rem;
+      line-height: 1.55;
+      color: #cbd5e1;
+      margin: 0.5rem 0;
+    }
+    pre.code .kw { color: #c084fc; }
+    pre.code .str { color: #86efac; }
+    pre.code .num { color: #fcd34d; }
+    pre.code .cmt { color: #64748b; }
+    .ac-list { list-style: none; margin-top: 0.35rem; }
+    .ac-list li { padding: 0.2rem 0 0.2rem 1.1rem; position: relative; font-size: 0.82rem; }
+    .ac-list li::before { content: "✓"; position: absolute; left: 0; color: #4ade80; font-weight: 700; }
+
+    table {
+      width: 100%; border-collapse: collapse; font-size: 0.86rem;
+      background: var(--card); border-radius: var(--radius);
+      overflow: hidden; box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+    }
+    th { background: #f1f5f9; text-align: left; padding: 0.65rem 0.95rem; font-weight: 700; border-bottom: 2px solid var(--border); }
+    td { padding: 0.6rem 0.95rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f8fafc; }
+    .tech table { background: #1e293b; border-color: #334155; box-shadow: none; }
+    .tech th { background: #0f172a; color: var(--tech-muted); border-color: #334155; }
+    .tech td { border-color: #334155; color: var(--tech-text); }
+    .tech tr:hover td { background: #1e293b; }
+
+    .badge { display: inline-block; padding: 0.12rem 0.5rem; border-radius: 6px; font-size: 0.72rem; font-weight: 700; }
+    .badge-blue { background: var(--primary-soft); color: var(--primary); }
+    .badge-green { background: var(--green-soft); color: var(--green); }
+    .badge-amber { background: var(--amber-soft); color: var(--amber); }
+    .badge-hide { background: #fee2e2; color: #b91c1c; }
+    .badge-keep { background: #d1fae5; color: #047857; }
+    .badge-tech { background: #1e3a5f; color: #7dd3fc; font-family: monospace; }
+
+    .highlight-box {
+      background: linear-gradient(135deg, var(--primary-soft), #e0f2fe);
+      border: 1px solid #93c5fd; border-radius: 12px;
+      padding: 0.9rem 1.15rem; margin: 0.85rem 0;
+      font-weight: 600; color: #1e40af; font-size: 0.92rem;
+    }
+
+    /* Reuse visual components */
+    .screen-card { border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); box-shadow: var(--shadow); }
+    .screen-card-header { padding: 0.9rem 1.15rem; font-weight: 700; font-size: 1rem; color: #fff; }
+    .screen-card-header.explore { background: linear-gradient(135deg, #7c3aed, #a78bfa); }
+    .screen-card-header.route { background: linear-gradient(135deg, #2563eb, #38bdf8); }
+    .screen-card-body { background: var(--card); padding: 1.15rem; }
+    .screen-card-body ul { list-style: none; }
+    .screen-card-body li { padding: 0.35rem 0; padding-left: 1.15rem; position: relative; font-size: 0.88rem; }
+    .screen-card-body li::before { content: "›"; position: absolute; left: 0; color: var(--primary); font-weight: 700; }
+    .screen-path { display: inline-block; background: var(--bg); border: 1px solid var(--border); padding: 0.12rem 0.45rem; border-radius: 6px; font-family: monospace; font-size: 0.78rem; margin-bottom: 0.6rem; }
+
+    .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; padding: 1.1rem; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+    .flow-step { background: var(--primary-soft); color: var(--primary); padding: 0.45rem 0.9rem; border-radius: 10px; font-weight: 600; font-size: 0.85rem; }
+    .flow-arrow { color: var(--muted); font-size: 1.2rem; }
+
+    .layout-compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 1.1rem; }
+    .mockup { border: 2px solid var(--border); border-radius: 12px; overflow: hidden; background: #e8edf4; }
+    .mockup-label { background: var(--text); color: #fff; padding: 0.35rem 0.7rem; font-weight: 700; font-size: 0.78rem; }
+    .mockup-inner { display: flex; min-height: 170px; }
+    .mockup-panel { background: #fff; border-right: 2px solid var(--border); width: 35%; padding: 0.45rem; display: flex; flex-direction: column; gap: 0.3rem; }
+    .mockup-map { flex: 1; background: linear-gradient(160deg, #bfdbfe, #6ee7b7); display: flex; align-items: center; justify-content: center; color: #1e40af; font-weight: 700; font-size: 0.82rem; position: relative; }
+    .mockup-zoom { position: absolute; right: 8px; bottom: 8px; background: #fff; border-radius: 6px; padding: 2px 6px; font-size: 0.68rem; box-shadow: 0 1px 4px rgba(0,0,0,0.15); }
+    .mockup-mobile { flex-direction: column; min-height: 210px; }
+    .mockup-mobile .mockup-map { min-height: 125px; }
+    .mockup-sheet { background: #fff; border-top: 2px solid var(--border); padding: 0.45rem; text-align: center; }
+    .mockup-sheet .handle { width: 36px; height: 4px; background: #cbd5e1; border-radius: 99px; margin: 0 auto 0.35rem; }
+    .mockup-block { background: var(--primary-soft); border-radius: 4px; padding: 0.2rem 0.35rem; color: var(--primary); font-weight: 600; font-size: 0.72rem; }
+
+    .sheet-viz { display: flex; flex-direction: column; gap: 0.65rem; }
+    .sheet-row { display: flex; align-items: center; gap: 0.85rem; }
+    .sheet-label { width: 50px; font-weight: 800; font-size: 0.82rem; flex-shrink: 0; }
+    .sheet-bar-wrap { flex: 1; background: #e8edf4; border-radius: 8px; height: 34px; overflow: hidden; }
+    .sheet-bar { height: 100%; border-radius: 8px; display: flex; align-items: center; padding-left: 0.7rem; font-weight: 700; font-size: 0.78rem; color: #fff; }
+    .sheet-bar.peek { width: 28%; background: linear-gradient(90deg, #38bdf8, #0ea5e9); min-width: 75px; }
+    .sheet-bar.half { width: 46%; background: linear-gradient(90deg, #3b82f6, #2563eb); }
+    .sheet-bar.full { width: 82%; background: linear-gradient(90deg, #1d4ed8, #1e3a8a); }
+    .sheet-desc { width: 130px; font-size: 0.78rem; color: var(--muted); flex-shrink: 0; }
+
+    .channel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 0.65rem; }
+    .channel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+    .channel-icon { font-size: 1.6rem; margin-bottom: 0.3rem; }
+    .channel-title { font-weight: 700; font-size: 0.82rem; }
+    .channel-sub { font-size: 0.72rem; color: var(--muted); margin-top: 0.15rem; }
+
+    .compare-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; }
+    @media (max-width: 600px) { .compare-2 { grid-template-columns: 1fr; } }
+    .compare-box { border-radius: 12px; padding: 0.9rem 1.05rem; border: 1px solid var(--border); }
+    .compare-box.before { background: #fef2f2; border-color: #fecaca; }
+    .compare-box.after { background: #f0fdf4; border-color: #bbf7d0; }
+    .compare-label { font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem; }
+    .compare-box.before .compare-label { color: #b91c1c; }
+    .compare-box.after .compare-label { color: #047857; }
+    .compact-demo .compact-row { display: flex; align-items: center; gap: 0.45rem; padding: 0.3rem 0; font-weight: 600; font-size: 0.88rem; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .dot-green { background: #16a34a; } .dot-red { background: #dc2626; }
+    .compact-actions { display: flex; gap: 0.3rem; margin-left: auto; }
+    .compact-btn { width: 30px; height: 30px; border: 1px solid var(--border); border-radius: 8px; display: flex; align-items: center; justify-content: center; background: var(--bg); }
+
+    .route-colors { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+    .route-color { display: flex; align-items: center; gap: 0.45rem; padding: 0.35rem 0.65rem; background: var(--card); border: 1px solid var(--border); border-radius: 8px; font-size: 0.8rem; font-weight: 600; }
+    .route-swatch { width: 18px; height: 5px; border-radius: 3px; }
+    .swatch-blue { background: #2563eb; } .swatch-green { background: #16a34a; }
+    .swatch-orange { background: #ea580c; } .swatch-red { background: #dc2626; }
+
+    .channel-diagram { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.35rem; box-shadow: var(--shadow); text-align: center; }
+    .channel-source { display: inline-block; background: var(--purple-soft); color: var(--purple); padding: 0.55rem 1.15rem; border-radius: 10px; font-weight: 800; margin-bottom: 0.85rem; }
+    .channel-branches { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.85rem; }
+    .channel-branch { flex: 1; min-width: 150px; max-width: 190px; padding: 0.9rem; border-radius: 12px; border: 1px solid var(--border); }
+    .channel-branch h4 { font-size: 0.82rem; font-weight: 800; margin-bottom: 0.3rem; }
+    .channel-branch p { font-size: 0.75rem; color: var(--muted); }
+    .branch-at { background: #f5f3ff; } .branch-mobile { background: #eff6ff; } .branch-desktop { background: #ecfdf5; }
+    .branch-tts { margin-top: 0.85rem; background: var(--amber-soft); border: 1px solid #fcd34d; padding: 0.65rem 1.15rem; border-radius: 10px; font-weight: 700; color: var(--amber); display: inline-block; }
+    .connector { color: var(--muted); font-size: 1.4rem; }
+
+    .summary-mock { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 1.15rem; max-width: 340px; box-shadow: var(--shadow); }
+    .summary-time { font-size: 1.65rem; font-weight: 800; }
+    .summary-time span { font-size: 0.85rem; font-weight: 500; color: var(--muted); }
+    .summary-meta { font-size: 0.8rem; color: var(--muted); margin: 0.2rem 0 0.65rem; }
+    .summary-tags { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.65rem; }
+    .summary-tag { font-size: 0.7rem; font-weight: 700; padding: 0.18rem 0.45rem; border-radius: 6px; }
+    .tag-stairs { background: var(--amber-soft); color: var(--amber); }
+    .tag-elevator { background: var(--teal-soft); color: var(--teal); }
+    .summary-btns { display: flex; gap: 0.45rem; }
+    .btn-primary { flex: 1; background: var(--primary); color: #fff; border: none; border-radius: 8px; padding: 0.5rem; font-weight: 700; font-size: 0.82rem; }
+    .btn-icon { width: 38px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+
+    .arch-tree {
+      font-family: ui-monospace, monospace;
+      font-size: 0.8rem;
+      line-height: 1.7;
+      background: #020617;
+      color: #94a3b8;
+      padding: 1rem 1.25rem;
+      border-radius: 12px;
+      border: 1px solid #334155;
+    }
+    .arch-tree .dir { color: #7dd3fc; }
+    .arch-tree .file { color: #cbd5e1; }
+    .arch-tree .note { color: #64748b; }
+
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; align-items: start; }
+    @media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+
+    /* PPT-style slide deck */
+    .ppt-intro { background: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; font-size: 0.88rem; }
+    .ppt-intro strong { color: #92400e; }
+    .ppt-deck { display: flex; flex-direction: column; gap: 2.25rem; }
+    .ppt-wrap { display: flex; flex-direction: column; gap: 0.65rem; }
+    .ppt-label { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; font-size: 0.78rem; color: var(--muted); font-weight: 600; }
+    .ppt-label span { background: var(--primary-soft); color: var(--primary); padding: 0.2rem 0.55rem; border-radius: 6px; font-weight: 700; }
+    .ppt-slide {
+      aspect-ratio: 16 / 9;
+      border-radius: 14px;
+      box-shadow: 0 12px 48px rgba(15,23,42,0.18);
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      padding: 5% 6% 4%;
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    .ppt-slide.title-slide {
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #0d9488 100%);
+      color: #fff;
+      justify-content: center;
+      text-align: center;
+    }
+    .ppt-slide.title-slide .ppt-h1 { font-size: clamp(1.35rem, 3.2vw, 2.1rem); font-weight: 800; letter-spacing: -0.02em; line-height: 1.25; }
+    .ppt-slide.title-slide .ppt-sub { margin-top: 0.65rem; font-size: clamp(0.85rem, 1.8vw, 1.15rem); opacity: 0.92; font-weight: 500; }
+    .ppt-slide.title-slide .ppt-meta { margin-top: 1.5rem; font-size: clamp(0.72rem, 1.4vw, 0.88rem); opacity: 0.75; }
+    .ppt-slide.content-slide { background: #ffffff; color: #1a2332; }
+    .ppt-slide.content-slide.dark { background: linear-gradient(160deg, #0f172a 0%, #1e293b 100%); color: #f1f5f9; }
+    .ppt-slide.content-slide.accent { background: linear-gradient(160deg, #1e3a8a 0%, #2563eb 100%); color: #fff; }
+    .ppt-slide.content-slide.accent-teal { background: linear-gradient(160deg, #0f766e 0%, #0d9488 100%); color: #fff; }
+    .ppt-slide.content-slide.accent-purple { background: linear-gradient(160deg, #5b21b6 0%, #7c3aed 100%); color: #fff; }
+    .ppt-h2 { font-size: clamp(1rem, 2.4vw, 1.55rem); font-weight: 800; letter-spacing: -0.02em; line-height: 1.2; margin-bottom: 0.35rem; }
+    .ppt-h3 { font-size: clamp(0.78rem, 1.5vw, 0.95rem); font-weight: 600; opacity: 0.75; margin-bottom: 0.85rem; }
+    .ppt-bullets { list-style: none; margin: 0; padding: 0; flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 0.3rem; }
+    .ppt-bullets li { display: flex; align-items: flex-start; gap: 0.45rem; font-size: clamp(0.68rem, 1.4vw, 0.88rem); line-height: 1.35; }
+    .ppt-bullets li::before { content: "▸"; font-weight: 800; flex-shrink: 0; opacity: 0.85; margin-top: 0.08rem; }
+    .ppt-bullets li strong { font-weight: 700; }
+    .ppt-li-wrap { flex: 1; min-width: 0; }
+    .ppt-li-main { display: block; }
+    .ppt-li-def { display: block; font-size: 0.82em; opacity: 0.65; margin-top: 0.08rem; line-height: 1.3; font-weight: 400; }
+    .ppt-bullets.cols-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.28rem 1rem; }
+    .ppt-stat-def { display: block; font-size: 0.65em; opacity: 0.7; font-weight: 400; margin-top: 0.15rem; }
+    .ppt-stat-row { display: flex; flex-wrap: wrap; gap: 0.65rem; margin-top: 0.5rem; }
+    .ppt-stat { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); border-radius: 10px; padding: 0.5rem 0.85rem; font-size: clamp(0.68rem, 1.3vw, 0.82rem); font-weight: 600; }
+    .content-slide .ppt-stat { background: var(--primary-soft); border-color: #bfdbfe; color: #1e40af; }
+    .ppt-footer { position: absolute; bottom: 3.5%; left: 6%; right: 6%; display: flex; justify-content: space-between; align-items: center; font-size: clamp(0.6rem, 1.1vw, 0.72rem); opacity: 0.55; }
+    .ppt-accent-bar { position: absolute; top: 0; left: 0; right: 0; height: 5px; background: linear-gradient(90deg, #2563eb, #0d9488); }
+    .ppt-prompt {
+      background: #0f172a; color: #e2e8f0; border-radius: 10px; padding: 0.85rem 1rem;
+      font-family: ui-monospace, "Cascadia Code", monospace; font-size: 0.75rem; line-height: 1.55;
+      white-space: pre-wrap; word-break: break-word; border: 1px solid #334155;
+    }
+    .ppt-prompt-label { font-size: 0.72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem; }
+    .ppt-notes { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem 1rem; font-size: 0.82rem; color: var(--muted); }
+    .ppt-notes strong { color: var(--text); display: block; font-size: 0.78rem; margin-bottom: 0.25rem; }
+    .ppt-master-prompt { margin-top: 1.5rem; }
+    .ppt-master-prompt summary { cursor: pointer; font-weight: 700; font-size: 0.9rem; padding: 0.65rem 0; color: var(--primary); }
+    .ppt-glossary { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; box-shadow: var(--shadow); }
+    .ppt-glossary h3 { font-size: 0.9rem; margin-bottom: 0.65rem; color: var(--text); }
+    .ppt-glossary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.35rem 1.25rem; }
+    .ppt-term { font-size: 0.8rem; line-height: 1.5; padding: 0.3rem 0; border-bottom: 1px solid #f1f5f9; }
+    .ppt-term:last-child { border-bottom: none; }
+    .ppt-term dt { display: inline; font-weight: 700; color: var(--primary); }
+    .ppt-term dt::after { content: " — "; font-weight: 400; color: var(--muted); }
+    .ppt-term dd { display: inline; color: var(--muted); margin: 0; }
+    .ppt-terms { background: #f8fafc; border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: 0 10px 10px 0; padding: 0.65rem 0.9rem; }
+    .ppt-terms-title { font-size: 0.7rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.4rem; }
+    .ppt-terms .ppt-term { font-size: 0.78rem; padding: 0.2rem 0; border-bottom-color: #e8edf4; }
+    @media (max-width: 640px) { .ppt-bullets.cols-2 { grid-template-columns: 1fr; } .ppt-glossary-grid { grid-template-columns: 1fr; } }
+
+    .footer { text-align: center; padding: 2rem; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 2rem; }
+
+    .split-label {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; margin: 1.1rem 0 0.5rem;
+    }
+    .split-label.ux { color: var(--primary); }
+    .split-label.ux::before { content: "👁"; }
+    .split-label.tech { color: #0d9488; }
+    .split-label.tech::before { content: "⚙"; }
+
+    .section-head { flex-wrap: wrap; }
+    .section-head h2 { flex: 1; min-width: 0; }
+    .stars { font-size: 0.9rem; letter-spacing: 2px; flex-shrink: 0; font-weight: 400; }
+    .s3 { color: #f59e0b; } .s2 { color: #64748b; } .s1 { color: #cbd5e1; }
+    .priority-legend { display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.82rem; margin-bottom: 0.85rem; padding: 0.65rem 0.9rem; background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; }
+    .priority-legend span { white-space: nowrap; }
+    .prio-table td:first-child, .prio-table th:first-child { width: 4.5rem; text-align: center; white-space: nowrap; }
+    .key-points { list-style: none; margin: 0.5rem 0 0; }
+    .key-points li { display: flex; align-items: flex-start; gap: 0.55rem; padding: 0.35rem 0; font-size: 0.88rem; border-bottom: 1px solid var(--border); }
+    .key-points li:last-child { border-bottom: none; }
+    .key-points .stars { font-size: 0.75rem; letter-spacing: 1px; min-width: 2.6rem; padding-top: 0.1rem; }
+    .key-points strong { display: block; font-size: 0.88rem; }
+    .key-points span.sub { font-size: 0.8rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>공주대 베리어프리맵 — UI/UX + 기술 가이드</h1>
+  <p>화면 구조·사용자 경험과 함께, 구현 파일·상태·상수·완료 기준을 <strong>★ 중요도</strong>와 함께 정리했습니다.</p>
+  <div class="hero-tags">
+    <span class="hero-tag">UI/UX</span>
+    <span class="hero-tag tech">React 19 · Next.js 16</span>
+    <span class="hero-tag tech">Tailwind · sm:640px</span>
+    <span class="hero-tag">Bottom Sheet FSM</span>
+    <span class="hero-tag">aria-live · TTS</span>
+  </div>
+  <a class="hero-link" href="feature-guide.html">→ 핵심 기능 가이드 보기</a>
+</header>
+
+<div class="wrap">
+
+  <nav class="toc">
+    <h2>목차</h2>
+    <div class="toc-grid">
+      <a href="#s0"><span class="toc-num">0</span> 기술 아키텍처</a>
+      <a href="#s1"><span class="toc-num">1</span> 두 화면 구조</a>
+      <a href="#s2"><span class="toc-num">2</span> 지도 우선 레이아웃</a>
+      <a href="#s3"><span class="toc-num">3</span> Bottom Sheet</a>
+      <a href="#s4"><span class="toc-num">4</span> OD 입력</a>
+      <a href="#s5"><span class="toc-num">5</span> 지도 오버레이</a>
+      <a href="#s6"><span class="toc-num">6</span> 경로·TBT UI</a>
+      <a href="#s7"><span class="toc-num">7</span> 안내 3채널</a>
+      <a href="#s8"><span class="toc-num">8</span> 탐색·설정</a>
+      <a href="#s9"><span class="toc-num">9</span> 상수·저장소</a>
+      <a href="#priority"><span class="toc-num">★</span> 중요도 한눈에</a>
+      <a href="#s10"><span class="toc-num">10</span> PPT 슬라이드 (UI/UX)</a>
+    </div>
+  </nav>
+
+  <section id="priority">
+    <div class="section-head"><span class="section-num">★</span><h2>중요도 한눈에 (별 기준)</h2></div>
+    <div class="priority-legend">
+      <span><span class="stars s3">★★★</span> 발표 필수 · 핵심 UX 차별점</span>
+      <span><span class="stars s2">★★☆</span> 중요 · Q&A·구현 상세</span>
+      <span><span class="stars s1">★☆☆</span> 보조 · 참고·상수</span>
+    </div>
+    <table class="prio-table">
+      <thead><tr><th>별</th><th>UI/UX 항목</th><th>한 줄 요약</th></tr></thead>
+      <tbody>
+        <tr><td><span class="stars s3">★★★</span></td><td>모바일 Bottom Sheet</td><td>PEEK/HALF/FULL · 상태 FSM · 드래그 핸들</td></tr>
+        <tr><td><span class="stars s3">★★★</span></td><td>지도 우선 레이아웃</td><td>데스크톱 22rem 패널 · 모바일 full-bleed 지도</td></tr>
+        <tr><td><span class="stars s3">★★★</span></td><td>OD 6채널 + 컴팩트</td><td>탭·검색·음성·GPS · 경로 후 한 줄 요약</td></tr>
+        <tr><td><span class="stars s3">★★★</span></td><td>3채널 안내 UI</td><td>sr-only live · 패널 배너 · 데스크톱 배너 + TTS</td></tr>
+        <tr><td><span class="stars s3">★★★</span></td><td>TBT 접기/펼치기</td><td>showSteps ↔ 시트 FULL · 안내 중 현재 단계만</td></tr>
+        <tr><td><span class="stars s2">★★☆</span></td><td>오버레이 최소화</td><td>길찾기 모바일 범례·옵션 숨김 · 줌·fit 유지</td></tr>
+        <tr><td><span class="stars s2">★★☆</span></td><td>경로 요약 카드</td><td>시간·거리·계단/승강기 배지 · 안내·음성 버튼</td></tr>
+        <tr><td><span class="stars s2">★★☆</span></td><td>탐색·필터·상세</td><td>Sidebar · 5종 필터 · BuildingDetail Dialog</td></tr>
+        <tr><td><span class="stars s2">★★☆</span></td><td>접근성 설정</td><td>고대비 CSS · 글자 80~150% · ko/en</td></tr>
+        <tr><td><span class="stars s2">★★☆</span></td><td>--route-sheet-vh 연동</td><td>시트 높이 → 줌·fit 버튼 bottom 동기</td></tr>
+        <tr><td><span class="stars s1">★☆☆</span></td><td>브레이크포인트 표</td><td>639px · sm 640 · md 768</td></tr>
+        <tr><td><span class="stars s1">★☆☆</span></td><td>상수·localStorage</td><td>SNAP 28/46/82 · settings · voice 키</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 0 Architecture -->
+  <section id="s0">
+    <div class="section-head"><span class="section-num">0</span><h2>UI/UX 기술 아키텍처</h2><span class="stars s2" title="중요">★★☆</span></div>
+    <p class="section-lead">화면은 <strong>페이지 → 레이아웃 컴포넌트 → 훅(상태)</strong> 3층으로 구성됩니다.</p>
+
+    <div class="card">
+      <h3>컴포넌트 · 페이지 의존 관계</h3>
+      <div class="arch-tree">
+<span class="dir">app/</span>
+  <span class="file">page.tsx</span>          <span class="note">← 탐색: Header, Sidebar, Filter, BuildingDetail, CampusMap(explore)</span>
+  <span class="file">route/page.tsx</span>    <span class="note">← 길찾기: CampusMap(route) + RoutePanel + NavLiveRegion + SettingsPanel</span>
+<span class="dir">components/barrier-free/</span>
+  <span class="file">campus-map.tsx</span>    <span class="note">← 네이버 지도 SDK, polyline, 오버레이, GPS 마커</span>
+  <span class="file">route-panel.tsx</span>   <span class="note">← bottom sheet, OD, TBT, 음성 토글</span>
+  <span class="file">nav-live-region.tsx</span> <span class="note">← aria-live assertive</span>
+  <span class="file">settings-panel.tsx</span> <span class="note">← ko/en, 고대비, 글자크기</span>
+  <span class="file">building-detail.tsx</span>
+  <span class="file">facility-filter-bar.tsx</span>
+<span class="dir">hooks/</span>
+  <span class="file">use-navigation.ts</span> <span class="note">← OD FSM, route, GPS nav, liveAnnouncement, TTS</span>
+  <span class="file">use-voice-input.ts</span>
+  <span class="file">use-ui.ts</span>         <span class="note">← lib/i18n/ui.ts 래퍼</span>
+<span class="dir">lib/</span>
+  <span class="file">app-settings.ts</span>   <span class="note">← localStorage 설정</span>
+  <span class="file">routing/step-display.ts</span> <span class="note">← TBT UI 메타</span>
+  <span class="file">routing/style.ts</span>    <span class="note">← polyline 색·범례</span>
+      </div>
+    </div>
+
+    <div class="tech">
+      <div class="tech-header">반응형 브레이크포인트 (코드 기준)</div>
+      <table>
+        <thead><tr><th>용도</th><th>조건</th><th>사용 위치</th></tr></thead>
+        <tbody>
+          <tr><td>모바일 시트</td><td><span class="badge-tech">max-width: 639px</span></td><td>route-panel.tsx, campus-map.tsx</td></tr>
+          <tr><td>Tailwind sm</td><td><span class="badge-tech">≥640px</span></td><td>sm:w-[22rem], sm:hidden, 데스크톱 배너</td></tr>
+          <tr><td>사이드바 닫기</td><td><span class="badge-tech">max-width: 767px</span></td><td>app/page.tsx 건물 선택 시</td></tr>
+          <tr><td>필터 embedded</td><td><span class="badge-tech">md: 768px</span></td><td>FacilityFilterBar desktop vs mobile</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 1 -->
+  <section id="s1">
+    <div class="section-head"><span class="section-num">1</span><h2>두 가지 화면</h2><span class="stars s2">★★☆</span></div>
+    <p class="section-lead">탐색(정보)과 길찾기(경로·안내)로 분리된 라우팅 구조입니다.</p>
+    <ul class="key-points card" style="list-style:none;padding:1rem 1.25rem">
+      <li><span class="stars s2">★★☆</span><div><strong>/ 탐색</strong><span class="sub">검색·필터·건물 상세·footprint 지도</span></div></li>
+      <li><span class="stars s2">★★☆</span><div><strong>/route 길찾기</strong><span class="sub">OD·경로·GPS 안내·RoutePanel 항상 open</span></div></li>
+      <li><span class="stars s1">★☆☆</span><div><strong>공통 설정</strong><span class="sub">fontSize% · data-high-contrast · SettingsPanel</span></div></li>
+    </ul>
+
+    <div class="split-label ux">사용자 관점</div>
+    <div class="card-grid">
+      <div class="screen-card">
+        <div class="screen-card-header explore">탐색</div>
+        <div class="screen-card-body">
+          <div class="screen-path">/</div>
+          <ul>
+            <li>검색·시설 필터·건물 목록</li>
+            <li>지도 footprint / 시설 핀</li>
+            <li>건물 상세 Dialog → 길찾기 CTA</li>
+          </ul>
+        </div>
+      </div>
+      <div class="screen-card">
+        <div class="screen-card-header route">길찾기</div>
+        <div class="screen-card-body">
+          <div class="screen-path">/route</div>
+          <ul>
+            <li>지도 전체 + 경로 polyline</li>
+            <li>RoutePanel: OD·요약·TBT</li>
+            <li>GPS 안내 + 음성 + aria-live</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="flow" style="margin-top:0.85rem">
+      <span class="flow-step">탐색</span><span class="flow-arrow">→</span>
+      <span class="flow-step">건물 선택</span><span class="flow-arrow">→</span>
+      <span class="flow-step">상세</span><span class="flow-arrow">→</span>
+      <span class="flow-step">/route</span><span class="flow-arrow">→</span>
+      <span class="flow-step">안내</span>
+    </div>
+
+    <div class="split-label tech">기술 구현</div>
+    <div class="tech">
+      <div class="tech-header">페이지 · Props 계약</div>
+      <div class="tech-grid">
+        <div class="tech-cell">
+          <h4>탐색 페이지</h4>
+          <span class="file-tag">app/page.tsx</span>
+          <ul>
+            <li>filteredBuildings: search + filters</li>
+            <li>CampusMap mapLayout="explore"</li>
+            <li>directionsHref="/route"</li>
+          </ul>
+        </div>
+        <div class="tech-cell">
+          <h4>길찾기 페이지</h4>
+          <span class="file-tag">app/route/page.tsx</span>
+          <ul>
+            <li>useNavigation(buildings) 단일 훅</li>
+            <li>CampusMap mapLayout="route"</li>
+            <li>RoutePanel open (항상 표시)</li>
+          </ul>
+        </div>
+      </div>
+      <h4 style="font-size:0.72rem;color:var(--tech-muted);margin:0.5rem 0 0.35rem">완료 기준</h4>
+      <ul class="ac-list">
+        <li>/ 에서 건물 필터·검색이 지도·사이드바에 동기 반영</li>
+        <li>/route 진입 시 RoutePanel 자동 open, selectedBuilding=null</li>
+        <li>settings.fontSize·data-high-contrast가 두 페이지 루트에 적용</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section id="s2">
+    <div class="section-head"><span class="section-num">2</span><h2>지도 우선 레이아웃</h2><span class="stars s3">★★★</span></div>
+    <p class="section-lead">길찾기에서 지도를 full-bleed로 두고, 정보는 패널에 격리합니다.</p>
+    <ul class="key-points card" style="list-style:none;padding:1rem 1.25rem">
+      <li><span class="stars s3">★★★</span><div><strong>데스크톱 sm:≥640px</strong><span class="sub">좌측 RoutePanel 22rem · 지도 나머지 전체</span></div></li>
+      <li><span class="stars s3">★★★</span><div><strong>모바일 &lt;640px</strong><span class="sub">하단 bottom sheet · 지도는 시트 위만</span></div></li>
+      <li><span class="stars s2">★★☆</span><div><strong>안내 배너 분기</strong><span class="sub">데스크톱 지도 좌상단 · 모바일은 패널+live region</span></div></li>
+    </ul>
+
+    <div class="split-label ux">사용자 관점</div>
+    <div class="layout-compare">
+      <div class="mockup">
+        <div class="mockup-label">🖥 데스크톱 sm: ≥640px</div>
+        <div class="mockup-inner">
+          <div class="mockup-panel">
+            <div class="mockup-block">RoutePanel</div>
+            <div class="mockup-block">22rem</div>
+          </div>
+          <div class="mockup-map">지도<div class="mockup-zoom">+ −</div></div>
+        </div>
+      </div>
+      <div class="mockup">
+        <div class="mockup-label">📱 모바일 &lt;640px</div>
+        <div class="mockup-inner mockup-mobile">
+          <div class="mockup-map" style="min-height:130px">지도<div class="mockup-zoom">+ −</div></div>
+          <div class="mockup-sheet"><div class="handle"></div><div class="mockup-block">sheetVh vh</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="split-label tech">기술 구현</div>
+    <div class="tech">
+      <div class="tech-header">시트 ↔ 지도 오버레이 동기화</div>
+      <pre class="code"><span class="cmt">// route-panel.tsx → app/route/page.tsx → campus-map.tsx</span>
+RoutePanel.onSheetVhChange(sheetVh)
+  → page state: sheetVh
+  → CampusMap mobileSheetVh={sheetVh}
+  → style={{ <span class="str">"--route-sheet-vh"</span>: mobileSheetVh }}
+  → overlay bottom: <span class="str">calc(var(--route-sheet-vh)*1vh + 0.625rem)</span></pre>
+      <div class="tech-grid">
+        <div class="tech-cell">
+          <h4>RoutePanel 클래스</h4>
+          <ul>
+            <li>모바일: absolute bottom, height: sheetVh vh</li>
+            <li>데스크톱: sm:inset-y-0 sm:w-[22rem]</li>
+            <li>pb: env(safe-area-inset-bottom)</li>
+          </ul>
+        </div>
+        <div class="tech-cell">
+          <h4>데스크톱 안내 배너</h4>
+          <ul>
+            <li>left: calc(22rem + 0.75rem)</li>
+            <li>hidden sm:block</li>
+            <li>distanceToNext + liveAnnouncement</li>
+          </ul>
+        </div>
+      </div>
+      <ul class="ac-list">
+        <li>sheetVh 변경 시 줌 버튼 bottom이 300ms transition으로 이동</li>
+        <li>데스크톱에서 패널·지도 영역 겹침 없음</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section id="s3">
+    <div class="section-head"><span class="section-num">3</span><h2>모바일 Bottom Sheet</h2><span class="stars s3">★★★</span></div>
+    <p class="section-lead">패널 높이 FSM + 드래그 핸들이 길찾기 UX의 핵심입니다.</p>
+    <ul class="key-points card" style="list-style:none;padding:1rem 1.25rem">
+      <li><span class="stars s3">★★★</span><div><strong>3단 스냅</strong><span class="sub">PEEK 28 · HALF 46 · FULL 82 vh</span></div></li>
+      <li><span class="stars s3">★★★</span><div><strong>경로 확정 → PEEK</strong><span class="sub">지도에서 경로 확인이 최우선</span></div></li>
+      <li><span class="stars s2">★★☆</span><div><strong>드래그·탭</strong><span class="sub">스냅 정렬 · 탭 시 PEEK↔FULL</span></div></li>
+      <li><span class="stars s2">★★☆</span><div><strong>showSteps 연동</strong><span class="sub">상세 안내 펼침 → FULL + scrollIntoView</span></div></li>
+    </ul>
+
+    <div class="split-label ux">사용자 관점</div>
+    <div class="card">
+      <h3>3단 스냅</h3>
+      <div class="sheet-viz">
+        <div class="sheet-row"><span class="sheet-label">PEEK</span><div class="sheet-bar-wrap"><div class="sheet-bar peek">28vh</div></div><span class="sheet-desc">지도 최대</span></div>
+        <div class="sheet-row"><span class="sheet-label">HALF</span><div class="sheet-bar-wrap"><div class="sheet-bar half">46vh</div></div><span class="sheet-desc">입력 중간</span></div>
+        <div class="sheet-row"><span class="sheet-label">FULL</span><div class="sheet-bar-wrap"><div class="sheet-bar full">82vh</div></div><span class="sheet-desc">상세·TBT</span></div>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th>상황</th><th>자동 sheetVh</th><th>의도</th></tr></thead>
+      <tbody>
+        <tr><td>pickMode</td><td><span class="badge badge-blue">PEEK 28</span></td><td>지도에서 점 선택</td></tr>
+        <tr><td>!origin || !destination</td><td><span class="badge badge-blue">HALF 46</span></td><td>OD 입력</td></tr>
+        <tr><td>OD 완성, !route</td><td><span class="badge badge-blue">FULL 82</span></td><td>입력 확인</td></tr>
+        <tr><td>route 확정</td><td><span class="badge badge-green">PEEK 28</span></td><td>경로 지도 확인</td></tr>
+        <tr><td>showSteps</td><td><span class="badge badge-blue">FULL 82</span></td><td>TBT 전체</td></tr>
+        <tr><td>navigating, !showSteps</td><td><span class="badge badge-green">PEEK 28</span></td><td>걸으며 지도 중심</td></tr>
+        <tr><td>navigating, showSteps</td><td><span class="badge badge-amber">HALF 46</span></td><td>단계+지도</td></tr>
+      </tbody>
+    </table>
+
+    <div class="split-label tech">기술 구현</div>
+    <div class="tech">
+      <div class="tech-header">상태 변수 · 파생 조건</div>
+      <pre class="code"><span class="kw">const</span> SNAP_PEEK = <span class="num">28</span>, SNAP_HALF = <span class="num">46</span>, SNAP_FULL = <span class="num">82</span>;
+
+<span class="cmt">// useEffect deps: route, navigating, pickMode, origin, destination, showSteps</span>
+
+compactSheet     = isMobile && sheetVh <= SNAP_HALF + <span class="num">4</span>
+showFullPoints   = !route || editPoints || !isMobile
+showStepList     = !isMobile || showSteps || sheetVh > SNAP_HALF || navigating</pre>
+      <div class="tech-grid">
+        <div class="tech-cell">
+          <h4>드래그 핸들</h4>
+          <ul>
+            <li>pointer capture, touch-none</li>
+            <li>dyVh = (dyPx / innerHeight) * 100</li>
+            <li>clamp 12 ~ 92 vh</li>
+            <li>탭(이동≤4px): v &gt; HALF ? PEEK : FULL</li>
+            <li>드래그 종료: 3 snap 중 최근접</li>
+          </ul>
+        </div>
+        <div class="tech-cell">
+          <h4>애니메이션</h4>
+          <ul>
+            <li>dragging 시 transition: none</li>
+            <li>그 외 height 320ms cubic-bezier(0.32,0.72,0,1)</li>
+            <li>role="separator" aria-label=sheetResize</li>
+          </ul>
+        </div>
+      </div>
+      <span class="file-tag">components/barrier-free/route-panel.tsx</span>
+      <ul class="ac-list">
+        <li>route 해제 시 editPoints=true, showSteps=false 리셋</li>
+        <li>핸들 sm:hidden — 데스크톱에서 미표시</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section id="s4">
+    <div class="section-head"><span class="section-num">4</span><h2>출발·도착(OD) 입력</h2><span class="stars s3">★★★</span></div>
+    <p class="section-lead">6채널 입력 + 경로 후 컴팩트 요약 모드.</p>
+    <ul class="key-points card" style="list-style:none;padding:1rem 1.25rem">
+      <li><span class="stars s3">★★★</span><div><strong>6채널</strong><span class="sub">폴리곤 탭 · 검색 · 음성 · 지도찍기 · GPS · 스왑</span></div></li>
+      <li><span class="stars s3">★★★</span><div><strong>컴팩트 OD</strong><span class="sub">route+mobile → 한 줄 요약 · ✏️ 편집 복귀</span></div></li>
+      <li><span class="stars s2">★★☆</span><div><strong>pickMode</strong><span class="sub">crosshair + 상단 배너 · kind:"map"</span></div></li>
+    </ul>
+
+    <div class="split-label ux">사용자 관점</div>
+    <div class="channel-grid">
+      <div class="channel"><div class="channel-icon">👆</div><div class="channel-title">폴리곤 탭</div><div class="channel-sub">출발→도착 FSM</div></div>
+      <div class="channel"><div class="channel-icon">🔍</div><div class="channel-title">검색</div><div class="channel-sub">slice(0,50)</div></div>
+      <div class="channel"><div class="channel-icon">🎤</div><div class="channel-title">음성</div><div class="channel-sub">ko-KR / en-US</div></div>
+      <div class="channel"><div class="channel-icon">📍</div><div class="channel-title">지도 찍기</div><div class="channel-sub">pickMode</div></div>
+      <div class="channel"><div class="channel-icon">📡</div><div class="channel-title">GPS</div><div class="channel-sub">kind: gps</div></div>
+      <div class="channel"><div class="channel-icon">↕️</div><div class="channel-title">스왑</div><div class="channel-sub">onSwap</div></div>
+    </div>
+    <div class="compare-2" style="margin-top:1rem">
+      <div class="compare-box before"><div class="compare-label">전체 폼</div><p style="font-size:0.86rem">showFullPoints=true — PointField 2개 + 스왑 레일</p></div>
+      <div class="compare-box after">
+        <div class="compare-label">컴팩트</div>
+        <div class="compact-demo">
+          <div class="compact-row"><span class="dot dot-green"></span> 중앙도서관</div>
+          <div class="compact-row"><span class="dot dot-red"></span> 홍익사 <div class="compact-actions"><span class="compact-btn">↕</span><span class="compact-btn">✏️</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="split-label tech">기술 구현</div>
+    <div class="tech">
+      <div class="tech-header">건물 폴리곤 FSM · PointField</div>
+      <pre class="code"><span class="cmt">// hooks/use-navigation.ts — handleBuildingSelect</span>
+<span class="kw">if</span> (navigating) <span class="kw">return</span>;
+<span class="kw">if</span> (pickMode) selectBuilding(pickMode, building);
+<span class="kw">else if</span> (!origin) selectBuilding(<span class="str">"origin"</span>, building);
+<span class="kw">else if</span> (!destination) selectBuilding(<span class="str">"destination"</span>, building);
+<span class="kw">else</span> selectBuilding(<span class="str">"destination"</span>, building); <span class="cmt">// replace dest</span></pre>
+      <div class="tech-grid">
+        <div class="tech-cell">
+          <h4>RoutePoint 종류</h4>
+          <ul>
+            <li>building — buildingId + entrance 좌표</li>
+            <li>map — pickMode 지도 클릭</li>
+            <li>gps — Geolocation</li>
+          </ul>
+        </div>
+        <div class="tech-cell">
+          <h4>음성 매칭</h4>
+          <ul>
+            <li>matchBuildingsFromSpeech()</li>
+            <li>full name + shortBuildingName</li>
+            <li>useVoiceInput: lang ko-KR/en-US</li>
+            <li>미지원 시 errorKey=unsupported</li>
+          </ul>
+        </div>
+      </div>
+      <span class="file-tag">route-panel.tsx PointField</span>
+      <span class="file-tag">hooks/use-voice-input.ts</span>
+      <span class="file-tag">hooks/use-navigation.ts</span>
+      <ul class="ac-list">
+        <li>pickMode 시 지도 cursor: crosshair + 상단 배너</li>
+        <li>editPoints=false + route + mobile → compact OD</li>
+        <li>navigating 중 폴리곤·OD 변경 차단</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section id="s5">
+    <div class="section-head"><span class="section-num">5</span><h2>지도 오버레이 · 경로 시각화</h2><span class="stars s2">★★☆</span></div>
+
+    <div class="split-label ux">사용자 관점</div>
+    <table>
+      <thead><tr><th>요소</th><th>탐색</th><th>길찾기 모바일</th></tr></thead>
+      <tbody>
+        <tr><td>좌측 RouteLegend</td><td><span class="badge badge-keep">표시</span></td><td><span class="badge badge-hide">max-sm:hidden</span></td></tr>
+        <tr><td>지도 옵션 패널</td><td><span class="badge badge-keep">표시</span></td><td><span class="badge badge-hide">mapLayout!==route 조건</span></td></tr>
+        <tr><td>줌 +/-</td><td><span class="badge badge-keep">표시</span></td><td><span class="badge badge-keep">시트 위 동기</span></td></tr>
+        <tr><td>경로 맞춤(fitRoute)</td><td>—</td><td><span class="badge badge-keep">routeLine 있을 때</span></td></tr>
+        <tr><td>위치 추적(Locate)</td><td>—</td><td><span class="badge badge-keep">안내 중 · followPaused 토글</span></td></tr>
+        <tr><td>승강기 마커</td><td>—</td><td>routeElevatorIds만</td></tr>
+      </tbody>
+    </table>
+    <ul class="key-points card" style="list-style:none;padding:1rem 1.25rem;margin-top:0.85rem">
+      <li><span class="stars s2">★★☆</span><div><strong>--route-sheet-vh</strong><span class="sub">시트 높이 → 줌·fit·Locate bottom 동기(300ms)</span></div></li>
+      <li><span class="stars s2">★★☆</span><div><strong>RouteLegend variant</strong><span class="sub">map(데스크톱) · panel · inline(compact)</span></div></li>
+    </ul>
+    <div class="card" style="margin-top:0.85rem">
+      <h3>경로 색상 (lib/routing/style.ts)</h3>
+      <div class="route-colors">
+        <div class="route-color"><span class="route-swatch swatch-blue"></span> path · indoor · elevator</div>
+        <div class="route-color"><span class="route-swatch swatch-green"></span> crosswalk</div>
+        <div class="route-color"><span class="route-swatch swatch-orange"></span> ramp</div>
+        <div class="route-color"><span class="route-swatch swatch-red"></span> stairs</div>
+      </div>
+    </div>
+
+    <div class="split-label tech">기술 구현</div>
+    <div class="tech">
+      <div class="tech-header">RouteLegend variant · 오버레이 클래스</div>
+      <pre class="code"><span class="cmt">// route-legend.tsx</span>
+variant: <span class="str">"map"</span>   → campus-map 좌측 (route 시 max-sm:hidden)
+variant: <span class="str">"panel"</span> → RoutePanel 요약 카드
+variant: <span class="str">"inline"</span>→ compactSheet 시 한 줄
+
+<span class="cmt">// campus-map.tsx</span>
+overlayBottomClass = mapLayout===<span class="str">"route"</span>
+  ? <span class="str">"max-sm:bottom-[calc(var(--route-sheet-vh)*1vh+0.625rem)]"</span>
+  : <span class="str">"bottom-[max(0.75rem,env(safe-area-inset-bottom))]"</span></pre>
+      <div class="tech-grid">
+        <div class="tech-cell">
+          <h4>조건부 승강기 POI</h4>
+          <ul>
+            <li>elevatorIdsOnRoute(steps, elevators)</li>
+            <li>routeLine 없으면 마커 미표시</li>
+            <li>ELEVATOR_ICON_SRC 커스텀 asset</li>
+          </ul>
+        </div>
+        <div class="tech-cell">
+          <h4>모바일 네비 성능</h4>
+          <ul>
+            <li>markerHeadingThreshold: 6° (mobile)</li>
+            <li>minFrameMs: 33ms throttle</li>
+            <li>camMoveSkipM: 0.4m</li>
+          </ul>
+        </div>
+      </div>
+      <span class="file-tag">campus-map.tsx</span>
+      <span class="file-tag">lib/routing/style.ts</span>
+      <span class="file-tag">lib/routing/elevators.ts</span>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section id="s6">
+    <div class="section-head"><span class="section-num">6</span><h2>경로 요약 · TBT UI</h2><span class="stars s3">★★★</span></div>
+    <ul class="key-points card" style="list-style:none;padding:1rem 1.25rem;margin-bottom:0.85rem">
+      <li><span class="stars s3">★★★</span><div><strong>상세 안내 토글</strong><span class="sub">showSteps ↔ 시트 FULL · aria-expanded</span></div></li>
+      <li><span class="stars s3">★★★</span><div><strong>안내 중 현재 단계만</strong><span class="sub">compact+navigating+!showSteps → currentStepIndex만</span></div></li>
+      <li><span class="stars s2">★★☆</span><div><strong>예상 시간</strong><span class="sub">estimateWalkMinutes — 0.7m/s + 구간·회전 가산</span></div></li>
+    </ul>
+
+    <div class="split-label ux">사용자 관점</div>
+    <div class="two-col">
+      <div class="summary-mock">
+        <div class="summary-time">12 <span>분</span></div>
+        <div class="summary-meta">850m · 도보</div>
+        <div class="summary-tags">
+          <span class="summary-tag tag-stairs">⚠ 계단</span>
+          <span class="summary-tag tag-elevator">승강기</span>
+        </div>
+        <div class="summary-btns"><button class="btn-primary">안내 시작</button><button class="btn-icon">🔊</button></div>
+      </div>
+      <table>
+        <thead><tr><th>TBT 모드</th><th>렌더 조건</th></tr></thead>
+        <tbody>
+          <tr><td>목록 숨김</td><td>mobile && !showSteps && !navigating && sheet≤HALF</td></tr>
+          <tr><td>전체 목록</td><td>showSteps || sheet&gt;HALF || desktop</td></tr>
+          <tr><td>현재만</td><td>compactSheet && navigating && !showSteps</td></tr>
+          <tr><td>활성 단계</td><td>aria-current="step", 파란 ring</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="split-label tech">기술 구현</div>
+    <div class="tech">
+      <div class="tech-header">stepDisplayMeta · maneuver UI</div>
+      <pre class="code"><span class="cmt">// lib/routing/step-display.ts</span>
+stepDisplayMeta(step, locale) → { distanceLabel, instruction }
+stepManeuverStyle(maneuver)   → { bg, fg, ring }  <span class="cmt">// TBT 아이콘 색</span>
+
+<span class="cmt">// route-panel.tsx</span>
+toggleShowSteps() → setShowSteps + useEffect가 sheetVh FULL 연동
+showSteps && isMobile → stepsListRef.scrollIntoView({ smooth })</pre>
+      <div class="tech-grid">
+        <div class="tech-cell">
+          <h4>요약 카드 데이터</h4>
+          <ul>
+            <li>estimateWalkMinutes — 0.7m/s + 구간·회전 가산</li>
+            <li>formatDistance(route.distance, locale)</li>
+            <li>route.hasStairs / hasElevator</li>
+            <li>route.segmentTypes → RouteLegend</li>
+          </ul>
+        </div>
+        <div class="tech-cell">
+          <h4>안내 시작 UX</h4>
+          <ul>
+            <li>handleStartNav → onStartNav()</li>
+            <li>mobile: routeSummaryRef.scrollIntoView</li>
+            <li>voiceEnabled localStorage 연동</li>
+          </ul>
+        </div>
+      </div>
+      <span class="file-tag">lib/routing/step-display.ts</span>
+      <span class="file-tag">lib/routing/route-estimate.ts</span>
+      <ul class="ac-list">
+        <li>「상세 안내 보기」 aria-expanded={showSteps}</li>
+        <li>active step: step.text 우선, 없으면 instruction</li>
+        <li>step.hazard 시 amber 경고 줄 표시</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 7 -->
+  <section id="s7">
+    <div class="section-head"><span class="section-num">7</span><h2>안내 중 3채널 + 상태 피드백</h2><span class="stars s3">★★★</span></div>
+    <ul class="key-points card" style="list-style:none;padding:1rem 1.25rem;margin-bottom:0.85rem">
+      <li><span class="stars s3">★★★</span><div><strong>liveAnnouncement 단일 소스</strong><span class="sub">sr-only assertive + 시각 배너 + TTS</span></div></li>
+      <li><span class="stars s2">★★☆</span><div><strong>음성 기본 ON</strong><span class="sub">barrier-free-voice-enabled · 패널 토글</span></div></li>
+      <li><span class="stars s2">★★☆</span><div><strong>상태 배너</strong><span class="sub">이탈 amber · 재탐색 green(4s) · followPaused</span></div></li>
+    </ul>
+
+    <div class="split-label ux">사용자 관점</div>
+    <div class="channel-diagram">
+      <div class="channel-source">liveAnnouncement (use-navigation 단일 소스)</div>
+      <div class="connector">│</div>
+      <div class="channel-branches">
+        <div class="channel-branch branch-at"><h4>스크린리더</h4><p>NavLiveRegion<br>sr-only assertive</p></div>
+        <div class="channel-branch branch-mobile"><h4>모바일 패널</h4><p>aria-hidden 시각 배너<br>sm:hidden</p></div>
+        <div class="channel-branch branch-desktop"><h4>데스크톱</h4><p>좌상단 blue-600 배너<br>hidden sm:block</p></div>
+      </div>
+      <div class="branch-tts">+ Google TTS (voiceEnabled, 기본 ON)</div>
+    </div>
+    <table style="margin-top:1rem">
+      <thead><tr><th>상황</th><th>UI</th><th>기술 임계값</th></tr></thead>
+      <tbody>
+        <tr><td>경로 이탈</td><td>amber 경고</td><td>offRouteM &gt; 40, !rerouteNotice</td></tr>
+        <tr><td>재탐색</td><td>green 알림</td><td>rerouteNotice flag</td></tr>
+        <tr><td>GPS 없음</td><td>acquiringGps</td><td>!userPos</td></tr>
+        <tr><td>추적 일시정지</td><td>지도 배너</td><td>followPaused</td></tr>
+      </tbody>
+    </table>
+
+    <div class="split-label tech">기술 구현</div>
+    <div class="tech">
+      <div class="tech-header">NavLiveRegion · TTS · announce()</div>
+      <pre class="code"><span class="cmt">// nav-live-region.tsx</span>
+role=<span class="str">"status"</span> aria-live=<span class="str">"assertive"</span> aria-atomic=<span class="str">"true"</span> className=<span class="str">"sr-only"</span>
+
+<span class="cmt">// hooks/use-navigation.ts</span>
+VOICE_STORAGE_KEY = <span class="str">"barrier-free-voice-enabled"</span>
+announce(text) → setLiveAnnouncement + TTS speak (voice on 시)
+
+<span class="cmt">// route-panel.tsx — 모바일 시각 배너</span>
+navigating && liveAnnouncement → aria-hidden=<span class="str">"true"</span> (SR 중복 방지)</pre>
+      <span class="file-tag">nav-live-region.tsx</span>
+      <span class="file-tag">hooks/use-navigation.ts</span>
+      <span class="file-tag">lib/routing/tts.ts</span>
+      <span class="file-tag">lib/i18n/navigation.ts</span>
+      <ul class="ac-list">
+        <li>voice off여도 liveAnnouncement·live region 갱신</li>
+        <li>navStepSpeechText와 live region 문장 동기</li>
+        <li>routePreviewSpeechText → startNav 시 선행 브리핑</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 8 -->
+  <section id="s8">
+    <div class="section-head"><span class="section-num">8</span><h2>탐색 화면 · 접근성 설정</h2><span class="stars s2">★★☆</span></div>
+    <ul class="key-points card" style="list-style:none;padding:1rem 1.25rem;margin-bottom:0.85rem">
+      <li><span class="stars s2">★★☆</span><div><strong>5종 시설 필터</strong><span class="sub">elevator·ramp·toilet·braille·auto-door · facet AND</span></div></li>
+      <li><span class="stars s2">★★☆</span><div><strong>BuildingDetail</strong><span class="sub">등급·시설·층별 사진 · 길찾기 연결</span></div></li>
+      <li><span class="stars s2">★★☆</span><div><strong>접근성 설정</strong><span class="sub">고대비 CSS · 글자 80~150% · ko/en 정적 i18n</span></div></li>
+    </ul>
+
+    <div class="split-label ux">사용자 관점</div>
+    <div class="card">
+      <h3>탐색 (/) 레이아웃</h3>
+      <table>
+        <thead><tr><th>영역</th><th>역할</th></tr></thead>
+        <tbody>
+          <tr><td>Header</td><td>검색 + 설정</td></tr>
+          <tr><td>Sidebar</td><td>건물 button 목록, aria-current</td></tr>
+          <tr><td>FacilityFilterBar</td><td>5종 시설 facet filter</td></tr>
+          <tr><td>FacilityFilterMapHint</td><td>aria-live="polite" 필터 안내</td></tr>
+          <tr><td>BuildingDetail</td><td>Dialog — 등급·시설·층별 사진</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card-grid" style="margin-top:0.85rem">
+      <div class="card"><h3>🌐 언어 ko/en</h3><p style="font-size:0.88rem">화면 문구 + TTS locale. 번역 API 아님 — 정적 i18n 사전.</p></div>
+      <div class="card"><h3>🌙 고대비</h3><p style="font-size:0.88rem">흰배경·검정글자·진한 테두리. focus-visible 4px outline.</p></div>
+      <div class="card"><h3>🔤 글자 80~150%</h3><p style="font-size:0.88rem">루트 fontSize% + 설정 미리보기.</p></div>
+    </div>
+
+    <div class="split-label tech">기술 구현</div>
+    <div class="tech">
+      <div class="tech-header">필터 · 검색 · 고대비 CSS</div>
+      <pre class="code"><span class="cmt">// app/page.tsx — facilitySearchTerms + filters.every()</span>
+facilityIds: elevator | ramp | toilet | braille | auto-door
+
+<span class="cmt">// app-settings.ts</span>
+SETTINGS_STORAGE_KEY = <span class="str">"barrier-free-map-settings"</span>
+fontSize clamp: <span class="num">80</span>~<span class="num">150</span>, step <span class="num">10</span>
+
+<span class="cmt">// globals.css</span>
+[data-high-contrast=<span class="str">"true"</span>] { --foreground: oklch(0 0 0); --border: oklch(0 0 0); ... }</pre>
+      <div class="tech-grid">
+        <div class="tech-cell">
+          <h4>i18n 체인</h4>
+          <ul>
+            <li>lib/i18n/ui.ts — UI copy</li>
+            <li>lib/i18n/navigation.ts — TBT·TTS</li>
+            <li>useUi() — locale 반응</li>
+            <li>locale 변경 시 steps 재계산</li>
+          </ul>
+        </div>
+        <div class="tech-cell">
+          <h4>BuildingDetail</h4>
+          <ul>
+            <li>gradeColors A/B/C/unknown</li>
+            <li>FacilityStatusCard + Pictogram</li>
+            <li>Accordion 층별 사진</li>
+            <li>isUnsurveyedBuilding 경고</li>
+          </ul>
+        </div>
+      </div>
+      <span class="file-tag">settings-panel.tsx</span>
+      <span class="file-tag">building-detail.tsx</span>
+      <span class="file-tag">facility-filter-bar.tsx</span>
+      <span class="file-tag">app/globals.css</span>
+    </div>
+  </section>
+
+  <!-- 9 Constants -->
+  <section id="s9">
+    <div class="section-head"><span class="section-num">9</span><h2>상수 · localStorage · 완료 기준 총정리</h2><span class="stars s1">★☆☆</span></div>
+    <p class="section-lead">발표 Q&A·구현 검증용 빠른 참조표입니다.</p>
+
+    <div class="tech" style="margin-top:0">
+      <div class="tech-header">UI/UX 핵심 상수</div>
+      <table>
+        <thead><tr><th>이름</th><th>값</th><th>파일</th></tr></thead>
+        <tbody>
+          <tr><td>SNAP_PEEK / HALF / FULL</td><td>28 / 46 / 82 vh</td><td>route-panel.tsx</td></tr>
+          <tr><td>compactSheet 조건</td><td>sheetVh ≤ HALF+4</td><td>route-panel.tsx</td></tr>
+          <tr><td>시트 드래그 clamp</td><td>12 ~ 92 vh</td><td>route-panel.tsx</td></tr>
+          <tr><td>패널 너비 (desktop)</td><td>22rem</td><td>route-panel.tsx</td></tr>
+          <tr><td>모바일 breakpoint</td><td>639px</td><td>matchMedia</td></tr>
+          <tr><td>offRoute 경고 UI</td><td>&gt; 40m</td><td>route-panel + use-navigation</td></tr>
+          <tr><td>OD 검색 slice</td><td>50건</td><td>PointField</td></tr>
+          <tr><td>fontSize range</td><td>80~150%, step 10</td><td>app-settings.ts</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tech" style="margin-top:0.85rem">
+      <div class="tech-header">localStorage 키</div>
+      <table>
+        <thead><tr><th>키</th><th>내용</th></tr></thead>
+        <tbody>
+          <tr><td><code>barrier-free-map-settings</code></td><td>{ highContrast, fontSize, locale }</td></tr>
+          <tr><td><code>barrier-free-voice-enabled</code></td><td>음성 안내 ON/OFF (기본 true)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card" style="margin-top:0.85rem">
+      <h3>UI/UX 전체 완료 기준 (Acceptance Criteria)</h3>
+      <ul class="ac-list" style="color:var(--text)">
+        <li>모바일 길찾기: 경로 확정 후 시트 PEEK, 지도에서 경로 확인 가능</li>
+        <li>상세 안내 토글 시 시트 FULL + 목록 스크롤</li>
+        <li>시트 높이 변경 시 줌 버튼이 가려지지 않음 (--route-sheet-vh)</li>
+        <li>모바일 route 모드: 좌측 지도 범례·옵션 패널 숨김, 패널 범례 대체</li>
+        <li>OD 6채널 + compact 요약 + editPoints 복귀</li>
+        <li>navigating: live region + (mobile 패널 | desktop 배너) + TTS 동기</li>
+        <li>고대비·글자크기·ko/en 전 페이지 즉시 반영</li>
+        <li>탐색: 필터+검색 동기, 건물 상세, 모바일 사이드바 자동 닫힘</li>
+      </ul>
+    </div>
+
+    <div class="highlight-box">
+      <strong>기능 파트</strong> 차별점: 자체 보행 그래프 ·
+      <strong>UI/UX 파트</strong> 차별점: 좁은 모바일 지도에서도 정보 밀도를 조절하는 Bottom Sheet + 3채널 안내 설계
+    </div>
+  </section>
+
+  <!-- 10 Slides -->
+  <section id="s10">
+    <div class="section-head"><span class="section-num">10</span><h2>발표 슬라이드 — UI/UX 파트 (바로 사용)</h2><span class="stars s1">★☆☆</span></div>
+    <p class="section-lead">16:9 PPT 화면 그대로 복사하거나, 슬라이드별 <strong>프롬프트·발표 멘트</strong>를 AI 도구에 붙여넣어 제작하세요.</p>
+
+    <div class="ppt-intro">
+      <strong>사용법</strong> — ① 아래 슬라이드 화면 캡처·복사 → PPT 붙여넣기 ② 프롬프트 블록 → Gamma/Canva/Copilot ③ 🎤 멘트는 발표 대본으로 사용 ④ 용어는 슬라이드 아래·전체 사전 참고
+    </div>
+
+    <div class="ppt-glossary">
+      <h3>📖 UI/UX 용어 한줄 사전 (PPT·Q&A용)</h3>
+      <div class="ppt-glossary-grid">
+        <div class="ppt-term"><dt>지도 우선</dt><dd>길찾기 화면에서 지도를 최대한 넓게, 패널·시트는 보조로만 쓰는 레이아웃 원칙</dd></div>
+        <div class="ppt-term"><dt>Bottom Sheet</dt><dd>모바일 하단에서 올라오는 패널 — 드래그로 높이를 조절하는 UI 패턴</dd></div>
+        <div class="ppt-term"><dt>PEEK / HALF / FULL</dt><dd>시트 3단 높이 — 28vh(최소) · 46vh(중간) · 82vh(전체) 화면 비율</dd></div>
+        <div class="ppt-term"><dt>FSM</dt><dd>Finite State Machine, PEEK↔HALF↔FULL 등 화면 상태를 규칙대로 전환하는 구조</dd></div>
+        <div class="ppt-term"><dt>RoutePanel</dt><dd>길찾기 좌측(또는 모바일 시트) 패널 — OD·경로·안내 UI가 모여 있는 영역</dd></div>
+        <div class="ppt-term"><dt>--route-sheet-vh</dt><dd>시트 높이를 CSS 변수로 지도에 알려 줌·fit 버튼 위치를 같이 조정</dd></div>
+        <div class="ppt-term"><dt>OD 6채널</dt><dd>출발·도착을 탭·검색·음성·지도찍기·GPS·스왑 6가지 방법으로 입력</dd></div>
+        <div class="ppt-term"><dt>컴팩트 OD</dt><dd>경로 확정 후 출발→도착을 한 줄 요약으로 줄인 UI</dd></div>
+        <div class="ppt-term"><dt>pickMode</dt><dd>지도에 십자선을 띄우고 탭한 위치를 출발/도착으로 받는 모드</dd></div>
+        <div class="ppt-term"><dt>showSteps</dt><dd>상세 TBT 목록 펼침 여부 — 켜면 시트가 FULL로 올라감</dd></div>
+        <div class="ppt-term"><dt>3채널 안내</dt><dd>시각 배너 + TTS 음성 + 스크린리더(aria-live)가 같은 문장을 받는 구조</dd></div>
+        <div class="ppt-term"><dt>sr-only live</dt><dd>눈에 안 보이지만 스크린리더만 읽는 실시간 안내 영역</dd></div>
+        <div class="ppt-term"><dt>followPaused</dt><dd>사용자가 지도를 손으로 움직이면 GPS 자동 추적을 잠시 멈춤</dd></div>
+        <div class="ppt-term"><dt>고대비</dt><dd>흰 배경·검은 글자·진한 테두리로 시각 대비를 높이는 접근성 모드</dd></div>
+        <div class="ppt-term"><dt>facet 필터</dt><dd>승강기·경사로 등 시설 조건을 AND로 걸어 건물 목록을 거르는 방식</dd></div>
+        <div class="ppt-term"><dt>full-bleed</dt><dd>지도가 화면 가장자리까지 꽉 차게 보이는 레이아웃</dd></div>
+      </div>
+    </div>
+
+    <div class="ppt-deck">
+
+      <!-- Slide 1 -->
+      <div class="ppt-wrap">
+        <div class="ppt-label"><span>SLIDE 1 / 8</span>표지</div>
+        <div class="ppt-slide title-slide">
+          <div class="ppt-h1">공주대학교 신관캠퍼스<br>베리어프리맵</div>
+          <div class="ppt-sub">UI/UX 설계 — 지도 우선 · Bottom Sheet · 3채널 접근성 안내</div>
+          <div class="ppt-meta">캡스톤 디자인 · 2026 · 팀명 입력</div>
+          <div class="ppt-footer"><span>UI/UX 파트</span><span>1 / 8</span></div>
+        </div>
+        <div class="ppt-prompt-label">📋 슬라이드 생성 프롬프트</div>
+        <div class="ppt-prompt">16:9 발표 표지. 제목: "공주대학교 신관캠퍼스 베리어프리맵". 부제: "UI/UX 설계 — 지도 우선 · Bottom Sheet · 3채널 접근성 안내". 네이비-블루-틸 그라데이션, 모바일 앱 느낌의 아이콘 장식.</div>
+        <div class="ppt-notes"><strong>🎤 발표 멘트 (30초)</strong>"이어서 UI/UX 파트입니다. 좁은 모바일 화면에서도 지도를 가리지 않으면서 길찾기 정보를 보여 주고, 시각·청각·스크린리더 사용자 모두를 위한 3채널 안내를 설계했습니다."</div>
+      </div>
+
+      <!-- Slide 2 -->
+      <div class="ppt-wrap">
+        <div class="ppt-label"><span>SLIDE 2 / 8</span>설계 원칙</div>
+        <div class="ppt-slide content-slide">
+          <div class="ppt-accent-bar"></div>
+          <div class="ppt-h2">UI/UX 설계 원칙</div>
+          <div class="ppt-h3">"지도가 주인공" — 정보는 필요할 때만 올라옵니다</div>
+          <ul class="ppt-bullets">
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>지도 우선</strong></span><span class="ppt-li-def">경로·위치 확인이 최우선, 패널·시트는 보조 역할만</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>Bottom Sheet</strong> 정보 밀도</span><span class="ppt-li-def">모바일에서 시트 높이(PEEK/HALF/FULL)로 한 화면 정보량 조절</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>접근성 기본 탑재</strong></span><span class="ppt-li-def">aria-live·TTS·고대비·글자 크기를 별도 앱 없이 기본 제공</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>두 화면</strong> / · /route</span><span class="ppt-li-def">탐색(건물·시설 검색)과 길찾기(OD·GPS 안내)를 분리</span></span></li>
+          </ul>
+          <div class="ppt-footer"><span>공주대 베리어프리맵</span><span>2 / 8</span></div>
+        </div>
+        <div class="ppt-prompt-label">📋 슬라이드 생성 프롬프트</div>
+        <div class="ppt-prompt">제목: "UI/UX 설계 원칙". 부제: "지도가 주인공". 불릿 4개: 지도 우선, Bottom Sheet 정보 밀도, 접근성 기본, /탐색 vs /route. 흰 배경, 미니멀 UX 슬라이드.</div>
+        <div class="ppt-notes"><strong>🎤 발표 멘트 (40초)</strong>"길찾기 앱에서 가장 중요한 건 지도입니다. 그래서 모바일에서는 하단 시트가 올라왔다 내려갔다 하며, 경로가 잡히면 시트를 최소화해 지도를 넓게 보여 줍니다."</div>
+      </div>
+
+      <!-- Slide 3 -->
+      <div class="ppt-wrap">
+        <div class="ppt-label"><span>SLIDE 3 / 8</span>반응형 레이아웃</div>
+        <div class="ppt-slide content-slide accent">
+          <div class="ppt-h2">지도 우선 반응형 레이아웃</div>
+          <div class="ppt-h3">데스크톱 패널 · 모바일 Bottom Sheet</div>
+          <ul class="ppt-bullets cols-2">
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>sm ≥ 640px</strong> RoutePanel 22rem</span><span class="ppt-li-def">PC·태블릿은 왼쪽 352px 패널 + 나머지 전체 지도</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>&lt; 640px</strong> full-bleed + 시트</span><span class="ppt-li-def">모바일은 지도가 화면 가득, 하단 시트가 정보 패널</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>--route-sheet-vh</strong></span><span class="ppt-li-def">시트 높이를 CSS 변수로 지도에 전달 → 줌·fit 버튼 위치 연동</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>안내 배너</strong> (데스크톱)</span><span class="ppt-li-def">PC는 지도 좌상단에 "100m 직진" 등 안내 문구 표시</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>안내 배너</strong> (모바일)</span><span class="ppt-li-def">시트 상단 배너 + 눈에 안 보이는 sr-only live 영역</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>범례·옵션 숨김</strong></span><span class="ppt-li-def">모바일 길찾기에서 지도를 가리는 범례·옵션 UI 제거</span></span></li>
+          </ul>
+          <div class="ppt-footer"><span>app/route/page.tsx</span><span>3 / 8</span></div>
+        </div>
+        <div class="ppt-prompt-label">📋 슬라이드 생성 프롬프트</div>
+        <div class="ppt-prompt">제목: "지도 우선 반응형 레이아웃". 2열 불릿: 데스크톱 22rem 패널, 모바일 bottom sheet, --route-sheet-vh, 안내 배너 분기, 모바일 범례 숨김. 좌우 비교 와이어프레임 느낌, 블루 배경.</div>
+        <div class="ppt-notes"><strong>🎤 발표 멘트 (50초)</strong>"640px을 기준으로 레이아웃이 바뀝니다. PC는 왼쪽에 고정 패널, 모바일은 지도 전체에 시트가 겹칩니다. 시트 높이에 맞춰 줌·경로맞춤 버튼 위치도 같이 움직입니다."</div>
+      </div>
+
+      <!-- Slide 4 -->
+      <div class="ppt-wrap">
+        <div class="ppt-label"><span>SLIDE 4 / 8</span>Bottom Sheet</div>
+        <div class="ppt-slide content-slide accent-teal">
+          <div class="ppt-h2">모바일 Bottom Sheet FSM</div>
+          <div class="ppt-h3">3단 스냅으로 정보 밀도를 실시간 조절</div>
+          <ul class="ppt-bullets">
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>PEEK 28vh</strong></span><span class="ppt-li-def">시트 최소 높이(화면 28%) — 경로 나오면 기본, 지도를 최대한 넓게</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>HALF 46vh</strong></span><span class="ppt-li-def">중간 높이 — 요약 카드·안내 시작 버튼 확인용</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>FULL 82vh</strong></span><span class="ppt-li-def">거의 전체 화면 — 상세 TBT 목록·출발/도착 편집</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>드래그·탭 · showSteps</strong></span><span class="ppt-li-def">손가락으로 높이 조절(스냅) · 상세 안내 펼치면 FULL 자동</span></span></li>
+          </ul>
+          <div class="ppt-stat-row">
+            <span class="ppt-stat">경로 확정 → PEEK<span class="ppt-stat-def">지도 확인 우선</span></span>
+            <span class="ppt-stat">상세 안내 → FULL<span class="ppt-stat-def">TBT 전체 보기</span></span>
+          </div>
+          <div class="ppt-footer"><span>핵심 UX 차별점 ★★★</span><span>4 / 8</span></div>
+        </div>
+        <div class="ppt-prompt-label">📋 슬라이드 생성 프롬프트</div>
+        <div class="ppt-prompt">제목: "모바일 Bottom Sheet FSM". 불릿: PEEK 28vh, HALF 46vh, FULL 82vh, 드래그/탭, showSteps→FULL. 태그: "경로 확정→PEEK", "상세 안내→FULL". 틸 배경, 3단 시트 다이어그램 포함.</div>
+        <div class="ppt-notes"><strong>🎤 발표 멘트 (55초)</strong>"시트는 28·46·82vh 세 단계입니다. 경로가 나오면 자동으로 PEEK으로 내려가 지도를 보여 주고, '상세 안내'를 누르면 FULL로 올라가 모든 단계를 봅니다. 드래그로도 스냅됩니다."</div>
+      </div>
+
+      <!-- Slide 5 -->
+      <div class="ppt-wrap">
+        <div class="ppt-label"><span>SLIDE 5 / 8</span>OD 입력</div>
+        <div class="ppt-slide content-slide">
+          <div class="ppt-accent-bar"></div>
+          <div class="ppt-h2">출발·도착(OD) 6채널 입력</div>
+          <div class="ppt-h3">어떤 사용자든 출발지·도착지를 정할 수 있게</div>
+          <ul class="ppt-bullets cols-2">
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main">🏢 <strong>폴리곤 탭</strong></span><span class="ppt-li-def">지도 위 건물 윤곽을 탭해 출발/도착으로 선택</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main">🔍 <strong>검색</strong></span><span class="ppt-li-def">건물명 자동완성으로 출발/도착 입력</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main">🎤 <strong>음성</strong></span><span class="ppt-li-def">"○○관에서 △△관" 말로 출발·도착 지정</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main">📍 <strong>지도 찍기</strong></span><span class="ppt-li-def">십자선(crosshair) 모드로 지도에 직접 위치 찍기</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main">📡 <strong>GPS</strong></span><span class="ppt-li-def">현재 위치를 출발지로 바로 설정</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main">⇄ <strong>스왑</strong></span><span class="ppt-li-def">출발지와 도착지를 한 번에 뒤바꿈</span></span></li>
+          </ul>
+          <p style="font-size:clamp(0.68rem,1.3vw,0.82rem);margin-top:0.4rem;opacity:0.75"><strong>컴팩트 요약</strong> — 경로 나오면 OD 입력이 한 줄로 줄고 ✏️로 다시 편집</p>
+          <div class="ppt-footer"><span>route-panel.tsx</span><span>5 / 8</span></div>
+        </div>
+        <div class="ppt-prompt-label">📋 슬라이드 생성 프롬프트</div>
+        <div class="ppt-prompt">제목: "출발·도착 6채널 입력". 2열 6아이콘: 폴리곤탭, 검색, 음성, 지도찍기, GPS, 스왑. 하단: "경로 후 컴팩트 한 줄+편집". 흰 배경, 아이콘 그리드 레이아웃.</div>
+        <div class="ppt-notes"><strong>🎤 발표 멘트 (45초)</strong>"출발과 도착은 6가지 방법으로 고를 수 있습니다. 탭, 검색, 음성, 지도에 직접 찍기, GPS, 그리고 스왑입니다. 경로가 나오면 입력 폼은 한 줄 요약으로 줄어듭니다."</div>
+      </div>
+
+      <!-- Slide 6 -->
+      <div class="ppt-wrap">
+        <div class="ppt-label"><span>SLIDE 6 / 8</span>경로·TBT UI</div>
+        <div class="ppt-slide content-slide dark">
+          <div class="ppt-h2">경로 요약 · TBT UI</div>
+          <div class="ppt-h3">안내 전 요약 · 안내 중 현재 단계만</div>
+          <ul class="ppt-bullets">
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>요약 카드</strong></span><span class="ppt-li-def">예상 시간(0.7m/s)·총 거리·계단/승강기 유무 배지를 한눈에 표시</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>상세 안내 토글</strong> showSteps</span><span class="ppt-li-def">TBT 목록 펼치기/접기 — 펼치면 시트 FULL + aria-expanded 알림</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>안내 중 현재 단계만</strong></span><span class="ppt-li-def">이동 중엔 전체 목록 대신 지금 해야 할 한 단계만 표시</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>지도 polyline · POI</strong></span><span class="ppt-li-def">구간별 색 경로선 + 이번 경로에 쓰는 승강기만 마커 표시</span></span></li>
+          </ul>
+          <div class="ppt-footer"><span>route-steps.tsx</span><span>6 / 8</span></div>
+        </div>
+        <div class="ppt-prompt-label">📋 슬라이드 생성 프롬프트</div>
+        <div class="ppt-prompt">제목: "경로 요약 · TBT UI". 불릿: 요약카드(시간·거리·배지), showSteps 토글, 안내 중 현재 단계만, polyline 색상. 다크 배경, 앱 스크린샷 placeholder 2개.</div>
+        <div class="ppt-notes"><strong>🎤 발표 멘트 (50초)</strong>"경로가 나오면 시간·거리·계단 여부를 카드로 보여 줍니다. 안내를 시작하면 복잡한 목록 대신 '지금 해야 할 한 단계'만 남기고, 펼치기를 누르면 전체 TBT를 볼 수 있습니다."</div>
+      </div>
+
+      <!-- Slide 7 -->
+      <div class="ppt-wrap">
+        <div class="ppt-label"><span>SLIDE 7 / 8</span>3채널 안내</div>
+        <div class="ppt-slide content-slide accent-purple">
+          <div class="ppt-h2">안내 중 3채널 피드백</div>
+          <div class="ppt-h3">시각 · 청각 · 스크린리더가 같은 메시지를 받습니다</div>
+          <ul class="ppt-bullets">
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>① sr-only live</strong></span><span class="ppt-li-def">눈에 안 보이지만 스크린리더가 assertive로 즉시 읽는 안내 영역</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>② 패널 배너</strong></span><span class="ppt-li-def">모바일 시트 상단에 보이는 "100m 직진" 등 안내 문구</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>③ 지도 배너 + TTS</strong></span><span class="ppt-li-def">PC 지도 좌상단 배너 + Google TTS로 같은 문장 음성 재생</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>상태 색상</strong></span><span class="ppt-li-def">이탈=amber(노랑) · 재탐색=green 4초 · followPaused=추적 일시정지</span></span></li>
+          </ul>
+          <div class="ppt-footer"><span>핵심 접근성 ★★★</span><span>7 / 8</span></div>
+        </div>
+        <div class="ppt-prompt-label">📋 슬라이드 생성 프롬프트</div>
+        <div class="ppt-prompt">제목: "안내 중 3채널 피드백". 불릿: sr-only live, 패널 배너, 지도 배너+TTS, 상태 색상(amber/green 4s). 3채널 다이어그램(시각·청각·SR). 퍼플 배경.</div>
+        <div class="ppt-notes"><strong>🎤 발표 멘트 (55초)</strong>"안내 문장은 liveAnnouncement 하나에서 나옵니다. 스크린리더는 assertive로 즉시 읽고, 화면에는 배너로 보이며, 음성이 켜져 있으면 TTS도 같이 재생됩니다. 이탈·재탐색은 색으로도 알려 줍니다."</div>
+      </div>
+
+      <!-- Slide 8 -->
+      <div class="ppt-wrap">
+        <div class="ppt-label"><span>SLIDE 8 / 8</span>접근성·마무리</div>
+        <div class="ppt-slide content-slide">
+          <div class="ppt-accent-bar"></div>
+          <div class="ppt-h2">탐색 · 접근성 설정 · 마무리</div>
+          <div class="ppt-h3">설정은 즉시 전 페이지에 반영됩니다</div>
+          <ul class="ppt-bullets cols-2">
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>5종 시설 필터</strong></span><span class="ppt-li-def">승강기·경사로·화장실·점자블록·자동문 보유 건물만 골라 보기</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>BuildingDetail</strong></span><span class="ppt-li-def">건물 등급·시설 현황·층별 사진을 보여 주는 상세 팝업</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>고대비</strong></span><span class="ppt-li-def">흰 배경·검은 글자·진한 테두리로 시각 대비를 높이는 모드</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>글자 80~150%</strong></span><span class="ppt-li-def">설정에서 전체 글자 크기를 80%~150%로 조절</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>ko / en</strong></span><span class="ppt-li-def">언어 변경 시 UI·TBT·TTS 문구가 즉시 전환</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>UI 차별점</strong></span><span class="ppt-li-def">지도 우선 Bottom Sheet + 시각·청각·SR 3채널 안내</span></span></li>
+          </ul>
+          <div class="ppt-footer"><span>감사합니다 · Q&amp;A</span><span>8 / 8</span></div>
+        </div>
+        <div class="ppt-prompt-label">📋 슬라이드 생성 프롬프트</div>
+        <div class="ppt-prompt">제목: "탐색 · 접근성 설정 · 마무리". 2열 불릿: 5종 필터, BuildingDetail, 고대비, 글자크기, ko/en, UI차별점 Bottom Sheet+3채널. 마지막 "감사합니다 Q&A". 설정 패널 스크린샷 포함.</div>
+        <div class="ppt-notes"><strong>🎤 발표 멘트 (45초)</strong>"탐색 화면에서는 시설 필터로 원하는 건물만 골라 볼 수 있고, 설정에서 고대비·글자 크기·언어를 바꾸면 바로 적용됩니다. 지도 우선 Bottom Sheet와 3채널 안내가 저희 UI/UX의 핵심입니다. 감사합니다."</div>
+      </div>
+
+    </div>
+
+    <details class="ppt-master-prompt">
+      <summary>📦 전체 8장 한 번에 생성하는 마스터 프롬프트 (복사용)</summary>
+      <div class="ppt-prompt" style="margin-top:0.75rem">공주대학교 캡스톤 발표용 PowerPoint 8장, 16:9, UI/UX 파트.
+
+1. 표지: "베리어프리맵 — UI/UX 설계"
+2. 원칙: 지도 우선, Bottom Sheet 밀도, 접근성 기본, /탐색 vs /route
+3. 반응형: 데스크톱 22rem, 모바일 시트, --route-sheet-vh, 배너 분기
+4. Bottom Sheet: PEEK 28/HALF 46/FULL 82vh, 드래그, showSteps→FULL
+5. OD 6채널: 탭·검색·음성·지도·GPS·스왑, 컴팩트 요약
+6. TBT UI: 요약카드, showSteps, 안내 중 현재 단계, polyline
+7. 3채널: aria-live, 패널 배너, 지도 배너+TTS, amber/green 상태
+8. 접근성: 필터, 고대비, 글자크기, ko/en, 감사합니다 Q&A
+
+모바일 앱 와이어프레임 스타일, 블루·틸·퍼플 그라데이션.</div>
+    </details>
+  </section>
+
+</div>
+
+<footer class="footer">
+  공주대학교 신관캠퍼스 베리어프리맵 · UI/UX + 기술 가이드 ·
+  <code>docs/ui-ux-guide.html</code> ·
+  <a href="feature-guide.html" style="color:var(--primary)">핵심 기능 가이드</a>와 함께 보세요
+</footer>
+
+</body>
+</html>

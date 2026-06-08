@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>베리어프리맵 — 핵심 기능 + 기술 가이드</title>
+  <style>
+    :root {
+      --bg: #f0f4f8; --card: #fff; --text: #1a2332; --muted: #5c6b7a; --border: #e2e8f0;
+      --primary: #7c3aed; --primary-soft: #ede9fe;
+      --green: #059669; --green-soft: #d1fae5;
+      --amber: #d97706; --amber-soft: #fef3c7;
+      --red: #dc2626; --red-soft: #fee2e2;
+      --teal: #0d9488; --teal-soft: #ccfbf1;
+      --blue: #2563eb; --blue-soft: #dbeafe;
+      --tech-bg: #0f172a; --tech-text: #e2e8f0; --tech-muted: #94a3b8; --tech-accent: #a78bfa;
+      --shadow: 0 4px 24px rgba(15,23,42,0.08); --radius: 14px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif; background: var(--bg); color: var(--text); line-height: 1.65; font-size: 15px; }
+
+    .hero { background: linear-gradient(135deg, #312e81 0%, #7c3aed 45%, #2563eb 100%); color: #fff; padding: 2.75rem 2rem 2.25rem; text-align: center; }
+    .hero h1 { font-size: 1.8rem; font-weight: 800; letter-spacing: -0.02em; }
+    .hero p { margin-top: 0.5rem; opacity: 0.92; font-size: 0.95rem; max-width: 580px; margin-inline: auto; }
+    .hero-tags { display: flex; flex-wrap: wrap; gap: 0.45rem; justify-content: center; margin-top: 1.1rem; }
+    .hero-tag { background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.22); padding: 0.28rem 0.7rem; border-radius: 999px; font-size: 0.78rem; font-weight: 600; }
+    .hero-tag.tech { background: rgba(167,139,250,0.3); border-color: rgba(167,139,250,0.45); }
+    .hero-link { display: inline-block; margin-top: 1rem; color: #e9d5ff; font-size: 0.88rem; text-decoration: underline; }
+
+    .wrap { max-width: 1140px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    .toc { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem 1.5rem; margin-bottom: 2rem; box-shadow: var(--shadow); }
+    .toc h2 { font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 0.7rem; }
+    .toc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(185px, 1fr)); gap: 0.45rem; }
+    .toc a { display: flex; align-items: center; gap: 0.45rem; text-decoration: none; color: var(--text); padding: 0.4rem 0.6rem; border-radius: 8px; font-size: 0.88rem; font-weight: 500; }
+    .toc a:hover { background: var(--primary-soft); color: var(--primary); }
+    .toc-num { width: 1.45rem; height: 1.45rem; background: var(--primary-soft); color: var(--primary); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 700; flex-shrink: 0; }
+
+    section { margin-bottom: 2.75rem; scroll-margin-top: 1rem; }
+    .section-head { display: flex; align-items: center; gap: 0.7rem; margin-bottom: 0.35rem; }
+    .section-num { width: 2.1rem; height: 2.1rem; background: var(--primary); color: #fff; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.95rem; flex-shrink: 0; }
+    .section-head h2 { font-size: 1.3rem; font-weight: 800; letter-spacing: -0.02em; }
+    .section-lead { color: var(--muted); margin-bottom: 1.1rem; font-size: 0.93rem; }
+
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.15rem 1.35rem; box-shadow: var(--shadow); margin-bottom: 0.85rem; }
+    .card h3 { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.65rem; }
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.85rem; }
+
+    .split-label { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin: 1.1rem 0 0.5rem; }
+    .split-label.concept::before { content: "💡"; color: var(--primary); }
+    .split-label.tech::before { content: "⚙"; color: #0d9488; }
+
+    .tech { background: var(--tech-bg); color: var(--tech-text); border-radius: var(--radius); padding: 1.15rem 1.35rem; margin-top: 1rem; font-size: 0.86rem; border: 1px solid #1e293b; }
+    .tech-header { display: flex; align-items: center; gap: 0.5rem; font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--tech-accent); margin-bottom: 0.75rem; }
+    .tech-header::before { content: "⚙"; }
+    .tech-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.75rem; margin-bottom: 0.75rem; }
+    .tech-cell h4 { font-size: 0.72rem; color: var(--tech-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem; }
+    .tech-cell ul { list-style: none; font-size: 0.84rem; }
+    .tech-cell li { padding: 0.15rem 0; }
+    .tech-cell li::before { content: "· "; color: var(--tech-accent); }
+    .file-tag { display: inline-block; background: #1e293b; color: #c4b5fd; padding: 0.12rem 0.45rem; border-radius: 5px; font-family: ui-monospace,monospace; font-size: 0.78rem; margin: 0.1rem 0.15rem 0.1rem 0; }
+    pre.code { background: #020617; border: 1px solid #334155; border-radius: 10px; padding: 0.85rem 1rem; overflow-x: auto; font-family: ui-monospace,monospace; font-size: 0.78rem; line-height: 1.55; color: #cbd5e1; margin: 0.5rem 0; }
+    pre.code .kw { color: #c084fc; } pre.code .str { color: #86efac; } pre.code .num { color: #fcd34d; } pre.code .cmt { color: #64748b; }
+    .ac-list { list-style: none; margin-top: 0.35rem; }
+    .ac-list li { padding: 0.2rem 0 0.2rem 1.1rem; position: relative; font-size: 0.82rem; }
+    .ac-list li::before { content: "✓"; position: absolute; left: 0; color: #4ade80; font-weight: 700; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.86rem; background: var(--card); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); border: 1px solid var(--border); }
+    th { background: #f1f5f9; text-align: left; padding: 0.65rem 0.95rem; font-weight: 700; border-bottom: 2px solid var(--border); }
+    td { padding: 0.6rem 0.95rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f8fafc; }
+    .tech table { background: #1e293b; border-color: #334155; box-shadow: none; }
+    .tech th { background: #0f172a; color: var(--tech-muted); border-color: #334155; }
+    .tech td { border-color: #334155; color: var(--tech-text); }
+    .tech tr:hover td { background: #1e293b; }
+
+    .badge { display: inline-block; padding: 0.12rem 0.5rem; border-radius: 6px; font-size: 0.72rem; font-weight: 700; }
+    .badge-purple { background: var(--primary-soft); color: var(--primary); }
+    .badge-green { background: var(--green-soft); color: var(--green); }
+    .badge-amber { background: var(--amber-soft); color: var(--amber); }
+    .badge-blue { background: var(--blue-soft); color: var(--blue); }
+    .badge-tech { background: #1e3a5f; color: #7dd3fc; font-family: monospace; }
+
+    .highlight-box { background: linear-gradient(135deg, var(--primary-soft), #e0e7ff); border: 1px solid #c4b5fd; border-radius: 12px; padding: 0.9rem 1.15rem; margin: 0.85rem 0; font-weight: 600; color: #5b21b6; font-size: 0.92rem; }
+
+    /* Pipeline */
+    .pipeline { display: flex; flex-wrap: wrap; align-items: stretch; gap: 0; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+    .pipe-step { flex: 1; min-width: 120px; padding: 1rem 0.85rem; text-align: center; border-right: 1px solid var(--border); position: relative; }
+    .pipe-step:last-child { border-right: none; }
+    .pipe-icon { font-size: 1.5rem; margin-bottom: 0.35rem; }
+    .pipe-title { font-weight: 800; font-size: 0.82rem; }
+    .pipe-sub { font-size: 0.72rem; color: var(--muted); margin-top: 0.2rem; }
+    .pipe-arrow { display: none; }
+    @media (min-width: 700px) {
+      .pipeline { flex-wrap: nowrap; }
+    }
+
+    /* Flow diagram */
+    .flow-v { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; padding: 1rem; }
+    .flow-box { background: var(--primary-soft); color: var(--primary); padding: 0.55rem 1.1rem; border-radius: 10px; font-weight: 700; font-size: 0.85rem; text-align: center; min-width: 200px; }
+    .flow-box.engine { background: #1e293b; color: #c4b5fd; }
+    .flow-box.output { background: var(--green-soft); color: var(--green); }
+    .flow-v .arrow { color: var(--muted); font-size: 1.1rem; }
+
+    /* Weight bars */
+    .weight-row { display: flex; align-items: center; gap: 0.75rem; margin: 0.4rem 0; font-size: 0.82rem; }
+    .weight-label { width: 90px; font-weight: 700; flex-shrink: 0; }
+    .weight-bar-wrap { flex: 1; height: 22px; background: #e8edf4; border-radius: 6px; overflow: hidden; }
+    .weight-bar { height: 100%; border-radius: 6px; display: flex; align-items: center; padding-left: 0.5rem; font-size: 0.72rem; font-weight: 700; color: #fff; }
+    .w-stairs { width: 85%; background: #dc2626; }
+    .w-path { width: 35%; background: #2563eb; }
+    .w-elevator { width: 12%; background: #0d9488; }
+    .w-ramp { width: 40%; background: #ea580c; }
+
+    .arch-tree { font-family: ui-monospace,monospace; font-size: 0.78rem; line-height: 1.7; background: #020617; color: #94a3b8; padding: 1rem 1.25rem; border-radius: 12px; border: 1px solid #334155; }
+    .arch-tree .dir { color: #7dd3fc; } .arch-tree .file { color: #cbd5e1; } .arch-tree .note { color: #64748b; }
+
+    .feat-card { border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; box-shadow: var(--shadow); }
+    .feat-card-head { padding: 0.85rem 1.1rem; font-weight: 800; color: #fff; font-size: 0.95rem; }
+    .feat-card-head.g1 { background: linear-gradient(135deg,#7c3aed,#a78bfa); }
+    .feat-card-head.g2 { background: linear-gradient(135deg,#0d9488,#34d399); }
+    .feat-card-head.g3 { background: linear-gradient(135deg,#2563eb,#38bdf8); }
+    .feat-card-head.g4 { background: linear-gradient(135deg,#d97706,#fbbf24); color:#1a2332; }
+    .feat-card-body { background: var(--card); padding: 1.1rem; font-size: 0.88rem; }
+
+    /* PPT-style slide deck */
+    .ppt-intro { background: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; font-size: 0.88rem; }
+    .ppt-intro strong { color: #92400e; }
+    .ppt-deck { display: flex; flex-direction: column; gap: 2.25rem; }
+    .ppt-wrap { display: flex; flex-direction: column; gap: 0.65rem; }
+    .ppt-label { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; font-size: 0.78rem; color: var(--muted); font-weight: 600; }
+    .ppt-label span { background: var(--primary-soft); color: var(--primary); padding: 0.2rem 0.55rem; border-radius: 6px; font-weight: 700; }
+    .ppt-slide {
+      aspect-ratio: 16 / 9;
+      border-radius: 14px;
+      box-shadow: 0 12px 48px rgba(15,23,42,0.18);
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      padding: 5% 6% 4%;
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    .ppt-slide.title-slide {
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #0d9488 100%);
+      color: #fff;
+      justify-content: center;
+      text-align: center;
+    }
+    .ppt-slide.title-slide .ppt-h1 { font-size: clamp(1.35rem, 3.2vw, 2.1rem); font-weight: 800; letter-spacing: -0.02em; line-height: 1.25; }
+    .ppt-slide.title-slide .ppt-sub { margin-top: 0.65rem; font-size: clamp(0.85rem, 1.8vw, 1.15rem); opacity: 0.92; font-weight: 500; }
+    .ppt-slide.title-slide .ppt-meta { margin-top: 1.5rem; font-size: clamp(0.72rem, 1.4vw, 0.88rem); opacity: 0.75; }
+    .ppt-slide.content-slide { background: #ffffff; color: #1a2332; }
+    .ppt-slide.content-slide.dark { background: linear-gradient(160deg, #0f172a 0%, #1e293b 100%); color: #f1f5f9; }
+    .ppt-slide.content-slide.accent { background: linear-gradient(160deg, #1e3a8a 0%, #2563eb 100%); color: #fff; }
+    .ppt-slide.content-slide.accent-teal { background: linear-gradient(160deg, #0f766e 0%, #0d9488 100%); color: #fff; }
+    .ppt-slide.content-slide.accent-purple { background: linear-gradient(160deg, #5b21b6 0%, #7c3aed 100%); color: #fff; }
+    .ppt-h2 { font-size: clamp(1rem, 2.4vw, 1.55rem); font-weight: 800; letter-spacing: -0.02em; line-height: 1.2; margin-bottom: 0.35rem; }
+    .ppt-h3 { font-size: clamp(0.78rem, 1.5vw, 0.95rem); font-weight: 600; opacity: 0.75; margin-bottom: 0.85rem; }
+    .ppt-bullets { list-style: none; margin: 0; padding: 0; flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 0.3rem; }
+    .ppt-bullets li { display: flex; align-items: flex-start; gap: 0.45rem; font-size: clamp(0.68rem, 1.4vw, 0.88rem); line-height: 1.35; }
+    .ppt-bullets li::before { content: "▸"; font-weight: 800; flex-shrink: 0; opacity: 0.85; margin-top: 0.08rem; }
+    .ppt-bullets li strong { font-weight: 700; }
+    .ppt-li-wrap { flex: 1; min-width: 0; }
+    .ppt-li-main { display: block; }
+    .ppt-li-def { display: block; font-size: 0.82em; opacity: 0.65; margin-top: 0.08rem; line-height: 1.3; font-weight: 400; }
+    .ppt-bullets.cols-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.28rem 1rem; }
+    .ppt-stat-def { display: block; font-size: 0.65em; opacity: 0.7; font-weight: 400; margin-top: 0.15rem; }
+    .ppt-stat-row { display: flex; flex-wrap: wrap; gap: 0.65rem; margin-top: 0.5rem; }
+    .ppt-stat { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); border-radius: 10px; padding: 0.5rem 0.85rem; font-size: clamp(0.68rem, 1.3vw, 0.82rem); font-weight: 600; }
+    .content-slide .ppt-stat { background: var(--primary-soft); border-color: #bfdbfe; color: #1e40af; }
+    .ppt-footer { position: absolute; bottom: 3.5%; left: 6%; right: 6%; display: flex; justify-content: space-between; align-items: center; font-size: clamp(0.6rem, 1.1vw, 0.72rem); opacity: 0.55; }
+    .ppt-accent-bar { position: absolute; top: 0; left: 0; right: 0; height: 5px; background: linear-gradient(90deg, #2563eb, #0d9488); }
+    .ppt-prompt {
+      background: #0f172a; color: #e2e8f0; border-radius: 10px; padding: 0.85rem 1rem;
+      font-family: ui-monospace, "Cascadia Code", monospace; font-size: 0.75rem; line-height: 1.55;
+      white-space: pre-wrap; word-break: break-word; border: 1px solid #334155;
+    }
+    .ppt-prompt-label { font-size: 0.72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem; }
+    .ppt-notes { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem 1rem; font-size: 0.82rem; color: var(--muted); }
+    .ppt-notes strong { color: var(--text); display: block; font-size: 0.78rem; margin-bottom: 0.25rem; }
+    .ppt-master-prompt { margin-top: 1.5rem; }
+    .ppt-master-prompt summary { cursor: pointer; font-weight: 700; font-size: 0.9rem; padding: 0.65rem 0; color: var(--primary); }
+    .ppt-glossary { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; box-shadow: var(--shadow); }
+    .ppt-glossary h3 { font-size: 0.9rem; margin-bottom: 0.65rem; color: var(--text); }
+    .ppt-glossary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.35rem 1.25rem; }
+    .ppt-term { font-size: 0.8rem; line-height: 1.5; padding: 0.3rem 0; border-bottom: 1px solid #f1f5f9; }
+    .ppt-term:last-child { border-bottom: none; }
+    .ppt-term dt { display: inline; font-weight: 700; color: var(--primary); }
+    .ppt-term dt::after { content: " — "; font-weight: 400; color: var(--muted); }
+    .ppt-term dd { display: inline; color: var(--muted); margin: 0; }
+    .ppt-terms { background: #f8fafc; border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: 0 10px 10px 0; padding: 0.65rem 0.9rem; }
+    .ppt-terms-title { font-size: 0.7rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.4rem; }
+    .ppt-terms .ppt-term { font-size: 0.78rem; padding: 0.2rem 0; border-bottom-color: #e8edf4; }
+    @media (max-width: 640px) { .ppt-bullets.cols-2 { grid-template-columns: 1fr; } .ppt-glossary-grid { grid-template-columns: 1fr; } }
+
+    .footer { text-align: center; padding: 2rem; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 2rem; }
+    .footer a { color: var(--primary); }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; align-items: start; }
+    @media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } .pipe-step { border-right: none; border-bottom: 1px solid var(--border); } }
+
+    .section-head { flex-wrap: wrap; }
+    .section-head h2 { flex: 1; min-width: 0; }
+    .stars { font-size: 0.9rem; letter-spacing: 2px; flex-shrink: 0; font-weight: 400; }
+    .s3 { color: #f59e0b; } .s2 { color: #64748b; } .s1 { color: #cbd5e1; }
+    .priority-legend { display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.82rem; margin-bottom: 0.85rem; padding: 0.65rem 0.9rem; background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; }
+    .priority-legend span { white-space: nowrap; }
+    .prio-table td:first-child, .prio-table th:first-child { width: 4.5rem; text-align: center; white-space: nowrap; }
+    .key-points { list-style: none; margin: 0.5rem 0 0; }
+    .key-points li { display: flex; align-items: flex-start; gap: 0.55rem; padding: 0.35rem 0; font-size: 0.88rem; border-bottom: 1px solid var(--border); }
+    .key-points li:last-child { border-bottom: none; }
+    .key-points .stars { font-size: 0.75rem; letter-spacing: 1px; min-width: 2.6rem; padding-top: 0.1rem; }
+    .key-points strong { display: block; font-size: 0.88rem; }
+    .key-points span.sub { font-size: 0.8rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>공주대 베리어프리맵 — 핵심 기능 + 기술 가이드</h1>
+  <p>외부 길찾기 API 없이, 캠퍼스 실측 보행 그래프·승강기 최적화·GPS 안내·TTS까지 — <strong>★ 중요도</strong>와 함께 개념·구현을 정리했습니다.</p>
+  <div class="hero-tags">
+    <span class="hero-tag">자체 Dijkstra</span>
+    <span class="hero-tag tech">GeoJSON Graph</span>
+    <span class="hero-tag">Comfort Elevator</span>
+    <span class="hero-tag tech">GPS Progress</span>
+    <span class="hero-tag">Google TTS</span>
+  </div>
+  <a class="hero-link" href="ui-ux-guide.html">→ UI/UX 가이드 보기</a>
+</header>
+
+<div class="wrap">
+
+  <nav class="toc">
+    <h2>목차</h2>
+    <div class="toc-grid">
+      <a href="#s0"><span class="toc-num">0</span> 전체 파이프라인</a>
+      <a href="#s1"><span class="toc-num">1</span> 보행 그래프</a>
+      <a href="#s2"><span class="toc-num">2</span> 비용 가중치</a>
+      <a href="#s3"><span class="toc-num">3</span> 승강기 최적화</a>
+      <a href="#s4"><span class="toc-num">4</span> TBT 생성</a>
+      <a href="#s5"><span class="toc-num">5</span> OD·시각화</a>
+      <a href="#s6"><span class="toc-num">6</span> GPS Progress</a>
+      <a href="#s7"><span class="toc-num">7</span> 재탐색·도착</a>
+      <a href="#s8"><span class="toc-num">8</span> Heading·카메라</a>
+      <a href="#s9"><span class="toc-num">9</span> TTS·음성·AT</a>
+      <a href="#s10"><span class="toc-num">10</span> 탐색·i18n</a>
+      <a href="#s11"><span class="toc-num">11</span> 상수·데이터</a>
+      <a href="#priority"><span class="toc-num">★</span> 중요도 한눈에</a>
+      <a href="#s12"><span class="toc-num">12</span> PPT 슬라이드 (기능)</a>
+    </div>
+  </nav>
+
+  <section id="priority">
+    <div class="section-head"><span class="section-num">★</span><h2>중요도 한눈에 (별 기준)</h2></div>
+    <div class="priority-legend">
+      <span><span class="stars s3">★★★</span> 발표 필수 · 핵심 차별점</span>
+      <span><span class="stars s2">★★☆</span> 중요 · Q&A·구현 상세</span>
+      <span><span class="stars s1">★☆☆</span> 보조 · 참고·상수</span>
+    </div>
+    <table class="prio-table">
+      <thead><tr><th>별</th><th>기능 항목</th><th>한 줄 요약</th></tr></thead>
+      <tbody>
+        <tr><td><span class="stars s3">★★★</span></td><td>보행 그래프 + Dijkstra</td><td>외부 API 없이 실측 GeoJSON 기반 자체 경로</td></tr>
+        <tr><td><span class="stars s3">★★★</span></td><td>edgeWeight 비용 모델</td><td>계단 회피·승강기 우대 가중치</td></tr>
+        <tr><td><span class="stars s3">★★★</span></td><td>승강기 3정책</td><td>comfort · corridor hub · 역방향·다중환승 패널티</td></tr>
+        <tr><td><span class="stars s3">★★★</span></td><td>GPS Progress</td><td>polyline 투영 → stepIndex·offRoute·remaining</td></tr>
+        <tr><td><span class="stars s3">★★★</span></td><td>TTS + aria-live</td><td>경로 브리핑 → step 음성 + 스크린리더 동기</td></tr>
+        <tr><td><span class="stars s2">★★☆</span></td><td>TBT Step Builder</td><td>시설 step 보존 · micro-turn(≤22m) 병합</td></tr>
+        <tr><td><span class="stars s2">★★☆</span></td><td>재탐색·도착 가드</td><td>40m 이탈·8s cooldown · 조기 도착 방지</td></tr>
+        <tr><td><span class="stars s2">★★☆</span></td><td>Heading·Nav Camera</td><td>나침반·GPS·경로 bearing 융합 1인칭 뷰</td></tr>
+        <tr><td><span class="stars s2">★★☆</span></td><td>OD·경로 시각화</td><td>폴리곤 FSM · 색 polyline · 경로 승강기만</td></tr>
+        <tr><td><span class="stars s2">★★☆</span></td><td>탐색·필터·i18n</td><td>시설 facet · 건물 상세 · ko/en 정적 사전</td></tr>
+        <tr><td><span class="stars s2">★★☆</span></td><td>navigationRoute</td><td>안내 중 별도 경로 상태 · 재탐색 시 교체</td></tr>
+        <tr><td><span class="stars s1">★☆☆</span></td><td>build:data 파이프라인</td><td>GeoJSON·CSV → public/data JSON</td></tr>
+        <tr><td><span class="stars s1">★☆☆</span></td><td>상수·환경변수</td><td>임계값 표 · GOOGLE_TTS · NAVER_MAP</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 0 -->
+  <section id="s0">
+    <div class="section-head"><span class="section-num">0</span><h2>기능 전체 파이프라인</h2><span class="stars s2" title="중요">★★☆</span></div>
+    <p class="section-lead">현장 조사 데이터가 웹 앱의 실시간 안내까지 이어지는 흐름입니다.</p>
+
+    <div class="pipeline">
+      <div class="pipe-step"><div class="pipe-icon">📋</div><div class="pipe-title">현장 조사</div><div class="pipe-sub">CSV·사진·QGIS</div></div>
+      <div class="pipe-step"><div class="pipe-icon">⚙️</div><div class="pipe-title">build:data</div><div class="pipe-sub">JSON 변환</div></div>
+      <div class="pipe-step"><div class="pipe-icon">🕸</div><div class="pipe-title">Routing Graph</div><div class="pipe-sub">nodes·edges</div></div>
+      <div class="pipe-step"><div class="pipe-icon">🧭</div><div class="pipe-title">computeRoute</div><div class="pipe-sub">Dijkstra+승강기</div></div>
+      <div class="pipe-step"><div class="pipe-icon">📍</div><div class="pipe-title">GPS Nav</div><div class="pipe-sub">progress·reroute</div></div>
+      <div class="pipe-step"><div class="pipe-icon">🔊</div><div class="pipe-title">TTS+AT</div><div class="pipe-sub">음성·aria-live</div></div>
+    </div>
+
+    <div class="card" style="margin-top:1rem">
+      <h3>런타임 데이터 흐름</h3>
+      <div class="flow-v">
+        <div class="flow-box">/data/walkways.json + entrances + elevators</div>
+        <div class="arrow">↓</div>
+        <div class="flow-box engine">buildRoutingGraph() → RoutingGraph</div>
+        <div class="arrow">↓</div>
+        <div class="flow-box engine">computeRoute(from, to) → ComputedRoute</div>
+        <div class="arrow">↓</div>
+        <div class="flow-box engine">computeProgress(route, userPos) → stepIndex, offRoute…</div>
+        <div class="arrow">↓</div>
+        <div class="flow-box output">TTS + NavLiveRegion + 지도 polyline</div>
+      </div>
+    </div>
+
+    <div class="split-label tech">기술 아키텍처</div>
+    <div class="tech">
+      <div class="arch-tree">
+<span class="dir">lib/routing/</span>
+  <span class="file">graph.ts</span>       <span class="note">← GeoJSON → 양방향 그래프, 출입구 스냅</span>
+  <span class="file">route.ts</span>       <span class="note">← Dijkstra, pickNodePath, 승강기 후보, buildSteps</span>
+  <span class="file">progress.ts</span>    <span class="note">← GPS → 경로 투영, stepIndex</span>
+  <span class="file">nav-camera.ts</span>  <span class="note">← heading 융합, 1인칭 카메라</span>
+  <span class="file">tts.ts</span>         <span class="note">← SpeechGuide 클라이언트</span>
+  <span class="file">elevators.ts</span>   <span class="note">← 경로 승강기 ID 추출</span>
+<span class="dir">hooks/</span>
+  <span class="file">use-navigation.ts</span> <span class="note">← OD, route, GPS watch, reroute, announce</span>
+<span class="dir">app/api/tts/</span>
+  <span class="file">route.ts</span>       <span class="note">← Google Cloud TTS 프록시</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 1 -->
+  <section id="s1">
+    <div class="section-head"><span class="section-num">1</span><h2>캠퍼스 보행 그래프 + Dijkstra</h2><span class="stars s3">★★★</span></div>
+    <p class="section-lead">네이버/카카오 도로 API 대신, <strong>실측 보행망 GeoJSON</strong> 위에서 경로를 계산합니다. 핵심 차별점입니다.</p>
+    <ul class="key-points card" style="list-style:none;padding:1rem 1.25rem">
+      <li><span class="stars s3">★★★</span><div><strong>자체 보행 그래프</strong><span class="sub">QGIS 실측 → walkways.json → Dijkstra</span></div></li>
+      <li><span class="stars s3">★★★</span><div><strong>buildRoutingGraph</strong><span class="sub">보행로 + 승강기 노드(22m 스냅) 통합 그래프</span></div></li>
+      <li><span class="stars s2">★★☆</span><div><strong>출입구 스냅</strong><span class="sub">e_4326 → entrances.json main 출입구 · 미등록 시 중심 fallback</span></div></li>
+      <li><span class="stars s2">★★☆</span><div><strong>ComputedRoute 출력</strong><span class="sub">coords · segmentTypes · steps · distance · hasStairs/hasElevator</span></div></li>
+    </ul>
+
+    <div class="split-label concept">개념</div>
+    <div class="card-grid">
+      <div class="feat-card">
+        <div class="feat-card-head g1">입력 데이터</div>
+        <div class="feat-card-body">
+          <code>bb_4326.geojson</code> + <code>indoor.geojson</code> → walkways.json<br>
+          <code>e_4326.geojson</code> → entrances.json<br>
+          <code>ev_4326.geojson</code> → elevators.json<br>
+          <code>naver.geojson</code> → 건물 footprint (탐색 지도)
+        </div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-card-head g1">출력</div>
+        <div class="feat-card-body">
+          <strong>ComputedRoute</strong><br>
+          coords · segmentTypes · steps<br>
+          distance · hasStairs · hasElevator
+        </div>
+      </div>
+    </div>
+
+    <div class="split-label tech">기술 구현</div>
+    <div class="tech">
+      <pre class="code"><span class="cmt">// graph.ts — 노드 병합</span>
+nodeKey(lng, lat) → <span class="str">`${lng.toFixed(6)},${lat.toFixed(6)}`</span>  <span class="cmt">≈0.1m</span>
+
+<span class="cmt">// route.ts</span>
+computeRoute(graph, from, to, locale):
+  startSnap = nearestNode(graph, from)
+  endSnap   = nearestNode(graph, to)
+  picked    = pickNodePath(graph, startId, endId)
+  return nodePathToRoute(...)</pre>
+      <div class="tech-grid">
+        <div class="tech-cell">
+          <h4>그래프 구축</h4>
+          <ul>
+            <li>buildRoutingGraph(walkways, elevators)</li>
+            <li>내부 buildWalkwayGraph + 승강기 노드 병합</li>
+            <li>양방향 adjacency · edge: distance, type, floor</li>
+            <li>ELEVATOR_SNAP_M=22 · nodeKey 6자리(≈0.1m)</li>
+          </ul>
+        </div>
+        <div class="tech-cell">
+          <h4>출발·도착 스냅</h4>
+          <ul>
+            <li>mainEntranceForBuilding()</li>
+            <li>entrances.json main 출입구</li>
+            <li>미등록 시 건물 중심 fallback</li>
+            <li>nearestNode() 그래프 최근접</li>
+          </ul>
+        </div>
+      </div>
+      <span class="file-tag">lib/routing/graph.ts</span>
+      <span class="file-tag">lib/routing/route.ts</span>
+      <ul class="ac-list">
+        <li>임의 두 연결 출입구 간 polyline 반환</li>
+        <li>연결 불가 시 null + routeError UI 분기</li>
+        <li>WalkwayType: path, indoor, crosswalk, ramp, stairs, elevator</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section id="s2">
+    <div class="section-head"><span class="section-num">2</span><h2>구간 유형별 비용 가중치</h2><span class="stars s3">★★★</span></div>
+    <p class="section-lead">거리만이 아닌 <strong>접근성 비용</strong>을 반영 — 계단은 비싸게, 승강기는 싸게.</p>
+    <ul class="key-points card" style="list-style:none;padding:1rem 1.25rem">
+      <li><span class="stars s3">★★★</span><div><strong>edgeWeight</strong><span class="sub">stairs×2.6 · elevator×0.22 · distance×weight</span></div></li>
+      <li><span class="stars s3">★★★</span><div><strong>elevator 모드</strong><span class="sub">stairs×6.5 · 승강기 우선 경로 강제</span></div></li>
+      <li><span class="stars s2">★★☆</span><div><strong>segmentTypes</strong><span class="sub">경로 구간별 유형 보존 → TBT·배지·시각화</span></div></li>
+    </ul>
+
+    <div class="split-label concept">개념</div>
+    <div class="card">
+      <h3>edgeWeight(type, mode) — shortest 모드 기준 상대 비용</h3>
+      <div class="weight-row"><span class="weight-label">stairs</span><div class="weight-bar-wrap"><div class="weight-bar w-stairs">×2.6</div></div></div>
+      <div class="weight-row"><span class="weight-label">crosswalk</span><div class="weight-bar-wrap"><div class="weight-bar w-ramp">×1.1</div></div></div>
+      <div class="weight-row"><span class="weight-label">path/indoor</span><div class="weight-bar-wrap"><div class="weight-bar w-path">×1.0</div></div></div>
+      <div class="weight-row"><span class="weight-label">elevator</span><div class="weight-bar-wrap"><div class="weight-bar w-elevator">×0.22</div></div></div>
+      <p style="font-size:0.82rem;color:var(--muted);margin-top:0.5rem">mode=<span class="badge badge-purple">elevator</span> 일 때 stairs ×6.5, indoor ×0.82 등 추가 분기</p>
+    </div>
+
+    <div class="split-label tech">기술 구현</div>
+    <div class="tech">
+      <pre class="code"><span class="kw">export function</span> edgeWeight(type: WalkwayType, mode = <span class="str">"shortest"</span>): number {
+  <span class="kw">case</span> <span class="str">"stairs"</span>:   <span class="kw">return</span> mode === <span class="str">"elevator"</span> ? <span class="num">6.5</span> : <span class="num">2.6</span>;
+  <span class="kw">case</span> <span class="str">"elevator"</span>: <span class="kw">return</span> <span class="num">0.22</span>;
+  <span class="kw">case</span> <span class="str">"ramp"</span>:     <span class="kw">return</span> mode === <span class="str">"elevator"</span> ? <span class="num">1.02</span> : <span class="num">1.05</span>;
+  ...
+}</pre>
+      <span class="file-tag">lib/routing/route.ts</span> — <code>edgeWeight()</code>, <code>dijkstra()</code> 비용 = distance × weight
+      <ul class="ac-list">
+        <li>shortest 모드에서도 계단 포함 경로보다 승강기/경사로 우회 선택 가능</li>
+        <li>segmentTypes에 stairs/elevator 구간 정확 반영</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section id="s3">
+    <div class="section-head"><span class="section-num">3</span><h2>승강기 통합 경로 최적화</h2><span class="stars s3">★★★</span></div>
+    <p class="section-lead">최단 거리와 크게 다르지 않으면 <strong>편의 승강기</strong>를 우선하고, 복도 인접 승강기는 실제 환승 노드로 반영합니다.</p>
+    <ul class="key-points card" style="list-style:none;padding:1rem 1.25rem">
+      <li><span class="stars s3">★★★</span><div><strong>Comfort</strong><span class="sub">75m/+45m/1.15 · 계단 절감 시 1.22/+55m</span></div></li>
+      <li><span class="stars s3">★★★</span><div><strong>Corridor Hub</strong><span class="sub">55m 이내 승강기 반드시 경유 후보</span></div></li>
+      <li><span class="stars s2">★★☆</span><div><strong>패널티</strong><span class="sub">역방향(progress&lt;0.05) · 다중환승+130m · 미이용+130m</span></div></li>
+    </ul>
+
+    <div class="split-label concept">개념 — 3가지 정책</div>
+    <div class="card-grid">
+      <div class="feat-card">
+        <div class="feat-card-head g2">Comfort Elevator</div>
+        <div class="feat-card-body">우회 ≤75m(close) · 추가 허용 +45m · 비율 1.15 이내면 comfort 채택. 계단 절감 시 확장 1.22/+55m.</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-card-head g2">Corridor Hub</div>
+        <div class="feat-card-body">기준 경로 선형에서 <strong>55m 이내</strong> 승강기는 “지나침”이 아니라 <strong>반드시 경유</strong>하는 후보 경로 생성.</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-card-head g2">패널티</div>
+        <div class="feat-card-body">progress&lt;0.05 역방향 승강기 · 다중 환승(2회+) +130m · 계단 多인데 승강기 미사용 +130m 패널티.</div>
+      </div>
+    </div>
+
+    <div class="split-label tech">기술 구현</div>
+    <div class="tech">
+      <table>
+        <thead><tr><th>상수</th><th>값</th><th>역할</th></tr></thead>
+        <tbody>
+          <tr><td>ELEVATOR_COMFORT_CLOSE_M</td><td>75</td><td>comfort 판정 거리</td></tr>
+          <tr><td>ELEVATOR_COMFORT_RATIO</td><td>1.15</td><td>상대 허용 비율</td></tr>
+          <tr><td>ELEVATOR_COMFORT_EXTRA_M</td><td>45</td><td>절대 추가 거리</td></tr>
+          <tr><td>ELEVATOR_ON_CORRIDOR_M</td><td>55</td><td>복도 인접 승강기 허용</td></tr>
+          <tr><td>EXTRA_ELEVATOR_STOP_PENALTY_M</td><td>130</td><td>다중 환승 패널티</td></tr>
+          <tr><td>NO_ELEVATOR_PENALTY_M</td><td>130</td><td>승강기 미이용 패널티</td></tr>
+          <tr><td>ELEVATOR_SCORE_BONUS_M</td><td>150</td><td>승강기 경로 가산</td></tr>
+        </tbody>
+      </table>
+      <pre class="code" style="margin-top:0.75rem"><span class="cmt">// pickNodePath — 후보 경로 스코어링 후 최적 선택</span>
+isComfortElevatorPath() / withinElevatorComfortBudget()
+corridorElevatorIds() → corridorHubPaths
+pathNearBackwardElevator() → backward 패널티
+scorePathCandidate() → 최종 비교</pre>
+      <span class="file-tag">lib/routing/route.ts</span>
+      <span class="file-tag">lib/routing/elevators.ts</span>
+      <ul class="ac-list">
+        <li>steps에 maneuver=elevator + 건물명·층 안내 문장</li>
+        <li>elevatorIdsOnRoute() → 지도에 경로 승강기만 표시</li>
+        <li>역방향 대형 건물 우회 회귀 테스트 가능 (test-route.ts)</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section id="s4">
+    <div class="section-head"><span class="section-num">4</span><h2>턴바이턴(TBT) 안내 생성</h2><span class="stars s2">★★☆</span></div>
+    <p class="section-lead">단순화해도 <strong>횡단보도·승강기·경사로·계단</strong> 단계는 반드시 유지합니다.</p>
+    <ul class="key-points card" style="list-style:none;padding:1rem 1.25rem">
+      <li><span class="stars s2">★★☆</span><div><strong>시설 step 보존</strong><span class="sub">collectFeatureRuns — crosswalk/elevator/stairs/ramp 개별 유지</span></div></li>
+      <li><span class="stars s2">★★☆</span><div><strong>micro-turn 병합</strong><span class="sub">≤22m 짧은 회전만 consolidate · 시설 직전 금지</span></div></li>
+      <li><span class="stars s2">★★☆</span><div><strong>거리 재보정</strong><span class="sub">recalibrateStepDistances — full polyline 기준 step.distance</span></div></li>
+      <li><span class="stars s1">★☆☆</span><div><strong>예상 시간</strong><span class="sub">estimateWalkMinutes: 0.7m/s + 구간·회전 가산(횡단+25s, 승강기+18s…)</span></div></li>
+    </ul>
+
+    <div class="split-label concept">개념</div>
+    <table>
+      <thead><tr><th>maneuver</th><th>안내 방식</th></tr></thead>
+      <tbody>
+        <tr><td>crosswalk</td><td>별도 step 유지 — 횡단보도 안내</td></tr>
+        <tr><td>elevator</td><td>시설 중심 문장 (건물명·층)</td></tr>
+        <tr><td>stairs / ramp</td><td>별도 step + hazard 가능</td></tr>
+        <tr><td>straight / turn</td><td>≤22m micro-turn만 consolidate</td></tr>
+        <tr><td>arrive</td><td>도착 메시지</td></tr>
+      </tbody>
+    </table>
+
+    <div class="split-label tech">기술 구현</div>
+    <div class="tech">
+      <pre class="code"><span class="cmt">// buildSteps(coords, fullSegs, locale)</span>
+collectFeatureRuns() → crosswalk/ramp/stairs/elevator 개별 step
+consolidateMicroTurns() → 짧은 회전 병합 (시설 직전 금지)
+recalibrateStepDistances() → full polyline 기준 거리 재보정
+buildElevatorStepsAtCoord() → elevator maneuver + i18n text
+
+<span class="cmt">// step-display.ts — UI/TTS 공용</span>
+stepDisplayMeta(step, locale) → { distanceLabel, instruction }
+navStepSpeechText(locale, step, dist) → 음성 문장</pre>
+      <span class="file-tag">lib/routing/route.ts</span>
+      <span class="file-tag">lib/routing/polyline-simplify.ts</span>
+      <span class="file-tag">lib/i18n/navigation.ts</span>
+      <ul class="ac-list">
+        <li>segmentTypes의 crosswalk/elevator 수 ≈ steps maneuver 빈도</li>
+        <li>승강기 직후 false-positive uturn 억제</li>
+        <li>locale 변경 시 steps text 재계산</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section id="s5">
+    <div class="section-head"><span class="section-num">5</span><h2>OD 입력 · 경로 시각화</h2><span class="stars s2">★★☆</span></div>
+    <p class="section-lead">건물 폴리곤·검색·음성·GPS로 출발·도착을 설정하고, 구간별 색 polyline으로 경로를 표시합니다.</p>
+    <ul class="key-points card" style="list-style:none;padding:1rem 1.25rem">
+      <li><span class="stars s2">★★☆</span><div><strong>OD FSM</strong><span class="sub">출발→도착→도착교체 · pickMode · navigating 차단</span></div></li>
+      <li><span class="stars s2">★★☆</span><div><strong>route vs navigationRoute</strong><span class="sub">안내 중 displayRoute = navigationRoute · 재탐색 시 교체</span></div></li>
+      <li><span class="stars s2">★★☆</span><div><strong>경로 승강기 POI</strong><span class="sub">elevatorIdsOnRoute — 해당 경로 이용 승강기만 마커</span></div></li>
+      <li><span class="stars s1">★☆☆</span><div><strong>음성 OD</strong><span class="sub">useVoiceInput + matchBuildingsFromSpeech</span></div></li>
+    </ul>
+
+    <div class="split-label concept">개념</div>
+    <div class="two-col">
+      <div class="card">
+        <h3>OD 설정 FSM</h3>
+        <ol style="font-size:0.88rem;padding-left:1.25rem">
+          <li>origin 비어 있음 → origin 설정</li>
+          <li>destination 비어 있음 → destination 설정</li>
+          <li>둘 다 있음 → destination 교체</li>
+          <li>navigating → 입력 차단</li>
+        </ol>
+      </div>
+      <div class="card">
+        <h3>경로 시각화</h3>
+        <p style="font-size:0.88rem">segmentTypes별 polyline 분할 렌더링<br>경로 확정 후에만 승강기 마커<br>fitRoute · zoom 연동</p>
+      </div>
+    </div>
+    <p style="font-size:0.85rem;color:var(--muted);margin-top:0.5rem">화면·패널·시트 UX는 <a href="ui-ux-guide.html">UI/UX 가이드</a> 참고</p>
+
+    <div class="split-label tech">기술 구현</div>
+    <div class="tech">
+      <span class="file-tag">hooks/use-navigation.ts</span>
+      <span class="file-tag">components/barrier-free/campus-map.tsx</span>
+      <span class="file-tag">lib/routing/style.ts</span>
+      <pre class="code">RoutePoint: { kind: <span class="str">"building"</span>|<span class="str">"map"</span>|<span class="str">"gps"</span>, label, point, buildingId? }
+routeElevatorIds = elevatorIdsOnRoute(steps, elevators)
+ROUTE_LEGEND colors → path:#2563eb crosswalk:#16a34a ramp:#ea580c stairs:#dc2626</pre>
+      <ul class="ac-list">
+        <li>OD 변경 시 route 재계산 + elevator 마커 집합 동기</li>
+        <li>pickMode + handleMapPick → kind:"map" 좌표</li>
+        <li>음성: matchBuildingsFromSpeech + useVoiceInput</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section id="s6">
+    <div class="section-head"><span class="section-num">6</span><h2>GPS Progress Engine</h2><span class="stars s3">★★★</span></div>
+    <p class="section-lead">사용자 위치를 polyline에 <strong>투영</strong>해 진행률·다음 maneuver 거리·이탈 거리를 산출합니다.</p>
+    <ul class="key-points card" style="list-style:none;padding:1rem 1.25rem">
+      <li><span class="stars s3">★★★</span><div><strong>computeProgress</strong><span class="sub">세그먼트 투영 · walkPathLengthBetween 누적 거리</span></div></li>
+      <li><span class="stars s2">★★☆</span><div><strong>GPS 스무딩</strong><span class="sub">createGpsSmoother() · watchPosition</span></div></li>
+      <li><span class="stars s2">★★☆</span><div><strong>navigationRoute 기준</strong><span class="sub">안내 중 activeRoute = navigationRoute (재탐색 반영)</span></div></li>
+    </ul>
+
+    <div class="split-label concept">개념</div>
+    <div class="card">
+      <h3>RouteProgress 출력</h3>
+      <table>
+        <thead><tr><th>필드</th><th>의미</th></tr></thead>
+        <tbody>
+          <tr><td>stepIndex</td><td>현재 TBT 단계</td></tr>
+          <tr><td>distanceToNext</td><td>다음 회전/시설까지 거리(m)</td></tr>
+          <tr><td>remaining</td><td>목적지까지 남은 보행 거리</td></tr>
+          <tr><td>offRoute</td><td>경로선까지 최단 거리(이탈)</td></tr>
+          <tr><td>snapped</td><td>경로상 투영 좌표</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="split-label tech">기술 구현</div>
+    <div class="tech">
+      <pre class="code"><span class="cmt">// progress.ts</span>
+computeProgress(route, user):
+  각 세그먼트에 projectOnSegment(user, a, b)
+  walkPathLengthBetween() 누적 — 단순 haversine 아님
+  stepAlong[] → stepIndex, distanceToNext 산출
+
+<span class="cmt">// use-navigation.ts</span>
+watchPosition → createGpsSmoother() → setUserPos
+headingAlongRoute(route, progress) → routeHeading
+UI heading throttle: <span class="num">280</span>ms</pre>
+      <span class="file-tag">lib/routing/progress.ts</span>
+      <span class="file-tag">lib/routing/gps-smooth.ts</span>
+      <span class="file-tag">hooks/use-navigation.ts</span>
+      <ul class="ac-list">
+        <li>보행 시 stepIndex 단조 진행</li>
+        <li>offRoute 안정 계산 (세그먼트 투영 기반)</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 7 -->
+  <section id="s7">
+    <div class="section-head"><span class="section-num">7</span><h2>재탐색 · 도착 판정</h2><span class="stars s2">★★☆</span></div>
+    <p class="section-lead">경로 이탈 시 <strong>현재 GPS→목적지</strong> 동적 재탐색. GPS 오차로 인한 <strong>조기 도착</strong>을 방지합니다.</p>
+    <ul class="key-points card" style="list-style:none;padding:1rem 1.25rem">
+      <li><span class="stars s2">★★☆</span><div><strong>재탐색</strong><span class="sub">offRoute&gt;40m · cooldown 8s · 시작 4s 후 · setNavigationRoute</span></div></li>
+      <li><span class="stars s2">★★☆</span><div><strong>도착 가드</strong><span class="sub">8s·22m·offRoute≤45m·이동≥8m</span></div></li>
+      <li><span class="stars s1">★☆☆</span><div><strong>rerouteNotice UI</strong><span class="sub">초록 알림 4초(4000ms)</span></div></li>
+    </ul>
+
+    <div class="split-label concept">개념</div>
+    <div class="card-grid">
+      <div class="feat-card">
+        <div class="feat-card-head g4">Off-Route Reroute</div>
+        <div class="feat-card-body">
+          이탈 &gt; <strong>40m</strong> 지속 → computeRoute 재호출<br>
+          cooldown <strong>8초</strong> · 시작 후 <strong>4초</strong> 이내 금지<br>
+          성공 시 TTS 재탐색 안내
+        </div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-card-head g4">Arrival Guardrails</div>
+        <div class="feat-card-body">
+          시작 후 ≥<strong>8초</strong><br>
+          목적지 ≤<strong>22m</strong> · offRoute ≤<strong>45m</strong><br>
+          이동 ≥<strong>8m</strong> (15초 이내 예외)
+        </div>
+      </div>
+    </div>
+
+    <div class="split-label tech">기술 구현</div>
+    <div class="tech">
+      <pre class="code"><span class="kw">const</span> OFF_ROUTE_THRESHOLD_M = <span class="num">40</span>;
+<span class="kw">const</span> REROUTE_COOLDOWN_MS = <span class="num">8000</span>;
+
+<span class="kw">if</span> (!arrived && sinceStartMs > <span class="num">4000</span> && progress.offRoute > <span class="num">40</span> && cooldown ok) {
+  newRoute = computeRoute(g, userPos, dest.point, locale);
+  setNavigationRoute(newRoute); setCurrentStepIndex(<span class="num">0</span>);
+  announce(offRouteRerouteSpeech(...));
+}
+
+hasArrived: sinceStart ≥ <span class="num">8000</span>ms && distToDest ≤ <span class="num">22</span>m && offRoute ≤ <span class="num">45</span>m && moved ≥ <span class="num">8</span>m</pre>
+      <span class="file-tag">hooks/use-navigation.ts</span>
+      <ul class="ac-list">
+        <li>출발지 정지 상태에서 arrive 미발화</li>
+        <li>재탐색 실패 시 geoError 메시지</li>
+        <li>rerouteNotice UI 플래그 4초(4000ms) 표시</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 8 -->
+  <section id="s8">
+    <div class="section-head"><span class="section-num">8</span><h2>Heading 융합 · Navigation Camera</h2><span class="stars s2">★★☆</span></div>
+    <p class="section-lead">나침반·GPS heading·이동 bearing·경로 bearing을 융합해 <strong>1인칭 안내 뷰</strong>를 제공합니다.</p>
+    <ul class="key-points card" style="list-style:none;padding:1rem 1.25rem">
+      <li><span class="stars s2">★★☆</span><div><strong>fuseNavigationHeading</strong><span class="sub">compass·GPS·movement·route bearing 가중 융합</span></div></li>
+      <li><span class="stars s2">★★☆</span><div><strong>1인칭 카메라</strong><span class="sub">NAV_FOLLOW_ZOOM 17 · backOffset 38m · lerp</span></div></li>
+      <li><span class="stars s1">★☆☆</span><div><strong>followPaused</strong><span class="sub">수동 pan 허용 · bottomObstructionVh 시트 보정</span></div></li>
+    </ul>
+
+    <div class="split-label concept">개념</div>
+    <div class="card">
+      <h3>입력 소스</h3>
+      <div class="card-grid" style="margin-top:0.5rem">
+        <div style="font-size:0.88rem">🧭 DeviceOrientation (compass)</div>
+        <div style="font-size:0.88rem">📡 Geolocation heading & speed</div>
+        <div style="font-size:0.88rem">🚶 movement bearing</div>
+        <div style="font-size:0.88rem">🛤 route progress bearing</div>
+      </div>
+      <p style="font-size:0.82rem;color:var(--muted);margin-top:0.65rem">followPaused 시 사용자 수동 pan 허용 · bottomObstructionVh로 시트 가림 보정</p>
+    </div>
+
+    <div class="split-label tech">기술 구현</div>
+    <div class="tech">
+      <pre class="code">fuseNavigationHeading({ compass, gpsHeading, movementBearing, speed })
+  → compass·motion 가중치 동적 조절
+
+navigationCenterForUser(user, heading, backOffsetM=<span class="num">38</span>)
+applyNavigationCamera(map, user, heading, { bottomObstructionVh })
+
+NAV_FOLLOW_ZOOM = <span class="num">17</span>
+NAV_POS_LERP = <span class="num">0.28</span>  NAV_HEADING_LERP = <span class="num">0.22</span>
+COMPASS_MAX_AGE_MS = <span class="num">800</span></pre>
+      <span class="file-tag">lib/routing/nav-camera.ts</span>
+      <span class="file-tag">hooks/use-device-heading.ts</span>
+      <span class="file-tag">components/barrier-free/campus-map.tsx</span>
+      <ul class="ac-list">
+        <li>followUser 모드에서 지도 회전·줌 안정</li>
+        <li>모바일: markerHeadingThreshold 6°, minFrameMs 33</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 9 -->
+  <section id="s9">
+    <div class="section-head"><span class="section-num">9</span><h2>TTS · 음성 입력 · Assistive Technology</h2><span class="stars s3">★★★</span></div>
+    <p class="section-lead">Google Cloud TTS + Web Speech API + aria-live로 <strong>청각·시각·스크린리더</strong> 동시 안내.</p>
+    <ul class="key-points card" style="list-style:none;padding:1rem 1.25rem">
+      <li><span class="stars s3">★★★</span><div><strong>경로 브리핑</strong><span class="sub">routePreviewSpeechText → speakAndWait → GPS step</span></div></li>
+      <li><span class="stars s3">★★★</span><div><strong>aria-live 동기</strong><span class="sub">announce() = liveAnnouncement + TTS (voice on 시)</span></div></li>
+      <li><span class="stars s2">★★☆</span><div><strong>음성 OD 입력</strong><span class="sub">Web Speech API · PointField 마이크</span></div></li>
+    </ul>
+
+    <div class="split-label concept">개념 — 3단계 음성 흐름</div>
+    <div class="pipeline" style="margin-bottom:0.85rem">
+      <div class="pipe-step"><div class="pipe-title">1. 경로 브리핑</div><div class="pipe-sub">startNav 직전<br>시간·거리·시설</div></div>
+      <div class="pipe-step"><div class="pipe-title">2. depart</div><div class="pipe-sub">speakAndWait<br>순차 재생</div></div>
+      <div class="pipe-step"><div class="pipe-title">3. step 전환</div><div class="pipe-sub">거리 밴드<br>리마인더</div></div>
+    </div>
+
+    <div class="split-label tech">기술 구현</div>
+    <div class="tech">
+      <div class="tech-grid">
+        <div class="tech-cell">
+          <h4>Server TTS</h4>
+          <ul>
+            <li>GET /api/tts?text=&lang=</li>
+            <li>ko-KR-Neural2-A / en-US-Neural2-F</li>
+            <li>GOOGLE_TTS_API_KEY</li>
+            <li>MP3 blob 스트리밍 재생</li>
+          </ul>
+        </div>
+        <div class="tech-cell">
+          <h4>SpeechGuide</h4>
+          <ul>
+            <li>generation token → stale 무시</li>
+            <li>5초 내 동일 문장 dedupe</li>
+            <li>speakAndWait() 순차 대기</li>
+            <li>navSpeechBlockedUntil 가드</li>
+          </ul>
+        </div>
+        <div class="tech-cell">
+          <h4>AT · 음성 입력</h4>
+          <ul>
+            <li>NavLiveRegion aria-live assertive</li>
+            <li>liveAnnouncement 단일 소스</li>
+            <li>useVoiceInput ko-KR/en-US</li>
+            <li>VOICE_STORAGE_KEY 기본 ON</li>
+          </ul>
+        </div>
+      </div>
+      <pre class="code">startNav():
+  routePreviewSpeechText(locale, route, destLabel)  <span class="cmt">// 먼저 재생</span>
+  navSpeechBlockedUntil = now + <span class="num">12000</span>ms
+  이후 GPS step → navStepSpeechText() + announce()
+
+announce(text) → setLiveAnnouncement + speech.speak()</pre>
+      <span class="file-tag">app/api/tts/route.ts</span>
+      <span class="file-tag">lib/routing/tts.ts</span>
+      <span class="file-tag">lib/i18n/navigation.ts</span>
+      <span class="file-tag">hooks/use-voice-input.ts</span>
+      <ul class="ac-list">
+        <li>voice off여도 live region 갱신</li>
+        <li>미지원 브라우저 graceful degradation</li>
+        <li>reroute·arrive 시 force announce</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 10 -->
+  <section id="s10">
+    <div class="section-head"><span class="section-num">10</span><h2>탐색 지원 · i18n</h2><span class="stars s2">★★☆</span></div>
+    <p class="section-lead">길찾기를 보완하는 건물 탐색·필터·상세 정보와 ko/en 로컬라이제이션.</p>
+
+    <div class="split-label concept">개념</div>
+    <table>
+      <thead><tr><th>기능</th><th>설명</th></tr></thead>
+      <tbody>
+        <tr><td>시설 Facet Filter</td><td>elevator · ramp · toilet · braille · auto-door (AND 조건)</td></tr>
+        <tr><td>키워드 검색</td><td>건물명 + 시설 동의어 (승강기, 점자블록 등)</td></tr>
+        <tr><td>BuildingDetail</td><td>등급 A/B/C, 시설 카드, 층별 현장 사진, 미조사 표시</td></tr>
+        <tr><td>i18n</td><td>정적 사전 — 번역 API 아님. UI + TTS + maneuver 일관 전환</td></tr>
+      </tbody>
+    </table>
+
+    <div class="split-label tech">기술 구현</div>
+    <div class="tech">
+      <span class="file-tag">app/page.tsx</span>
+      <span class="file-tag">facility-filter-bar.tsx</span>
+      <span class="file-tag">building-detail.tsx</span>
+      <span class="file-tag">lib/i18n/ui.ts</span>
+      <span class="file-tag">lib/i18n/navigation.ts</span>
+      <pre class="code">facilitySearchTerms: { elevator: [<span class="str">"승강기"</span>,...], braille: [<span class="str">"점자"</span>,...] }
+filters.every(f => building.facilities.includes(f))
+
+AppLocale: <span class="str">"ko"</span> | <span class="str">"en"</span>
+useUi() / getUi(locale) — 안내 중 locale 변경 시 navigationRoute steps 재계산</pre>
+    </div>
+  </section>
+
+  <!-- 11 -->
+  <section id="s11">
+    <div class="section-head"><span class="section-num">11</span><h2>상수 · 데이터 파이프라인 · 환경변수</h2><span class="stars s1">★☆☆</span></div>
+
+    <div class="tech" style="margin-top:0">
+      <div class="tech-header">핵심 기능 상수 총정리</div>
+      <table>
+        <thead><tr><th>영역</th><th>상수</th><th>값</th></tr></thead>
+        <tbody>
+          <tr><td>그래프</td><td>nodeKey precision / ELEVATOR_SNAP_M</td><td>6자리 / 22m</td></tr>
+          <tr><td>가중치</td><td>stairs / elevator (shortest)</td><td>×2.6 / ×0.22</td></tr>
+          <tr><td>승강기</td><td>COMFORT_RATIO / ON_CORRIDOR_M</td><td>1.15 / 55m</td></tr>
+          <tr><td>재탐색</td><td>OFF_ROUTE / COOLDOWN / start guard</td><td>40m / 8s / 4s</td></tr>
+          <tr><td>도착</td><td>min time / dest dist / moved</td><td>8s / 22m / 8m</td></tr>
+          <tr><td>카메라</td><td>NAV_FOLLOW_ZOOM / backOffset</td><td>17 / 38m</td></tr>
+          <tr><td>TTS</td><td>dedupe / preview block</td><td>5s / 12s</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card" style="margin-top:0.85rem">
+      <h3>데이터 빌드 (npm run build:data)</h3>
+      <pre class="code" style="background:#f1f5f9;color:#1e293b;border:1px solid var(--border);font-size:0.82rem">npm run build:data
+  copy-barrier-photos.mjs    → public/photos
+  convert-buildings.mjs      → buildings.json (CSV 조사)
+  copy-facility-icons.mjs    → public/icons
+  copy-routing-data.mjs      → walkways · entrances · elevators · naver.geojson</pre>
+    </div>
+
+    <div class="card">
+      <h3>환경 변수</h3>
+      <table>
+        <thead><tr><th>변수</th><th>용도</th></tr></thead>
+        <tbody>
+          <tr><td><code>NEXT_PUBLIC_NAVER_MAP_CLIENT_ID</code></td><td>네이버 지도 SDK</td></tr>
+          <tr><td><code>GOOGLE_TTS_API_KEY</code></td><td>/api/tts Google Cloud TTS</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>기능 전체 완료 기준</h3>
+      <ul class="ac-list" style="color:var(--text)">
+        <li>두 출입구 간 보행 그래프 경로 polyline + steps 반환</li>
+        <li>comfort 승강기·corridor hub·패널티 정책 동작</li>
+        <li>TBT: crosswalk/elevator/stairs/ramp step 유지</li>
+        <li>GPS progress → stepIndex·offRoute·remaining 산출</li>
+        <li>offRoute 40m → 8s cooldown 재탐색 + TTS</li>
+        <li>hasArrived 가드레일 — 조기 도착 방지</li>
+        <li>경로 브리핑 → step 음성 + aria-live 동기</li>
+        <li>ko/en locale UI·TTS·maneuver 일관</li>
+      </ul>
+    </div>
+
+    <div class="highlight-box">
+      <strong>기능 차별점:</strong> 외부 도로 API가 아닌 캠퍼스 실측 보행망 + 승강기 휴리스틱 + GPS 실시간 안내 ·
+      <strong>UI/UX 차별점:</strong> <a href="ui-ux-guide.html" style="color:#5b21b6">모바일 Bottom Sheet 정보 설계</a>
+    </div>
+  </section>
+
+  <!-- 12 -->
+  <section id="s12">
+    <div class="section-head"><span class="section-num">12</span><h2>발표 슬라이드 — 기능 파트 (바로 사용)</h2><span class="stars s1">★☆☆</span></div>
+    <p class="section-lead">아래 화면을 그대로 PPT에 옮기거나, 각 슬라이드 하단 <strong>프롬프트</strong>를 Gamma·Canva·Copilot에 붙여넣으면 됩니다.</p>
+
+    <div class="ppt-intro">
+      <strong>사용법</strong> — ① 슬라이드 화면의 제목·불릿을 그대로 복사 ② 또는 프롬프트 블록 전체 복사 ③ 데모·스크린샷은 해당 슬라이드에 삽입 ④ 용어는 슬라이드 아래·전체 사전 참고
+    </div>
+
+    <div class="ppt-glossary">
+      <h3>📖 기능 용어 한줄 사전 (PPT·Q&A용)</h3>
+      <div class="ppt-glossary-grid">
+        <div class="ppt-term"><dt>자체 경로 엔진</dt><dd>외부 API 없이 캠퍼스 실측 그래프에서 직접 경로를 계산하는 핵심 모듈</dd></div>
+        <div class="ppt-term"><dt>GeoJSON</dt><dd>좌표·선·면이 담긴 지리 데이터 형식(QGIS 실측 결과)</dd></div>
+        <div class="ppt-term"><dt>buildRoutingGraph</dt><dd>보행 구간과 승강기 노드를 하나의 탐색용 그래프로 합치는 함수</dd></div>
+        <div class="ppt-term"><dt>22m 스냅</dt><dd>승강기 좌표를 가장 가까운 보행 노드에 22m 이내로 붙이는 처리</dd></div>
+        <div class="ppt-term"><dt>출입구 스냅</dt><dd>사용자가 고른 건물을 main 출입구 좌표에 연결해 경로 시작·끝을 정함</dd></div>
+        <div class="ppt-term"><dt>Dijkstra</dt><dd>그래프에서 총 비용이 가장 작은 경로를 찾는 최단경로 알고리즘</dd></div>
+        <div class="ppt-term"><dt>edgeWeight</dt><dd>구간 유형별 비용 배수 — 계단은 비싸게, 승강기는 싸게 매김</dd></div>
+        <div class="ppt-term"><dt>Comfort</dt><dd>조금 우회(≤75m)해도 편한 승강기를 택하는 경로 선택 정책</dd></div>
+        <div class="ppt-term"><dt>Corridor Hub</dt><dd>경로 55m 안의 승강기는 반드시 지나가게 만드는 환승 정책</dd></div>
+        <div class="ppt-term"><dt>TBT</dt><dd>Turn-By-Turn, "100m 후 좌회전" 식의 단계별 길안내</dd></div>
+        <div class="ppt-term"><dt>OD</dt><dd>Origin-Destination, 출발지(O)와 도착지(D)</dd></div>
+        <div class="ppt-term"><dt>navigationRoute</dt><dd>GPS 안내 중 쓰는 경로 상태(재탐색 시 교체, 미리보기 route와 분리)</dd></div>
+        <div class="ppt-term"><dt>computeProgress</dt><dd>GPS 좌표를 경로 선에 투영해 진행률·현재 단계·이탈 거리를 계산</dd></div>
+        <div class="ppt-term"><dt>offRoute</dt><dd>경로 선에서 떨어진 수직 거리(m) — 40m 넘으면 재탐색</dd></div>
+        <div class="ppt-term"><dt>cooldown</dt><dd>재탐색 요청 사이 최소 대기 시간(8초)으로 GPS 떨림 방지</dd></div>
+        <div class="ppt-term"><dt>도착 가드</dt><dd>GPS 오차로 일찍 "도착" 처리되지 않게 하는 조건(시간·거리·이동량)</dd></div>
+        <div class="ppt-term"><dt>TTS</dt><dd>Text-To-Speech, 글자를 음성으로 읽어 주는 기술(Google Cloud TTS)</dd></div>
+        <div class="ppt-term"><dt>aria-live</dt><dd>화면 문구가 바뀔 때 스크린리더가 자동으로 읽게 하는 HTML 속성</dd></div>
+        <div class="ppt-term"><dt>i18n</dt><dd>국제화 — ko/en 등 언어별 문구·음성을 바꾸는 체계</dd></div>
+      </div>
+    </div>
+
+    <div class="ppt-deck">
+
+      <!-- Slide 1 -->
+      <div class="ppt-wrap">
+        <div class="ppt-label"><span>SLIDE 1 / 8</span>표지</div>
+        <div class="ppt-slide title-slide">
+          <div class="ppt-h1">공주대학교 신관캠퍼스<br>베리어프리맵</div>
+          <div class="ppt-sub">핵심 기능 — 자체 보행 경로 엔진 &amp; 실시간 GPS 안내</div>
+          <div class="ppt-meta">캡스톤 디자인 · 2026 · 팀명 입력</div>
+          <div class="ppt-footer"><span>기능 파트</span><span>1 / 8</span></div>
+        </div>
+        <div class="ppt-prompt-label">📋 슬라이드 생성 프롬프트</div>
+        <div class="ppt-prompt">16:9 발표 표지 슬라이드. 제목: "공주대학교 신관캠퍼스 베리어프리맵". 부제: "핵심 기능 — 자체 보행 경로 엔진 & 실시간 GPS 안내". 하단에 팀명·2026. 네이비-블루-틸 그라데이션 배경, 깔끔한 대학 발표 스타일.</div>
+        <div class="ppt-notes"><strong>🎤 발표 멘트 (30초)</strong>"안녕하세요. 저희는 공주대 신관캠퍼스를 위한 베리어프리 길찾기 서비스를 만들었습니다. 오늘은 기능 파트에서, 외부 API 없이 어떻게 캠퍼스 보행 경로를 계산하고 GPS로 실시간 안내하는지 설명드리겠습니다."</div>
+      </div>
+
+      <!-- Slide 2 -->
+      <div class="ppt-wrap">
+        <div class="ppt-label"><span>SLIDE 2 / 8</span>문제 정의</div>
+        <div class="ppt-slide content-slide">
+          <div class="ppt-accent-bar"></div>
+          <div class="ppt-h2">왜 자체 경로 엔진인가?</div>
+          <div class="ppt-h3">도로 API로는 캠퍼스 내부 보행·접근성을 커버할 수 없습니다</div>
+          <ul class="ppt-bullets">
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>도로망 API</strong> 한계</span><span class="ppt-li-def">네이버·카카오는 차도 기준이라 건물 사이 보행로·승강기를 모름</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>접근성 요소</strong> 필수</span><span class="ppt-li-def">계단·횡단보도·승강기를 경로에 반영해야 휠체어·시각장애 사용자에게 유용</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>GeoJSON 보행 그래프</strong></span><span class="ppt-li-def">캠퍼스를 직접 실측해 만든 점·선 데이터로만 내부 길을 표현 가능</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>TBT + GPS</strong> 목표</span><span class="ppt-li-def">건물→건물 단계별 안내(TBT)와 실시간 위치 추적(GPS)을 함께 제공</span></span></li>
+          </ul>
+          <div class="ppt-footer"><span>공주대 베리어프리맵</span><span>2 / 8</span></div>
+        </div>
+        <div class="ppt-prompt-label">📋 슬라이드 생성 프롬프트</div>
+        <div class="ppt-prompt">제목: "왜 자체 경로 엔진인가?". 부제: "도로 API로는 캠퍼스 내부 보행·접근성을 커버할 수 없습니다". 불릿 4개: ①도로망 API 한계 ②계단·횡단보도·승강기 중요 ③QGIS 실측 GeoJSON 필요 ④출발→도착 TBT+GPS 목표. 흰 배경, 상단 블루 액센트 바.</div>
+        <div class="ppt-notes"><strong>🎤 발표 멘트 (45초)</strong>"일반 지도 앱은 캠퍼스 안쪽 보행로를 모릅니다. 계단을 피하고 승강기를 타는 경로를 주려면, 우리가 직접 측량한 데이터로 그래프를 만들고, 그 위에서 경로를 계산해야 합니다."</div>
+      </div>
+
+      <!-- Slide 3 -->
+      <div class="ppt-wrap">
+        <div class="ppt-label"><span>SLIDE 3 / 8</span>데이터 파이프라인</div>
+        <div class="ppt-slide content-slide accent">
+          <div class="ppt-h2">데이터 → 보행 그래프</div>
+          <div class="ppt-h3">QGIS 실측 GeoJSON을 런타임 그래프로 변환</div>
+          <ul class="ppt-bullets">
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>QGIS 실측</strong></span><span class="ppt-li-def">보행로·계단·경사로·횡단보도·승강기 좌표를 지도 위에 직접 그려 수집</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>npm run build:data</strong></span><span class="ppt-li-def">실측 GeoJSON(e_4326·ev_4326·naver.geojson)을 앱용 JSON 파일로 변환</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>buildRoutingGraph()</strong></span><span class="ppt-li-def">보행 선분과 승강기 노드(22m 이내 스냅)를 하나의 탐색 그래프로 합침</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>출입구 스냅</strong></span><span class="ppt-li-def">사용자가 고른 건물을 entrances.json의 main 출입구 좌표에 연결</span></span></li>
+          </ul>
+          <div class="ppt-stat-row">
+            <span class="ppt-stat">walkways.json<span class="ppt-stat-def">보행 구간·유형</span></span>
+            <span class="ppt-stat">entrances.json<span class="ppt-stat-def">건물 출입구</span></span>
+            <span class="ppt-stat">elevators.json<span class="ppt-stat-def">승강기 위치</span></span>
+          </div>
+          <div class="ppt-footer"><span>공주대 베리어프리맵</span><span>3 / 8</span></div>
+        </div>
+        <div class="ppt-prompt-label">📋 슬라이드 생성 프롬프트</div>
+        <div class="ppt-prompt">제목: "데이터 → 보행 그래프". 불릿: QGIS 실측, build:data 파이프라인, buildRoutingGraph(보행+승강기 22m 스냅), entrances 출입구 스냅. 하단 태그: walkways.json, entrances.json, elevators.json. 블루 그라데이션 배경.</div>
+        <div class="ppt-notes"><strong>🎤 발표 멘트 (50초)</strong>"먼저 QGIS로 캠퍼스 보행망을 실측했습니다. 빌드 스크립트가 GeoJSON을 JSON으로 변환하고, buildRoutingGraph가 보행 구간과 승강기를 하나의 그래프로 합칩니다. 사용자가 고른 건물은 출입구 좌표에 스냅됩니다."</div>
+      </div>
+
+      <!-- Slide 4 -->
+      <div class="ppt-wrap">
+        <div class="ppt-label"><span>SLIDE 4 / 8</span>Dijkstra + 비용</div>
+        <div class="ppt-slide content-slide dark">
+          <div class="ppt-h2">Dijkstra + 접근성 비용 모델</div>
+          <div class="ppt-h3">거리만이 아닌 edgeWeight로 계단 회피·승강기 우대</div>
+          <ul class="ppt-bullets cols-2">
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>비용</strong> = 거리 × edgeWeight</span><span class="ppt-li-def">단순 거리가 아니라 구간 유형 배수를 곱한 값으로 최적 경로를 찾음</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>stairs</strong> ×2.6</span><span class="ppt-li-def">계단은 2.6배 비싸게 계산 → 알고리즘이 계단 경로를 피함</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>elevator</strong> ×0.22</span><span class="ppt-li-def">승강기는 0.22배로 싸게 → 승강기 우회가 자연스럽게 선택됨</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>crosswalk</strong> ×1.1</span><span class="ppt-li-def">횡단보도는 보행로보다 약간 비싸게(대기·주의 반영)</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>elevator 모드</strong> stairs ×6.5</span><span class="ppt-li-def">승강기 우선 옵션 — 계단 가중치를 6.5배로 올려 계단을 강하게 회피</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>segmentTypes</strong></span><span class="ppt-li-def">경로를 계단·승강기·횡단보도 등 구간별로 나눠 TBT·배지에 활용</span></span></li>
+          </ul>
+          <div class="ppt-footer"><span>lib/routing/route.ts</span><span>4 / 8</span></div>
+        </div>
+        <div class="ppt-prompt-label">📋 슬라이드 생성 프롬프트</div>
+        <div class="ppt-prompt">제목: "Dijkstra + 접근성 비용 모델". 2열 불릿: 비용=거리×weight, stairs×2.6, elevator×0.22, crosswalk×1.1, elevator모드 stairs×6.5, segmentTypes 보존. 다크 네이비 배경, 코드 느낌의 기술 슬라이드.</div>
+        <div class="ppt-notes"><strong>🎤 발표 멘트 (50초)</strong>"Dijkstra로 최단 경로를 구하되, 단순 거리가 아니라 구간 유형별 가중치를 곱합니다. 계단은 2.6배 비싸고 승강기는 0.22배로 싸게 해서, 최단 모드에서도 승강기 우회가 자연스럽게 선택됩니다."</div>
+      </div>
+
+      <!-- Slide 5 -->
+      <div class="ppt-wrap">
+        <div class="ppt-label"><span>SLIDE 5 / 8</span>승강기 3정책</div>
+        <div class="ppt-slide content-slide accent-teal">
+          <div class="ppt-h2">승강기 통합 경로 최적화</div>
+          <div class="ppt-h3">3가지 정책으로 "가까운 승강기"를 실제 경로에 반영</div>
+          <ul class="ppt-bullets">
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>Comfort</strong> ≤75m · +45m · 1.15</span><span class="ppt-li-def">최단보다 조금 길어도 가까운 편한 승강기를 택하는 정책</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>Corridor Hub</strong> 55m</span><span class="ppt-li-def">경로 55m 안의 승강기는 지나치지 않고 반드시 경유하는 후보를 만듦</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>패널티</strong> 역방향 · 다중환승 · 미이용</span><span class="ppt-li-def">뒤로 가는 승강기·2회+ 환승·승강기 미사용 시 +130m 상당 불이익</span></span></li>
+          </ul>
+          <div class="ppt-footer"><span>핵심 차별점 ★★★</span><span>5 / 8</span></div>
+        </div>
+        <div class="ppt-prompt-label">📋 슬라이드 생성 프롬프트</div>
+        <div class="ppt-prompt">제목: "승강기 통합 경로 최적화". 불릿 3개: Comfort(75m/+45m/1.15), Corridor Hub(55m 필수 경유), 패널티(역방향·다중환승+130m). 틸 그라데이션, "핵심 차별점" 강조.</div>
+        <div class="ppt-notes"><strong>🎤 발표 멘트 (60초)</strong>"승강기만 단순히 가까우면 안 됩니다. Comfort 정책은 조금 우회해도 편한 승강기를 선택하고, Corridor Hub는 복도 옆 승강기를 반드시 지나가게 합니다. 역방향·불필요한 환승에는 패널티를 줍니다."</div>
+      </div>
+
+      <!-- Slide 6 -->
+      <div class="ppt-wrap">
+        <div class="ppt-label"><span>SLIDE 6 / 8</span>TBT + OD</div>
+        <div class="ppt-slide content-slide">
+          <div class="ppt-accent-bar"></div>
+          <div class="ppt-h2">턴바이턴 안내 &amp; OD 연동</div>
+          <div class="ppt-h3">경로를 사용자가 이해할 수 있는 단계로 변환</div>
+          <ul class="ppt-bullets">
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>시설 step 보존</strong></span><span class="ppt-li-def">횡단보도·승강기·계단·경사로 안내는 줄이지 않고 반드시 남김</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>micro-turn</strong> ≤22m</span><span class="ppt-li-def">22m 이하 짧은 꺾임만 하나로 합쳐 안내 문장 수를 줄임</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>OD FSM</strong> 6채널</span><span class="ppt-li-def">출발→도착→교체 순서를 관리, 탭·검색·음성·GPS 등 6가지 입력</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>navigationRoute</strong></span><span class="ppt-li-def">GPS 안내 중 쓰는 경로 — 재탐색 시 미리보기 route와 별도 유지</span></span></li>
+          </ul>
+          <div class="ppt-footer"><span>lib/routing/progress.ts</span><span>6 / 8</span></div>
+        </div>
+        <div class="ppt-prompt-label">📋 슬라이드 생성 프롬프트</div>
+        <div class="ppt-prompt">제목: "턴바이턴 안내 & OD 연동". 불릿: 시설 step 보존, micro-turn 22m, OD FSM 6채널, navigationRoute 재탐색. 흰 배경 기술 슬라이드.</div>
+        <div class="ppt-notes"><strong>🎤 발표 멘트 (45초)</strong>"계산된 polyline을 TBT 단계로 바꿀 때, 승강기·횡단보도 안내는 반드시 남깁니다. 사용자는 6가지 방법으로 출발·도착을 정하고, 안내 중 경로가 바뀌면 navigationRoute로 관리합니다."</div>
+      </div>
+
+      <!-- Slide 7 -->
+      <div class="ppt-wrap">
+        <div class="ppt-label"><span>SLIDE 7 / 8</span>GPS + 재탐색</div>
+        <div class="ppt-slide content-slide accent-purple">
+          <div class="ppt-h2">GPS Progress &amp; 동적 재탐색</div>
+          <div class="ppt-h3">실시간 위치를 경로에 투영하고 이탈 시 자동 재계산</div>
+          <ul class="ppt-bullets cols-2">
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>computeProgress</strong></span><span class="ppt-li-def">GPS 좌표를 경로 선에 투영해 "경로 위 어디쯤"인지 계산</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>stepIndex · remaining · offRoute</strong></span><span class="ppt-li-def">현재 안내 단계 / 남은 거리(m) / 경로에서 벗어난 거리(m)</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>재탐색</strong> offRoute &gt; 40m</span><span class="ppt-li-def">경로에서 40m 이상 벗어나면 현재 위치→목적지로 다시 계산</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>cooldown</strong> 8초 · 시작 4초 후</span><span class="ppt-li-def">재탐색 최소 간격 8초, 안내 시작 4초 후부터 적용(GPS 떨림 방지)</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>도착 가드</strong> 8s·22m·이동≥8m</span><span class="ppt-li-def">8초·22m 이내·8m 이상 이동해야 도착 처리(GPS 오차 방지)</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>조기 도착 방지</strong></span><span class="ppt-li-def">GPS가 목적지 근처로 튀어도 실제로 가까워질 때까지 도착 안 함</span></span></li>
+          </ul>
+          <div class="ppt-footer"><span>hooks/use-navigation.ts</span><span>7 / 8</span></div>
+        </div>
+        <div class="ppt-prompt-label">📋 슬라이드 생성 프롬프트</div>
+        <div class="ppt-prompt">제목: "GPS Progress & 동적 재탐색". 2열 불릿 6개: computeProgress, stepIndex/remaining/offRoute, 재탐색 40m, cooldown 8s, 도착 가드, 조기 도착 방지. 퍼플 그라데이션.</div>
+        <div class="ppt-notes"><strong>🎤 발표 멘트 (50초)</strong>"GPS를 경로 선에 투영해 현재 단계와 남은 거리를 계산합니다. 40m 이상 벗어나면 8초 간격으로 현재 위치에서 목적지까지 재탐색하고, GPS 오차로 일찍 도착 처리되지 않도록 가드를 둡니다."</div>
+      </div>
+
+      <!-- Slide 8 -->
+      <div class="ppt-wrap">
+        <div class="ppt-label"><span>SLIDE 8 / 8</span>TTS + 마무리</div>
+        <div class="ppt-slide content-slide">
+          <div class="ppt-accent-bar"></div>
+          <div class="ppt-h2">TTS · 음성 안내 · 다국어</div>
+          <div class="ppt-h3">청각·시각·스크린리더 3채널 동시 지원</div>
+          <ul class="ppt-bullets">
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>경로 브리핑</strong></span><span class="ppt-li-def">안내 시작 전 "몇 분·계단 있음" 등 전체 경로를 TTS로 먼저 읽어 줌</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>step announce</strong></span><span class="ppt-li-def">이동 중 "100m 직진" 등 단계 안내를 화면·음성에 동시 전달</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>aria-live assertive</strong></span><span class="ppt-li-def">안내 문구 변경 시 스크린리더가 기존 읽기를 끊고 즉시 새 내용을 읽음</span></span></li>
+            <li><span class="ppt-li-wrap"><span class="ppt-li-main"><strong>ko / en</strong> 정적 i18n</span><span class="ppt-li-def">번역 API 없이 미리 작성한 문구 사전으로 UI·TBT·TTS 언어 전환</span></span></li>
+          </ul>
+          <div class="ppt-stat-row">
+            <span class="ppt-stat">자체 그래프 + 승강기 3정책 + GPS<span class="ppt-stat-def">기능 핵심 차별점 3가지</span></span>
+          </div>
+          <div class="ppt-footer"><span>감사합니다 · Q&amp;A</span><span>8 / 8</span></div>
+        </div>
+        <div class="ppt-prompt-label">📋 슬라이드 생성 프롬프트</div>
+        <div class="ppt-prompt">제목: "TTS · 음성 안내 · 다국어". 불릿: 경로 브리핑, step announce+aria-live, 스크린리더, ko/en. 하단: "기능 차별점: 자체 그래프 + 승강기 3정책 + GPS". 마지막 슬라이드 "감사합니다 Q&A".</div>
+        <div class="ppt-notes"><strong>🎤 발표 멘트 (40초)</strong>"안내 시작 전 경로 전체를 읽어 주고, 이동 중에는 화면·스피커·스크린리더가 같은 문장을 봅니다. UI/UX 설계는 다음 발표에서 이어서 설명드리겠습니다. 감사합니다."</div>
+      </div>
+
+    </div>
+
+    <details class="ppt-master-prompt">
+      <summary>📦 전체 8장 한 번에 생성하는 마스터 프롬프트 (복사용)</summary>
+      <div class="ppt-prompt" style="margin-top:0.75rem">공주대학교 캡스톤 발표용 PowerPoint 8장, 16:9, 기능 파트.
+
+1. 표지: "공주대학교 신관캠퍼스 베리어프리맵 — 핵심 기능"
+2. 문제: 도로 API 한계, 계단·승강기 필요, QGIS 실측, TBT+GPS 목표
+3. 데이터: QGIS→build:data→buildRoutingGraph, 승강기 22m 스냅, entrances
+4. Dijkstra: edgeWeight stairs×2.6 elevator×0.22, elevator모드×6.5
+5. 승강기: Comfort 75m/1.15, Corridor 55m, 패널티 역방향·다중환승
+6. TBT: 시설 보존, micro-turn 22m, OD FSM, navigationRoute
+7. GPS: computeProgress, offRoute 40m, cooldown 8s, 도착 가드
+8. TTS: 브리핑+aria-live+ko/en, 감사합니다 Q&A
+
+네이비·블루·틸·퍼플 그라데이션, 대학 발표 톤, 불릿 위주.</div>
+    </details>
+  </section>
+
+</div>
+
+<footer class="footer">
+  공주대학교 신관캠퍼스 베리어프리맵 · 핵심 기능 + 기술 가이드 ·
+  <code>docs/feature-guide.html</code> ·
+  <a href="ui-ux-guide.html">UI/UX 가이드</a>와 함께 보세요
+</footer>
+
+</body>
+</html>
