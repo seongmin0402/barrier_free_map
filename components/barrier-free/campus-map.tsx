@@ -17,15 +17,17 @@ import {
 import type { BarrierBuilding } from "@/lib/building-types";
 import type { LatLng } from "@/lib/routing/geo";
 import type { ElevatorRecord } from "@/lib/routing/elevators";
-import { haversineMeters } from "@/lib/routing/geo";
 import {
   applyNavigationCamera,
   fuseNavigationHeading,
+  getUserScreenOffset,
   lerpAngleDeg,
   lerpLatLng,
+  NAV_CAMERA_MIN_INTERVAL_MS,
   NAV_FOLLOW_ZOOM,
   NAV_HEADING_LERP,
   NAV_POS_LERP,
+  shouldRecenterEdgeFollow,
 } from "@/lib/routing/nav-camera";
 import type { DeviceHeadingSnapshot, NavMotionSnapshot } from "@/lib/device-orientation";
 import { compassAgeMs } from "@/lib/device-orientation";
@@ -117,9 +119,7 @@ function routeDrawSignature(
 }
 
 function shouldHideFootprintsInNav(): boolean {
-  return (
-    typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches
-  );
+  return true;
 }
 
 type NaverRoutePolyline = {
@@ -569,6 +569,16 @@ function CampusMapInner({
   const navFollowSessionRef = useRef(false);
   const lastRouteDrawSigRef = useRef("");
   const lastCameraApplyAtRef = useRef(0);
+  const mapIsIdleRef = useRef(true);
+  const pendingNavCameraRef = useRef<{
+    user: LatLng;
+    markerHeading: number;
+    cameraHeading: number;
+    snap?: boolean;
+    adjustViewport?: boolean;
+  } | null>(null);
+  const followPausedRef = useRef(followPaused);
+  followPausedRef.current = followPaused;
   mobileSheetVhRef.current = mobileSheetVh;
   const userHeadingRef = useRef(userHeading);
   const routeHeadingRef = useRef(routeHeading);
@@ -591,6 +601,108 @@ function CampusMapInner({
     if (fused != null) return fused;
     return routeHeadingRef.current ?? userHeadingRef.current ?? displayHeadingRef.current;
   }, [deviceHeadingRef, navMotionRef]);
+
+  const onMapIdleRef = useRef<(() => void) | null>(null);
+
+  const flushPendingNavCamera = useCallback((force = false) => {
+    if (followPausedRef.current && !force) return;
+    const pending = pendingNavCameraRef.current;
+    if (!pending) return;
+
+    const map = mapInstanceRef.current;
+    const maps = window.naver?.maps as NMaps | undefined;
+    if (!map || !maps?.LatLng || !maps?.Point) return;
+
+    const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
+    const PointCtor = maps.Point as new (x: number, y: number) => unknown;
+    const camMap = map as Parameters<typeof applyNavigationCamera>[0];
+    const bottomObstructionVh =
+      mapLayout === "route" &&
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 639px)").matches
+        ? mobileSheetVhRef.current
+        : 0;
+
+    if (!force && !pending.snap && !pending.adjustViewport) {
+      const size = camMap.getSize?.();
+      const userOffset = getUserScreenOffset(
+        camMap,
+        (lat, lng) => new LatLngCtor(lat, lng),
+        pending.user,
+      );
+      if (
+        size?.width &&
+        size?.height &&
+        userOffset &&
+        !shouldRecenterEdgeFollow(userOffset, size, bottomObstructionVh)
+      ) {
+        pendingNavCameraRef.current = null;
+        return;
+      }
+    }
+
+    try {
+      programmaticCameraRef.current = true;
+      mapIsIdleRef.current = false;
+      applyNavigationCamera(
+        camMap,
+        (lat, lng) => new LatLngCtor(lat, lng),
+        (x, y) => new PointCtor(x, y),
+        pending.user,
+        pending.markerHeading,
+        {
+          snap: pending.snap,
+          bottomObstructionVh,
+          adjustViewport: pending.adjustViewport,
+          lookAheadHeadingDeg: pending.cameraHeading,
+        },
+      );
+      if (pending.adjustViewport) viewportAdjustedRef.current = true;
+      if (pending.snap) {
+        try {
+          (map as { relayout?: () => void }).relayout?.();
+        } catch {
+          /* ignore */
+        }
+      }
+      navZoomSetRef.current = true;
+      hasNavCenteredRef.current = true;
+      lastCameraApplyAtRef.current = performance.now();
+      lastAppliedCamRef.current = {
+        lat: pending.user.lat,
+        lng: pending.user.lng,
+        heading: pending.cameraHeading,
+      };
+      pendingNavCameraRef.current = null;
+    } catch {
+      /* ignore */
+    } finally {
+      programmaticCameraRef.current = false;
+    }
+  }, [mapLayout]);
+
+  const queueNavCamera = useCallback(
+    (
+      user: LatLng,
+      markerHeading: number,
+      opts: { snap?: boolean; adjustViewport?: boolean; force?: boolean } = {},
+    ) => {
+      const cameraHeading = routeHeadingRef.current ?? markerHeading;
+      pendingNavCameraRef.current = {
+        user,
+        markerHeading,
+        cameraHeading,
+        snap: opts.snap,
+        adjustViewport: opts.adjustViewport,
+      };
+
+      if (opts.force || opts.snap || mapIsIdleRef.current) {
+        flushPendingNavCamera(opts.force);
+      }
+    },
+    [flushPendingNavCamera],
+  );
+
   const [geoHintMessage, setGeoHintMessage] = useState<string | null>(null);
   const [locationTracking, setLocationTracking] = useState(false);
   const [scriptError, setScriptError] = useState(false);
@@ -790,6 +902,8 @@ function CampusMapInner({
 
     maps.Event.addListener(map, "idle", () => {
       relayoutMap();
+      mapIsIdleRef.current = true;
+      onMapIdleRef.current?.();
     });
 
     const MarkerCtor = maps.Marker as unknown as new (opts: Record<string, unknown>) => {
@@ -973,7 +1087,7 @@ function CampusMapInner({
     };
   }, [sdkLoaded, footprintCollection, mapReadyEpoch, buildings, showAllFootprints, ui]);
 
-  /** 모바일 길안내 중 건물 폴리곤만 숨김 (재생성 없이 setMap 토글) */
+  /** 길안내 중 건물 폴리곤 숨김 (재생성 없이 setMap 토글) */
   useEffect(() => {
     if (!sdkLoaded || footprintPolygonsRef.current.length === 0) return;
     const map = mapInstanceRef.current;
@@ -1246,6 +1360,9 @@ function CampusMapInner({
     targetPosRef.current = null;
     lastMarkerHeadingRef.current = null;
     lastAppliedCamRef.current = null;
+    pendingNavCameraRef.current = null;
+    mapIsIdleRef.current = true;
+    lastCameraApplyAtRef.current = 0;
     const seedHeading = routeHeadingRef.current ?? userHeadingRef.current ?? 0;
     displayHeadingRef.current = seedHeading;
     targetHeadingRef.current = seedHeading;
@@ -1285,59 +1402,38 @@ function CampusMapInner({
     if (!sdkLoaded || !followUser || !navigationMode || followPaused || !liveUserPosition) return;
     if (hasNavCenteredRef.current) return;
 
-    const map = mapInstanceRef.current;
-    const maps = window.naver?.maps as NMaps | undefined;
-    if (!map || !maps?.LatLng || !maps?.Point) return;
-
-    const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
-    const PointCtor = maps.Point as new (x: number, y: number) => unknown;
     const heading = resolveFusedHeading();
-    const bottomObstructionVh =
-      mapLayout === "route" &&
-      typeof window !== "undefined" &&
-      window.matchMedia("(max-width: 639px)").matches
-        ? mobileSheetVhRef.current
-        : 0;
-
     displayPosRef.current = { ...liveUserPosition };
     targetPosRef.current = liveUserPosition;
 
-    try {
-      programmaticCameraRef.current = true;
-      applyNavigationCamera(
-        map as Parameters<typeof applyNavigationCamera>[0],
-        (lat, lng) => new LatLngCtor(lat, lng),
-        (x, y) => new PointCtor(x, y),
-        liveUserPosition,
-        heading,
-        { snap: true, bottomObstructionVh, adjustViewport: true },
-      );
-      viewportAdjustedRef.current = true;
-      try {
-        (map as { relayout?: () => void }).relayout?.();
-      } catch {
-        /* ignore */
-      }
-      navZoomSetRef.current = true;
-      navSnapPendingRef.current = false;
-      hasNavCenteredRef.current = true;
-    } catch {
-      /* ignore */
-    } finally {
-      programmaticCameraRef.current = false;
-    }
+    queueNavCamera(liveUserPosition, heading, {
+      snap: true,
+      adjustViewport: true,
+      force: true,
+    });
+    navSnapPendingRef.current = false;
   }, [
     sdkLoaded,
     followUser,
     navigationMode,
     followPaused,
     liveUserPosition,
-    userHeading,
-    routeHeading,
-    mapLayout,
     mapReadyEpoch,
     resolveFusedHeading,
+    queueNavCamera,
   ]);
+
+  /** map idle 시 대기 중인 카메라 이동 적용 (타일 로딩 겹침 방지) */
+  useEffect(() => {
+    onMapIdleRef.current = () => {
+      if (followUser && navigationMode && !followPausedRef.current) {
+        flushPendingNavCamera();
+      }
+    };
+    return () => {
+      onMapIdleRef.current = null;
+    };
+  }, [followUser, navigationMode, flushPendingNavCamera]);
 
   /** 안내 중 지도 드래그·핀치 줌 → 추적 일시 중지 */
   useEffect(() => {
@@ -1424,9 +1520,6 @@ function CampusMapInner({
       typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches;
     const minFrameMs = isMobileNav ? 50 : 32;
     const markerHeadingThreshold = isMobileNav ? 8 : 4;
-    const camMoveSkipM = isMobileNav ? 1.8 : 1.0;
-    const camHeadingSkipDeg = isMobileNav ? 10 : 6;
-    const camApplyMinMs = isMobileNav ? 140 : 90;
 
     const tick = (now: number) => {
       if (minFrameMs > 0 && now - lastCameraFrameRef.current < minFrameMs) {
@@ -1458,7 +1551,7 @@ function CampusMapInner({
 
       let display = displayPosRef.current;
       const shouldSnap = navSnapPendingRef.current || !display;
-      if (shouldSnap) {
+      if (shouldSnap || !display) {
         display = { ...target };
         navSnapPendingRef.current = false;
       } else {
@@ -1503,70 +1596,39 @@ function CampusMapInner({
           : 0;
 
       const needsViewportAdjust = !viewportAdjustedRef.current;
-      const lastCam = lastAppliedCamRef.current;
-      const skipCamera =
-        !shouldSnap &&
-        !needsViewportAdjust &&
-        lastCam != null &&
-        haversineMeters(lastCam, display) < camMoveSkipM &&
-        Math.abs(((headingForCam - lastCam.heading + 540) % 360) - 180) < camHeadingSkipDeg;
 
-      const camDue =
-        shouldSnap ||
-        needsViewportAdjust ||
-        now - lastCameraApplyAtRef.current >= camApplyMinMs;
-
-      if (skipCamera || !camDue) {
+      if (shouldSnap || needsViewportAdjust) {
+        queueNavCamera(display, headingForCam, {
+          snap: shouldSnap,
+          adjustViewport: needsViewportAdjust,
+          force: shouldSnap,
+        });
         navAnimFrameRef.current = requestAnimationFrame(tick);
         return;
       }
 
-      const m = map as Parameters<typeof applyNavigationCamera>[0] & { relayout?: () => void };
+      const m = map as Parameters<typeof applyNavigationCamera>[0];
+      const size = m.getSize?.();
+      if (!size?.width || !size?.height) {
+        navAnimFrameRef.current = requestAnimationFrame(tick);
+        return;
+      }
 
-      try {
-        programmaticCameraRef.current = true;
-        const origin =
-          PointCtor != null
-            ? applyNavigationCamera(
-                m,
-                (lat, lng) => new LatLngCtor(lat, lng),
-                (x, y) => new PointCtor(x, y),
-                display,
-                headingForCam,
-                {
-                  snap: shouldSnap,
-                  bottomObstructionVh,
-                  adjustViewport: needsViewportAdjust,
-                },
-              )
-            : null;
+      const userOffset = getUserScreenOffset(
+        m,
+        (lat, lng) => new LatLngCtor(lat, lng),
+        display,
+      );
+      if (!userOffset) {
+        navAnimFrameRef.current = requestAnimationFrame(tick);
+        return;
+      }
 
-        if (needsViewportAdjust && origin) {
-          viewportAdjustedRef.current = true;
-        }
+      const edgeExceeded = shouldRecenterEdgeFollow(userOffset, size, bottomObstructionVh);
+      const camDue = now - lastCameraApplyAtRef.current >= NAV_CAMERA_MIN_INTERVAL_MS;
 
-        if (origin && !hasNavCenteredRef.current) {
-          hasNavCenteredRef.current = true;
-        }
-
-        if (shouldSnap || needsViewportAdjust) {
-          try {
-            m.relayout?.();
-          } catch {
-            /* ignore */
-          }
-        }
-        navZoomSetRef.current = true;
-        lastCameraApplyAtRef.current = now;
-        lastAppliedCamRef.current = {
-          lat: display.lat,
-          lng: display.lng,
-          heading: headingForCam,
-        };
-      } catch {
-        /* ignore */
-      } finally {
-        programmaticCameraRef.current = false;
+      if (edgeExceeded && camDue) {
+        queueNavCamera(display, headingForCam);
       }
 
       navAnimFrameRef.current = requestAnimationFrame(tick);
@@ -1578,7 +1640,7 @@ function CampusMapInner({
       navAnimFrameRef.current = null;
       lastCameraApplyAtRef.current = 0;
     };
-  }, [sdkLoaded, followUser, navigationMode, followPaused, mapReadyEpoch, mapLayout]);
+  }, [sdkLoaded, followUser, navigationMode, followPaused, mapReadyEpoch, mapLayout, queueNavCamera]);
 
   /** 추적 일시 중지 중에도 GPS 마커만 부드럽게 갱신 */
   useEffect(() => {
@@ -1684,6 +1746,7 @@ function CampusMapInner({
       displayPosRef.current = { ...latest };
     }
     lastAppliedCamRef.current = null;
+    pendingNavCameraRef.current = null;
     navZoomSetRef.current = false;
     navSnapPendingRef.current = true;
     hasNavCenteredRef.current = false;

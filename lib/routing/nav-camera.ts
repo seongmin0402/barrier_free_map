@@ -160,7 +160,13 @@ export function headingAlongRoute(route: ComputedRoute, progress: RouteProgress)
   return bearingDeg(from, to);
 }
 
-export const NAV_FOLLOW_ZOOM = 17;
+export const NAV_FOLLOW_ZOOM = 16;
+/** look-ahead가 클수록 방향 변화 시 setCenter 점프가 커져 타일 재로딩이 잦아짐 */
+export const NAV_LOOK_AHEAD_M = 24;
+/** 화면 가장자리 이 비율 안쪽이면 지도를 움직이지 않음 (edge follow) */
+export const NAV_EDGE_MARGIN_RATIO = 0.24;
+/** edge follow 재중심 최소 간격(ms) — 타일 요청 겹침 방지 */
+export const NAV_CAMERA_MIN_INTERVAL_MS = 900;
 export const NAV_MAP_ROTATION_SCALE = 1.38;
 
 /** rAF 추적 보간 (60fps 기준) */
@@ -178,6 +184,47 @@ export type NavigationCameraMap = {
   panBy?: (point: unknown) => void;
 };
 
+export type ScreenOffset = { x: number; y: number };
+export type MapSize = { width: number; height: number };
+
+/** 사용자 좌표의 지도 뷰포트 픽셀 위치 */
+export function getUserScreenOffset(
+  map: NavigationCameraMap,
+  createLatLng: (lat: number, lng: number) => unknown,
+  user: LatLng,
+): ScreenOffset | null {
+  const projection = map.getProjection?.();
+  if (!projection?.fromCoordToOffset) return null;
+  return projection.fromCoordToOffset(createLatLng(user.lat, user.lng));
+}
+
+/**
+ * 사용자 마커가 안전 영역(화면 중앙부)을 벗어났을 때만 true.
+ * 카카오/네이버 앱 길안내의 edge-follow와 동일한 원리.
+ */
+export function shouldRecenterEdgeFollow(
+  userOffset: ScreenOffset,
+  mapSize: MapSize,
+  bottomObstructionVh = 0,
+  marginRatio = NAV_EDGE_MARGIN_RATIO,
+): boolean {
+  const obstructionPx = (bottomObstructionVh / 100) * mapSize.height;
+  const visibleBottom = mapSize.height - obstructionPx;
+  const visibleH = Math.max(mapSize.height * 0.3, visibleBottom);
+  const marginX = mapSize.width * marginRatio;
+  const marginY = visibleH * marginRatio;
+  const minX = marginX;
+  const maxX = mapSize.width - marginX;
+  const minY = marginY;
+  const maxY = visibleBottom - marginY;
+  return (
+    userOffset.x < minX ||
+    userOffset.x > maxX ||
+    userOffset.y < minY ||
+    userOffset.y > maxY
+  );
+}
+
 export type NavigationCameraOptions = {
   zoom?: number;
   /** 모바일 하단 패널 높이(vh). 0이면 하단 가림 없음 */
@@ -186,6 +233,10 @@ export type NavigationCameraOptions = {
   snap?: boolean;
   /** true일 때만 panBy로 하단 패널 보정 (매 프레임 panBy는 지도 타일 깨짐 유발) */
   adjustViewport?: boolean;
+  /** look-ahead 거리(m). 기본 NAV_LOOK_AHEAD_M */
+  lookAheadM?: number;
+  /** 카메라 look-ahead 방향(deg). 미지정 시 headingDeg 사용 */
+  lookAheadHeadingDeg?: number;
 };
 
 function isValidLatLng(user: LatLng): boolean {
@@ -221,8 +272,11 @@ export function applyNavigationCamera(
   }
 
   const heading = Number.isFinite(headingDeg) ? headingDeg : 0;
-  const lookAheadM = 42;
-  const ahead = navigationCenterForUser(user, heading, lookAheadM);
+  const lookAheadHeading = Number.isFinite(options.lookAheadHeadingDeg)
+    ? options.lookAheadHeadingDeg!
+    : heading;
+  const lookAheadM = options.lookAheadM ?? NAV_LOOK_AHEAD_M;
+  const ahead = navigationCenterForUser(user, lookAheadHeading, lookAheadM);
   map.setCenter?.(createLatLng(ahead.lat, ahead.lng));
 
   const projection = map.getProjection?.();
