@@ -91,6 +91,55 @@ function polylineFromChains(chains: WalkwayChain[], locale: AppLocale): Computed
   };
 }
 
+/** 도서관 정문 → 교양관 앞 (w_0189) — 웅비학생회관 북측 우회 없음 */
+const W_0382: LngLat[] = [
+  [127.140534697696651, 36.469289549783831],
+  [127.140584139961561, 36.469311155058556],
+];
+
+const W_0170: LngLat[] = [
+  [127.140543533310563, 36.469182376822509],
+  [127.140534697696651, 36.469289549783831],
+];
+
+const W_0166: LngLat[] = [
+  [127.140229869019237, 36.46918119259005],
+  [127.140543533310563, 36.469182376822509],
+];
+
+const W_0165: LngLat[] = [
+  [127.140229869019237, 36.46918119259005],
+  [127.13998983484322, 36.469200140306981],
+];
+
+const W_0189: LngLat[] = [
+  [127.13998983484322, 36.469200140306974],
+  [127.139942343418696, 36.469225009178452],
+  [127.139858405087224, 36.469243956884696],
+  [127.139785511273061, 36.469275931128465],
+  [127.13967359349769, 36.469293102476151],
+];
+
+const W_0191: LngLat[] = [
+  [127.139666598636708, 36.469277411417202],
+  [127.13967359349769, 36.469293102476151],
+];
+
+const W_0190: LngLat[] = [
+  [127.139660340076972, 36.469264088817496],
+  [127.139666598636708, 36.469277411417202],
+];
+
+const W_0188: LngLat[] = [
+  [127.139614689405462, 36.469131454811055],
+  [127.139660340076972, 36.469264088817496],
+];
+
+const W_0192: LngLat[] = [
+  [127.139614689405462, 36.469131454811055],
+  [127.139121735783249, 36.469233890916342],
+];
+
 const W_0194: LngLat[] = [
   [127.139121735783249, 36.469233890916342],
   [127.138637985925399, 36.469328629390311],
@@ -117,27 +166,39 @@ const W_0234: LngLat[] = [
   [127.137646924572806, 36.46835281756271],
 ];
 
+/** 중앙도서관 1층 정문 → 교양관 앞 횡단로 (w_0192/w_0194 시작점) */
+function buildLibraryToGyoyangFrontLeg(locale: AppLocale): ComputedRoute | null {
+  return polylineFromChains(
+    [
+      { type: "path", reverse: true, coords: W_0382 },
+      { type: "path", reverse: true, coords: W_0170 },
+      { type: "path", reverse: true, coords: W_0166 },
+      { type: "crosswalk", coords: W_0165 },
+      { type: "path", coords: W_0189 },
+      { type: "path", reverse: true, coords: W_0191 },
+      { type: "stairs", reverse: true, coords: W_0190 },
+      { type: "path", reverse: true, coords: W_0188 },
+      { type: "path", coords: W_0192 },
+    ],
+    locale,
+  );
+}
+
 /**
  * 실외 구간: 끝점이 맞닿은 보행로만 좌표 고정, 나머지는 그래프 경로
- * (w_0194 → w_0531 → w_0234 는 노드 공유 / w_0531↔w_0240 직결선은 데이터에 없음)
+ * (w_0194 → w_0531 → w_0234 는 노드 공유)
  */
 function buildOutdoorLeg(
   graph: RoutingGraph,
-  gyoyangWest: LatLng,
   visionA: LatLng,
   humanitiesMain: LatLng,
   locale: AppLocale,
 ): ComputedRoute | null {
-  const w0194Start = toLatLng(W_0194[0]);
   const w0234Vision = toLatLng(W_0234[0]);
 
   const parts: ComputedRoute[] = [];
 
   try {
-    const toWest = walkLeg(graph, gyoyangWest, w0194Start, locale);
-    if (!toWest) throw new Error("gyoyang to w_0194 failed");
-    parts.push(toWest);
-
     const campusWest = polylineFromChains(
       [
         { type: "path", coords: W_0194 },
@@ -298,7 +359,6 @@ export function buildDreamToHumanitiesRoute(
   const sanhakMain = entrancePoint(entrances, "e_0074");
   const libraryRear3F = entrancePoint(entrances, "e_0029");
   const libraryMain1F = entrancePoint(entrances, "e_0028");
-  const gyoyangRearWest = entrancePoint(entrances, "e_0033");
   const visionA = entrancePoint(entrances, "e_0014");
   const humanitiesMain = entrancePoint(entrances, "e_0004");
 
@@ -333,10 +393,12 @@ export function buildDreamToHumanitiesRoute(
     legs.push(elevatorLeg(evLibrary.point, evLibrary, "1F", locale));
     // 9. 도서관 1층 정문
     pushWalk(evLibrary.point, libraryMain1F);
-    // 10. 교양관 서쪽 후문까지
-    pushWalk(libraryMain1F, gyoyangRearWest);
+    // 10. 교양관 앞 횡단 (w_0189) — 웅비학생회관 방면 미경유
+    const libraryToGyoyang = buildLibraryToGyoyangFrontLeg(locale);
+    if (!libraryToGyoyang) throw new Error("library to gyoyang front failed");
+    legs.push(libraryToGyoyang);
     // 11–13. 실외 — 연결된 보행로 좌표 고정 + 그래프 경로로만 이음
-    const outdoor = buildOutdoorLeg(graph, gyoyangRearWest, visionA, humanitiesMain, locale);
+    const outdoor = buildOutdoorLeg(graph, visionA, humanitiesMain, locale);
     if (!outdoor) throw new Error("fixed route outdoor leg failed");
     legs.push(outdoor);
   } catch {
