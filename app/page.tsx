@@ -9,7 +9,7 @@ import { Header } from "@/components/barrier-free/header";
 import { Sidebar } from "@/components/barrier-free/sidebar";
 import { CampusMap } from "@/components/barrier-free/campus-map";
 import { BuildingDetail } from "@/components/barrier-free/building-detail";
-import { FacilityFilterBar, FacilityFilterMapHint } from "@/components/barrier-free/facility-filter-bar";
+import { FacilityFilterBar } from "@/components/barrier-free/facility-filter-bar";
 import { SettingsPanel } from "@/components/barrier-free/settings-panel";
 import { MobileSidebarToggle } from "@/components/barrier-free/mobile-sidebar-toggle";
 import { useAppSettings } from "@/components/app-settings-provider";
@@ -141,13 +141,6 @@ export default function BarrierFreeMapPage() {
                 className="min-w-0 flex-1"
               />
             </div>
-            <FacilityFilterMapHint
-              filters={filters}
-              className={cn(
-                "mt-1.5 bg-transparent px-0 py-0 shadow-none backdrop-blur-none md:mt-2",
-                isSidebarOpen && "max-md:hidden",
-              )}
-            />
           </div>
 
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
