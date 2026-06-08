@@ -102,37 +102,29 @@ const W_0170: LngLat[] = [
   [127.140534697696651, 36.469289549783831],
 ];
 
-const W_0166: LngLat[] = [
-  [127.140229869019237, 36.46918119259005],
+const W_0160: LngLat[] = [
+  [127.140357249118864, 36.469015399869242],
+  [127.140564149742858, 36.469039084565374],
+];
+
+const W_0161: LngLat[] = [
+  [127.140564149742858, 36.469039084565374],
   [127.140543533310563, 36.469182376822509],
 ];
 
-const W_0165: LngLat[] = [
-  [127.140229869019237, 36.46918119259005],
-  [127.13998983484322, 36.469200140306981],
+const W_0162: LngLat[] = [
+  [127.140357249118864, 36.469015399869242],
+  [127.140241649837662, 36.469016584104253],
 ];
 
-const W_0189: LngLat[] = [
-  [127.13998983484322, 36.469200140306974],
-  [127.139942343418696, 36.469225009178452],
-  [127.139858405087224, 36.469243956884696],
-  [127.139785511273061, 36.469275931128465],
-  [127.13967359349769, 36.469293102476151],
+const W_0163: LngLat[] = [
+  [127.140241649837662, 36.469016584104253],
+  [127.140100280016284, 36.469040268799972],
 ];
 
-const W_0191: LngLat[] = [
-  [127.139666598636708, 36.469277411417202],
-  [127.13967359349769, 36.469293102476151],
-];
-
-const W_0190: LngLat[] = [
-  [127.139660340076972, 36.469264088817496],
-  [127.139666598636708, 36.469277411417202],
-];
-
-const W_0188: LngLat[] = [
+const W_0187: LngLat[] = [
+  [127.140100280016284, 36.469040268799972],
   [127.139614689405462, 36.469131454811055],
-  [127.139660340076972, 36.469264088817496],
 ];
 
 const W_0192: LngLat[] = [
@@ -167,20 +159,19 @@ const W_0234: LngLat[] = [
 ];
 
 /**
- * 중앙도서관 1층 정문 → 직진 → 횡단보도 → 서측 도로 → 캠퍼스 서쪽 동선
- * (w_0382·w_0165·w_0189 직진/횡단/서향 후 w_0194·w_0531·w_0234)
+ * 중앙도서관 1층 정문 → 남쪽 직진 → 공주대학로 횡단 → 남측 인도 서향 → 캠퍼스 서쪽
+ * (w_0170·w_0161 횡단 후 w_0187·w_0194·w_0531·w_0234 — 북측 인도·교양관 북측 우회 없음)
  */
 function buildLibraryToCampusWestLeg(locale: AppLocale): ComputedRoute | null {
   return polylineFromChains(
     [
       { type: "path", reverse: true, coords: W_0382 },
       { type: "path", reverse: true, coords: W_0170 },
-      { type: "path", reverse: true, coords: W_0166 },
-      { type: "crosswalk", coords: W_0165 },
-      { type: "path", coords: W_0189 },
-      { type: "path", reverse: true, coords: W_0191 },
-      { type: "stairs", reverse: true, coords: W_0190 },
-      { type: "crosswalk", reverse: true, coords: W_0188 },
+      { type: "crosswalk", reverse: true, coords: W_0161 },
+      { type: "path", reverse: true, coords: W_0160 },
+      { type: "path", coords: W_0162 },
+      { type: "path", coords: W_0163 },
+      { type: "path", coords: W_0187 },
       { type: "path", coords: W_0192 },
       { type: "path", coords: W_0194 },
       { type: "path", reverse: true, coords: W_0531 },
@@ -434,7 +425,7 @@ export function buildDreamToHumanitiesRoute(
     legs.push(elevatorLeg(evLibrary.point, evLibrary, "1F", locale));
     // 9. 도서관 1층 정문
     pushWalk(evLibrary.point, libraryMain1F);
-    // 10. 도서관 정문 직진 → 횡단보도 → 서측 도로 → 열린광장 서쪽 (웅비 미경유)
+    // 10. 도서관 정문 → 남쪽 횡단 → 남측 인도 서향 → 열린광장 서쪽 (웅비·북측 인도 미경유)
     const libraryToCampusWest = buildLibraryToCampusWestLeg(locale);
     if (!libraryToCampusWest) throw new Error("library to campus west failed");
     legs.push(libraryToCampusWest);
