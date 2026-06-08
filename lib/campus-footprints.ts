@@ -19,28 +19,26 @@ export interface FootprintFeatureCollection {
   features: FootprintFeature[];
 }
 
-/** 접근성 등급별 폴리곤 테두리 */
+/** 한양대 ERICA 배리어프리맵 스타일 — 등급 무관 단색 폴리곤 */
+export const FOOTPRINT_FILL_COLOR = "#DDE6F0";
+export const FOOTPRINT_STROKE_COLOR = "#A3B8CE";
+export const FOOTPRINT_FILL_SELECTED = "#C5D8EC";
+export const FOOTPRINT_STROKE_SELECTED = "#4A7FB5";
+
+/** @deprecated 등급별 색상 미사용 — 하위 호환용 */
 export const FOOTPRINT_LEVEL_STROKE: Record<"A" | "B" | "C", string> = {
-  A: "#22A557",
-  B: "#F5A623",
-  C: "#DC3545",
+  A: FOOTPRINT_STROKE_COLOR,
+  B: FOOTPRINT_STROKE_COLOR,
+  C: FOOTPRINT_STROKE_COLOR,
 };
 
-/** buildings.json에 없거나 등급 정보가 없는 건물 */
-export const FOOTPRINT_STROKE_UNKNOWN = "#1a1a1a";
+/** @deprecated 등급별 색상 미사용 — 하위 호환용 */
+export const FOOTPRINT_STROKE_UNKNOWN = FOOTPRINT_STROKE_COLOR;
 
-/** 테두리와 같은 색상, fillOpacity로 연하게 표시 */
-const FOOTPRINT_FILL_OPACITY: Record<"A" | "B" | "C" | "unknown", { default: number; selected: number }> = {
-  A: { default: 0.22, selected: 0.32 },
-  B: { default: 0.24, selected: 0.34 },
-  C: { default: 0.22, selected: 0.32 },
-  unknown: { default: 0.1, selected: 0.16 },
-};
-
-export type FootprintAccessibilityLevel = keyof typeof FOOTPRINT_LEVEL_STROKE;
+export type FootprintAccessibilityLevel = "A" | "B" | "C";
 
 export function footprintStrokeOptions(
-  level: FootprintAccessibilityLevel | null,
+  _level: FootprintAccessibilityLevel | null,
   selected: boolean,
 ): {
   strokeColor: string;
@@ -51,17 +49,12 @@ export function footprintStrokeOptions(
   zIndex: number;
   clickable: boolean;
 } {
-  const strokeColor =
-    level != null ? FOOTPRINT_LEVEL_STROKE[level] : FOOTPRINT_STROKE_UNKNOWN;
-  const fillKey = level ?? "unknown";
-  const fillOpacity = FOOTPRINT_FILL_OPACITY[fillKey][selected ? "selected" : "default"];
-
   return {
-    strokeColor,
-    strokeWeight: selected ? 4 : 2.5,
-    strokeOpacity: selected ? 1 : 0.9,
-    fillColor: strokeColor,
-    fillOpacity,
+    strokeColor: selected ? FOOTPRINT_STROKE_SELECTED : FOOTPRINT_STROKE_COLOR,
+    strokeWeight: selected ? 3 : 1.5,
+    strokeOpacity: selected ? 1 : 0.88,
+    fillColor: selected ? FOOTPRINT_FILL_SELECTED : FOOTPRINT_FILL_COLOR,
+    fillOpacity: selected ? 0.95 : 0.9,
     zIndex: selected ? 220 : 50,
     clickable: true,
   };
