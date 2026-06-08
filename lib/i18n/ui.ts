@@ -183,6 +183,16 @@ export type UiText = {
     mapHintFilteredShort: (labels: string) => string;
     reportShort: string;
   };
+  installGuide: {
+    title: string;
+    lead: string;
+    openAria: string;
+    close: string;
+    iosTitle: string;
+    iosSteps: readonly string[];
+    androidTitle: string;
+    androidSteps: readonly string[];
+  };
   settings: {
     title: string;
     close: string;
@@ -409,6 +419,21 @@ const ko: UiText = {
     mapHintAllShort: "전체 건물 표시 · 테두리 색 = 접근성 등급",
     mapHintFilteredShort: (labels) => `${labels} 보유 건물 · 📍 위치 핀`,
     reportShort: "신고",
+  },
+  installGuide: {
+    title: "홈 화면 추가 안내",
+    lead: "앱 설치가 아닙니다. 아래 방법으로 홈 화면에 바로가기를 추가하면 앱처럼 빠르게 열 수 있습니다.",
+    openAria: "홈 화면에 추가하는 방법",
+    close: "닫기",
+    iosTitle: "iOS (iPhone)",
+    iosSteps: ["Safari로 접속", "공유 → '홈 화면에 추가'"],
+    androidTitle: "Android (Galaxy)",
+    androidSteps: [
+      "기본 브라우저로 접속",
+      "상단 주소창의 설치 버튼 클릭",
+      "없을 시, 메뉴(⋮) → (크롬/웨일) '홈 화면에 추가'",
+      "(삼성 인터넷) '현재 페이지 추가' → '앱스 화면'",
+    ],
   },
   settings: {
     title: "접근성 설정",
@@ -637,6 +662,21 @@ const en: UiText = {
     mapHintAllShort: "All buildings · border color = grade",
     mapHintFilteredShort: (labels) => `${labels} · 📍 pins`,
     reportShort: "Report",
+  },
+  installGuide: {
+    title: "Add to Home Screen",
+    lead: "This is not an app install. Add a home screen shortcut to open the map quickly like an app.",
+    openAria: "How to add to home screen",
+    close: "Close",
+    iosTitle: "iOS (iPhone)",
+    iosSteps: ["Open in Safari", "Share → Add to Home Screen"],
+    androidTitle: "Android",
+    androidSteps: [
+      "Open in your default browser",
+      "Tap the install button in the address bar",
+      "If missing: menu (⋮) → (Chrome) Add to Home screen",
+      "(Samsung Internet) Add page to → Apps screen",
+    ],
   },
   settings: {
     title: "Accessibility settings",

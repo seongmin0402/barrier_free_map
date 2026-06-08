@@ -1,10 +1,11 @@
 "use client";
 
 import Image from "next/image";
-import { Search, Settings } from "lucide-react";
+import { Download, Search, Settings } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { InstallGuideDialog } from "@/components/barrier-free/install-guide-dialog";
 import { useUi } from "@/hooks/use-ui";
 
 interface HeaderProps {
@@ -16,6 +17,7 @@ interface HeaderProps {
 export function Header({ onSettingsClick, searchQuery, onSearchChange }: HeaderProps) {
   const ui = useUi();
   const [useShortPlaceholder, setUseShortPlaceholder] = useState(true);
+  const [installGuideOpen, setInstallGuideOpen] = useState(false);
 
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 768px)");
@@ -43,15 +45,24 @@ export function Header({ onSettingsClick, searchQuery, onSearchChange }: HeaderP
           />
         </div>
 
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={onSettingsClick}
-          aria-label={ui.header.settingsAria}
-          className="shrink-0 sm:hidden"
-        >
-          <Settings className="h-5 w-5" />
-        </Button>
+        <div className="flex shrink-0 items-center gap-1 sm:hidden">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setInstallGuideOpen(true)}
+            aria-label={ui.installGuide.openAria}
+          >
+            <Download className="h-5 w-5" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={onSettingsClick}
+            aria-label={ui.header.settingsAria}
+          >
+            <Settings className="h-5 w-5" />
+          </Button>
+        </div>
       </div>
 
       <div className="w-full min-w-0 sm:max-w-md sm:flex-1">
@@ -68,15 +79,26 @@ export function Header({ onSettingsClick, searchQuery, onSearchChange }: HeaderP
         </div>
       </div>
 
-      <Button
-        variant="outline"
-        size="icon"
-        onClick={onSettingsClick}
-        aria-label={ui.header.settingsAria}
-        className="hidden shrink-0 sm:inline-flex"
-      >
-        <Settings className="h-5 w-5" />
-      </Button>
+      <div className="hidden shrink-0 items-center gap-1 sm:flex">
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setInstallGuideOpen(true)}
+          aria-label={ui.installGuide.openAria}
+        >
+          <Download className="h-5 w-5" />
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={onSettingsClick}
+          aria-label={ui.header.settingsAria}
+        >
+          <Settings className="h-5 w-5" />
+        </Button>
+      </div>
+
+      <InstallGuideDialog open={installGuideOpen} onOpenChange={setInstallGuideOpen} />
     </header>
   );
 }

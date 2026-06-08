@@ -32,8 +32,10 @@ import {
   Footprints,
   TriangleAlert,
   Settings,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { InstallGuideDialog } from "@/components/barrier-free/install-guide-dialog";
 import { useAppSettings } from "@/components/app-settings-provider";
 import type { BarrierBuilding } from "@/lib/building-types";
 import { useVoiceInput } from "@/hooks/use-voice-input";
@@ -325,6 +327,7 @@ export function RoutePanel(props: RoutePanelProps) {
   const SNAP_HALF = 46;
   const SNAP_FULL = 82;
   const [isMobile, setIsMobile] = useState(false);
+  const [installGuideOpen, setInstallGuideOpen] = useState(false);
   const [sheetVh, setSheetVh] = useState<number>(SNAP_HALF);
   const [dragging, setDragging] = useState(false);
   const [editPoints, setEditPoints] = useState(true);
@@ -471,19 +474,33 @@ export function RoutePanel(props: RoutePanelProps) {
           <Navigation className="h-5 w-5 shrink-0 text-blue-600" />
           <h2 className="truncate text-base font-semibold">{ui.route.title}</h2>
         </div>
-        {onSettingsClick ? (
+        <div className="flex shrink-0 items-center gap-1">
           <Button
             type="button"
             variant="outline"
             size="icon"
-            className="h-9 w-9 shrink-0"
-            onClick={onSettingsClick}
-            aria-label={ui.header.settingsAria}
+            className="h-9 w-9"
+            onClick={() => setInstallGuideOpen(true)}
+            aria-label={ui.installGuide.openAria}
           >
-            <Settings className="h-4 w-4" />
+            <Download className="h-4 w-4" />
           </Button>
-        ) : null}
+          {onSettingsClick ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-9 w-9"
+              onClick={onSettingsClick}
+              aria-label={ui.header.settingsAria}
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+          ) : null}
+        </div>
       </div>
+
+      <InstallGuideDialog open={installGuideOpen} onOpenChange={setInstallGuideOpen} />
 
       <div
         className={cn(
