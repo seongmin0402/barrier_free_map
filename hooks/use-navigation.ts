@@ -632,7 +632,10 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       if (progress.stepIndex !== lastLiveStepIndexRef.current) {
         lastLiveStepIndexRef.current = progress.stepIndex;
         setLiveAnnouncement(liveText);
-      } else if (speechPhaseRef.current.stepIndex === progress.stepIndex) {
+      } else if (
+        speechPhaseRef.current.stepIndex === progress.stepIndex &&
+        step.maneuver !== "elevator"
+      ) {
         const prevRank = navSpeechPhaseRank(speechPhaseRef.current.phase);
         const nextRank = navSpeechPhaseRank(phase);
         if (nextRank > prevRank) {
@@ -643,6 +646,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       if (speechAllowed) {
         const isNewStep = progress.stepIndex !== lastSpokenStepRef.current;
         const phaseAdvanced =
+          step.maneuver !== "elevator" &&
           speechPhaseRef.current.stepIndex === progress.stepIndex &&
           navSpeechPhaseRank(phase) > navSpeechPhaseRank(speechPhaseRef.current.phase);
 

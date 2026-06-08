@@ -248,6 +248,13 @@ function walkLeg(
   );
 }
 
+/** 승강기 직전 도보 구간 — computeRoute가 만든 승강기 단계 제거(고정 elevatorLeg와 중복 방지) */
+function withoutElevatorSteps(leg: ComputedRoute): ComputedRoute {
+  if (!leg.steps.some((s) => s.maneuver === "elevator")) return leg;
+  const steps = leg.steps.filter((s) => s.maneuver !== "elevator");
+  return { ...leg, steps, hasElevator: false };
+}
+
 function elevatorLeg(
   at: LatLng,
   elevator: ElevatorRecord,
@@ -274,6 +281,36 @@ function elevatorLeg(
   };
 }
 
+/** 병합 시 출발·도착·연속 승강기 안내 중복 제거 */
+function appendMergedStep(steps: RouteStep[], step: RouteStep): void {
+  if (step.maneuver === "depart" && steps.some((s) => s.maneuver === "depart")) return;
+  if (step.maneuver === "arrive") return;
+
+  const last = steps[steps.length - 1];
+  if (step.maneuver === "elevator" && last?.maneuver === "elevator") {
+    const samePlace = haversineMeters(last.at, step.at) <= JOIN_M;
+    if (samePlace || last.text === step.text) {
+      // walkLeg 자동 승강기 안내 대신 고정 시나리오(elevatorLeg) 문구 유지
+      steps[steps.length - 1] = step;
+      return;
+    }
+  }
+
+  steps.push(step);
+}
+
+/** 병합 후에도 남는 연속 승강기 안내(동일 문구·근접 위치) 제거 */
+function dedupeElevatorSteps(steps: RouteStep[]): void {
+  for (let i = steps.length - 1; i > 0; i--) {
+    const cur = steps[i];
+    const prev = steps[i - 1];
+    if (cur.maneuver !== "elevator" || prev.maneuver !== "elevator") continue;
+    if (prev.text === cur.text || haversineMeters(prev.at, cur.at) <= JOIN_M) {
+      steps.splice(i, 1);
+    }
+  }
+}
+
 function mergeComputedRoutes(parts: ComputedRoute[]): ComputedRoute | null {
   if (!parts.length) return null;
 
@@ -295,9 +332,7 @@ function mergeComputedRoutes(parts: ComputedRoute[]): ComputedRoute | null {
       coords.push(...part.coords);
       segmentTypes.push(...part.segmentTypes);
       for (const step of part.steps) {
-        // 경유 구간(산학연구관 등)의 도착 단계는 제외 — 최종 목적지에만 arrive 유지
-        if (step.maneuver === "arrive") continue;
-        steps.push(step);
+        appendMergedStep(steps, step);
       }
       continue;
     }
@@ -321,9 +356,7 @@ function mergeComputedRoutes(parts: ComputedRoute[]): ComputedRoute | null {
     }
 
     for (const step of part.steps) {
-      if (step.maneuver === "depart" && steps.some((s) => s.maneuver === "depart")) continue;
-      if (step.maneuver === "arrive") continue;
-      steps.push(step);
+      appendMergedStep(steps, step);
     }
   }
 
@@ -333,6 +366,8 @@ function mergeComputedRoutes(parts: ComputedRoute[]): ComputedRoute | null {
   if (segmentTypes.length > coords.length - 1) {
     segmentTypes.length = coords.length - 1;
   }
+
+  dedupeElevatorSteps(steps);
 
   const last = coords[coords.length - 1];
   steps.push({
@@ -378,27 +413,28 @@ export function buildDreamToHumanitiesRoute(
 
   const legs: ComputedRoute[] = [];
 
-  const pushWalk = (from: LatLng, to: LatLng) => {
-    const leg = walkLeg(graph, from, to, locale);
+  const pushWalk = (from: LatLng, to: LatLng, beforeElevator = false) => {
+    let leg = walkLeg(graph, from, to, locale);
     if (!leg) throw new Error("fixed route walk leg failed");
+    if (beforeElevator) leg = withoutElevatorSteps(leg);
     legs.push(leg);
   };
 
   try {
     // 1. 드림하우스 B동입구 → 산학연구관 지하1층 입구
-    pushWalk(dreamEntrance, sanhakB1);
+    pushWalk(dreamEntrance, sanhakB1, true);
     // 2. 산학 승강기 B1 → 1F
     legs.push(elevatorLeg(evSanhak.point, evSanhak, "1F", locale));
     // 3. 산학 정문으로 이동
     pushWalk(evSanhak.point, sanhakMain);
     // 4. 산학 정문 → 미래융합 승강기
-    pushWalk(sanhakMain, evMirae.point);
+    pushWalk(sanhakMain, evMirae.point, true);
     // 5. 미래융합 B1 → 2F
     legs.push(elevatorLeg(evMirae.point, evMirae, "2F", locale));
     // 6. 중앙도서관 3층 후문(경사로) 방향
     pushWalk(evMirae.point, libraryRear3F);
     // 7. 도서관 3층 → 승강기
-    pushWalk(libraryRear3F, evLibrary.point);
+    pushWalk(libraryRear3F, evLibrary.point, true);
     // 8. 도서관 승강기 3F → 1F
     legs.push(elevatorLeg(evLibrary.point, evLibrary, "1F", locale));
     // 9. 도서관 1층 정문
