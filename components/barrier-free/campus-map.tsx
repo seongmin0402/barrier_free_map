@@ -1643,7 +1643,7 @@ export function CampusMap({
     mapLayout === "route"
       ? "max-sm:bottom-[calc(var(--route-sheet-vh)*1vh+0.625rem)] sm:bottom-[max(0.75rem,env(safe-area-inset-bottom))]"
       : mapLayout === "explore" && directionsHref
-        ? "bottom-[calc(max(0.75rem,env(safe-area-inset-bottom))+4.25rem)]"
+        ? "max-sm:bottom-[max(0.75rem,env(safe-area-inset-bottom))] sm:bottom-[calc(max(0.75rem,env(safe-area-inset-bottom))+4.25rem)]"
         : "bottom-[max(0.75rem,env(safe-area-inset-bottom))]",
   );
 
