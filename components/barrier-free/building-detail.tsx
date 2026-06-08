@@ -2,13 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Image from "next/image";
-import { Accessibility, Check, Navigation } from "lucide-react";
+import { Accessibility, Building2, Check, Navigation } from "lucide-react";
 import {
   FacilityPictogram,
   PictogramDisabledParking,
 } from "@/components/barrier-free/facility-pictograms";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Accordion,
   AccordionContent,
@@ -34,13 +33,6 @@ interface BuildingDetailProps {
   onClose: () => void;
 }
 
-const gradeColors = {
-  A: "bg-[#22A557] text-white",
-  B: "bg-[#F5A623] text-foreground",
-  C: "bg-[#DC3545] text-white",
-  unknown: "bg-[#1a1a1a] text-white",
-} as const;
-
 function FacilityStatusCard({
   label,
   available,
@@ -55,23 +47,36 @@ function FacilityStatusCard({
   return (
     <div
       className={cn(
-        "flex flex-col items-center rounded-xl border p-3 text-center",
-        available ? "border-sky-200 bg-sky-50/80" : "border-border bg-muted/40",
+        "flex flex-col items-center rounded-xl border p-3 text-center transition-colors",
+        available
+          ? "border-2 border-[#005D91] bg-[#005D91]/12 shadow-md ring-1 ring-[#005D91]/20"
+          : "border border-dashed border-muted-foreground/25 bg-muted/25 opacity-65",
       )}
     >
       <div
         className={cn(
           "mb-2 flex h-11 w-11 items-center justify-center rounded-lg",
-          available ? "bg-white text-foreground shadow-sm" : "bg-muted text-muted-foreground",
+          available
+            ? "bg-white text-[#005D91] shadow-sm ring-1 ring-[#005D91]/30"
+            : "bg-muted/80 text-muted-foreground/70",
         )}
       >
         {icon}
       </div>
-      <p className="mb-2 text-xs font-medium leading-tight text-foreground">{label}</p>
+      <p
+        className={cn(
+          "mb-2 text-xs leading-tight",
+          available ? "font-bold text-foreground" : "font-medium text-muted-foreground",
+        )}
+      >
+        {label}
+      </p>
       <span
         className={cn(
-          "inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-semibold",
-          available ? "bg-sky-100 text-sky-700" : "bg-muted text-muted-foreground",
+          "inline-flex items-center gap-0.5 rounded-full px-2.5 py-0.5 text-[11px]",
+          available
+            ? "bg-[#005D91] font-bold text-white"
+            : "bg-muted font-medium text-muted-foreground",
         )}
       >
         {available ? <Check className="h-3 w-3" aria-hidden /> : null}
@@ -317,7 +322,6 @@ export function BuildingDetail({ building, onClose }: BuildingDetailProps) {
   if (!building) return null;
 
   const unsurveyed = isUnsurveyedBuilding(building);
-  const grade = unsurveyed ? null : ui.grade[building.accessibilityLevel];
 
   return (
     <>
@@ -334,32 +338,19 @@ export function BuildingDetail({ building, onClose }: BuildingDetailProps) {
           <DialogHeader className="shrink-0 border-b border-border px-4 py-3 pr-12 text-left">
             <div className="flex items-center gap-3">
               <div
-                className={cn(
-                  "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-base font-bold",
-                  gradeColors[building.accessibilityLevel],
-                )}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#005D91]/10 text-[#005D91]"
                 aria-hidden
               >
-                {unsurveyed ? "—" : building.accessibilityLevel}
+                <Building2 className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
                 <DialogTitle className="text-base leading-snug sm:text-lg">
                   <span className="sm:hidden">{shortBuildingName(building.name)}</span>
                   <span className="hidden sm:inline">{building.name}</span>
                 </DialogTitle>
-                <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                  <Badge
-                    variant="secondary"
-                    className={cn("px-1.5 py-0 text-[10px]", gradeColors[building.accessibilityLevel])}
-                  >
-                    {unsurveyed
-                      ? ui.gradeUnsurveyed
-                      : `${building.accessibilityLevel} ${grade?.label ?? ""}`}
-                  </Badge>
-                  {!unsurveyed ? (
-                    <span className="text-xs text-muted-foreground">{sortedFloorLabel}</span>
-                  ) : null}
-                </div>
+                {!unsurveyed && sortedFloorLabel !== "—" ? (
+                  <p className="mt-0.5 text-xs text-muted-foreground">{sortedFloorLabel}</p>
+                ) : null}
               </div>
             </div>
           </DialogHeader>
