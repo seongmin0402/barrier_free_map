@@ -1627,7 +1627,7 @@ export function CampusMap({
 
   if (!clientId) {
     return (
-      <div className="relative flex flex-1 items-center justify-center bg-muted/40 p-8 text-center">
+      <div className="relative flex h-full min-h-0 flex-1 items-center justify-center bg-muted/40 p-8 text-center">
         <div className="max-w-md space-y-2 rounded-lg border border-border bg-card p-6 shadow-sm">
           <p className="font-semibold text-foreground">{ui.map.clientIdRequired}</p>
           <p className="text-sm text-muted-foreground">{ui.map.clientIdHint}</p>
@@ -1656,7 +1656,7 @@ export function CampusMap({
 
   return (
     <div
-      className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-muted/30"
+      className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-muted/30"
       style={
         mapLayout === "route"
           ? ({ "--route-sheet-vh": mobileSheetVh } as React.CSSProperties)
