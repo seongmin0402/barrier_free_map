@@ -19,11 +19,11 @@ export interface FootprintFeatureCollection {
   features: FootprintFeature[];
 }
 
-/** 한양대 ERICA 배리어프리맵 스타일 — 등급 무관 단색 폴리곤 */
-export const FOOTPRINT_FILL_COLOR = "#DDE6F0";
-export const FOOTPRINT_STROKE_COLOR = "#A3B8CE";
-export const FOOTPRINT_FILL_SELECTED = "#C5D8EC";
-export const FOOTPRINT_STROKE_SELECTED = "#4A7FB5";
+/** 등급 무관 단색 폴리곤 */
+export const FOOTPRINT_FILL_COLOR = "#005D91";
+export const FOOTPRINT_STROKE_COLOR = "#004A73";
+export const FOOTPRINT_FILL_SELECTED = "#0078B8";
+export const FOOTPRINT_STROKE_SELECTED = "#005D91";
 
 /** @deprecated 등급별 색상 미사용 — 하위 호환용 */
 export const FOOTPRINT_LEVEL_STROKE: Record<"A" | "B" | "C", string> = {
@@ -54,7 +54,7 @@ export function footprintStrokeOptions(
     strokeWeight: selected ? 3 : 1.5,
     strokeOpacity: selected ? 1 : 0.88,
     fillColor: selected ? FOOTPRINT_FILL_SELECTED : FOOTPRINT_FILL_COLOR,
-    fillOpacity: selected ? 0.95 : 0.9,
+    fillOpacity: selected ? 0.88 : 0.72,
     zIndex: selected ? 220 : 50,
     clickable: true,
   };
