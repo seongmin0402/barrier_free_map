@@ -25,17 +25,28 @@ function addBidirectionalEdge(
   distance: number,
   type: string,
   floor?: string,
+  slopePct?: number | null,
 ) {
   if (from === to) return;
   const listA = adjacency.get(from);
   if (!listA) return;
-  if (!listA.some((e) => e.to === to)) {
-    listA.push({ to, distance, type, floor });
+  const existingA = listA.find((e) => e.to === to);
+  if (!existingA) {
+    listA.push({ to, distance, type, floor, slopePct });
+  } else if (slopePct != null && Number.isFinite(slopePct)) {
+    const prev = existingA.slopePct;
+    existingA.slopePct =
+      prev != null && Number.isFinite(prev) ? Math.max(prev, slopePct) : slopePct;
   }
   const listB = adjacency.get(to);
   if (!listB) return;
-  if (!listB.some((e) => e.to === from)) {
-    listB.push({ to: from, distance, type, floor });
+  const existingB = listB.find((e) => e.to === from);
+  if (!existingB) {
+    listB.push({ to: from, distance, type, floor, slopePct });
+  } else if (slopePct != null && Number.isFinite(slopePct)) {
+    const prev = existingB.slopePct;
+    existingB.slopePct =
+      prev != null && Number.isFinite(prev) ? Math.max(prev, slopePct) : slopePct;
   }
 }
 
@@ -66,10 +77,13 @@ export function buildWalkwayGraph(
 
   for (const feature of collection.features) {
     const type = String(feature.properties?.type ?? "path");
-    const props = feature.properties as { floor?: string } | undefined;
+    const props = feature.properties as { floor?: string; slope_pct?: number | null } | undefined;
     const floorRaw = props?.floor;
     const floor =
       floorRaw != null && String(floorRaw).trim() ? String(floorRaw).trim().toUpperCase() : undefined;
+    const rawSlope = props?.slope_pct;
+    const slopePct =
+      rawSlope != null && Number.isFinite(Number(rawSlope)) ? Number(rawSlope) : undefined;
     for (const line of lineStringsOf(feature)) {
       for (let i = 0; i < line.length - 1; i++) {
         const [lng1, lat1] = line[i];
@@ -85,7 +99,7 @@ export function buildWalkwayGraph(
         const a = ensureNode(lng1, lat1);
         const b = ensureNode(lng2, lat2);
         const dist = haversineMeters({ lat: lat1, lng: lng1 }, { lat: lat2, lng: lng2 });
-        addBidirectionalEdge(adjacency, a, b, dist, type, floor);
+        addBidirectionalEdge(adjacency, a, b, dist, type, floor, slopePct);
       }
     }
   }
@@ -176,16 +190,80 @@ export function parseEntrances(
   return out;
 }
 
+const RAMP_ENTRANCE_SNAP_M = 18;
+
+/** 경사로 엣지와 직접 연결된 그래프 노드 */
+export function buildRampAdjacentNodeIds(graph: WalkwayGraph): Set<string> {
+  const ids = new Set<string>();
+  for (const [fromId, edges] of graph.adjacency) {
+    for (const edge of edges) {
+      if (edge.type === "ramp") {
+        ids.add(fromId);
+        ids.add(edge.to);
+      }
+    }
+  }
+  return ids;
+}
+
+export function entrancesForBuilding(
+  entrances: BuildingEntrance[],
+  buildingId: string,
+): BuildingEntrance[] {
+  const norm = normalizeBuildingId(buildingId);
+  return entrances.filter((e) => e.buildingId === norm);
+}
+
+/** 경사로·무장애 출입구 우선 순위 (높을수록 유리) */
+export function rankEntrancesForBuilding(
+  graph: WalkwayGraph,
+  entrances: BuildingEntrance[],
+  buildingId: string,
+): BuildingEntrance[] {
+  const matches = entrancesForBuilding(entrances, buildingId);
+  if (!matches.length) return [];
+
+  const rampNodes = buildRampAdjacentNodeIds(graph);
+  const scoreOf = (entrance: BuildingEntrance): number => {
+    let score = 0;
+    if (/경사로|ramp/i.test(entrance.entranceName)) score += 120;
+    if (/장애|무장애|wheelchair|accessible/i.test(entrance.entranceName)) score += 80;
+    if (entrance.entranceType === "main") score += 15;
+    else if (entrance.entranceType === "secondary") score += 5;
+
+    const snap = nearestNode(graph, entrance.point);
+    if (!snap) return score;
+
+    const edges = graph.adjacency.get(snap.id) ?? [];
+    if (rampNodes.has(snap.id)) score += 100;
+    if (edges.some((edge) => edge.type === "ramp")) score += 60;
+    if (snap.distance <= RAMP_ENTRANCE_SNAP_M && rampNodes.has(snap.id)) score += 30;
+    return score;
+  };
+
+  return [...matches].sort((a, b) => scoreOf(b) - scoreOf(a));
+}
+
+/** 경사로 접근이 용이한 출입구 (없으면 main) */
+export function preferredEntranceForBuilding(
+  graph: WalkwayGraph,
+  entrances: BuildingEntrance[],
+  buildingId: string,
+): BuildingEntrance | null {
+  const ranked = rankEntrancesForBuilding(graph, entrances, buildingId);
+  if (ranked.length) return ranked[0];
+  return mainEntranceForBuilding(entrances, buildingId);
+}
+
 /**
  * 건물의 대표 출입구 좌표.
- * 추후 장애 유형별 가중치 전까지는 main(없으면 첫 출입구)을 사용.
+ * 그래프 없이 호출 시 main(없으면 첫 출입구)을 사용.
  */
 export function mainEntranceForBuilding(
   entrances: BuildingEntrance[],
   buildingId: string,
 ): BuildingEntrance | null {
-  const norm = normalizeBuildingId(buildingId);
-  const matches = entrances.filter((e) => e.buildingId === norm);
+  const matches = entrancesForBuilding(entrances, buildingId);
   if (!matches.length) return null;
   const main = matches.find((e) => e.entranceType === "main");
   return main ?? matches[0];

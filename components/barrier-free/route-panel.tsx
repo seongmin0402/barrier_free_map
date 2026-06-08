@@ -47,7 +47,13 @@ import { estimateWalkMinutes } from "@/lib/routing/route-estimate";
 import { stepDisplayMeta, stepManeuverStyle } from "@/lib/routing/step-display";
 import { isUnsurveyedBuilding } from "@/lib/merge-campus-buildings";
 import { RouteLegend } from "@/components/barrier-free/route-legend";
-import type { ComputedRoute, ManeuverKind, RoutePoint, RouteStep } from "@/lib/routing/types";
+import type {
+  ComputedRoute,
+  ManeuverKind,
+  RoutePoint,
+  RouteProfile,
+  RouteStep,
+} from "@/lib/routing/types";
 import { cn } from "@/lib/utils";
 
 type WhichPoint = "origin" | "destination";
@@ -65,6 +71,10 @@ interface RoutePanelProps {
   onClearPoint: (which: WhichPoint) => void;
   onSwap: () => void;
   route: ComputedRoute | null;
+  routeFast?: ComputedRoute | null;
+  routeComfort?: ComputedRoute | null;
+  routeProfile?: RouteProfile;
+  onRouteProfileChange?: (profile: RouteProfile) => void;
   routeError: string | null;
   navigating: boolean;
   onStartNav: () => void;
@@ -107,6 +117,73 @@ function maneuverIcon(maneuver: ManeuverKind, iconClass = "h-5 w-5") {
     default:
       return <ArrowUp className={iconClass} strokeWidth={2.25} />;
   }
+}
+
+function RouteProfilePicker({
+  fast,
+  comfort,
+  profile,
+  onChange,
+  disabled,
+  compact,
+}: {
+  fast: ComputedRoute;
+  comfort: ComputedRoute;
+  profile: RouteProfile;
+  onChange: (profile: RouteProfile) => void;
+  disabled?: boolean;
+  compact?: boolean;
+}) {
+  const { locale } = useAppSettings();
+  const ui = useUi();
+
+  const options: Array<{ key: RouteProfile; route: ComputedRoute; label: string; hint: string }> = [
+    { key: "fast", route: fast, label: ui.route.profileFast, hint: ui.route.profileFastHint },
+    {
+      key: "comfort",
+      route: comfort,
+      label: ui.route.profileComfort,
+      hint: ui.route.profileComfortHint,
+    },
+  ];
+
+  return (
+    <div
+      role="radiogroup"
+      aria-label={ui.route.profilePickerAria}
+      className={cn("grid grid-cols-2 gap-2", compact ? "mb-2" : "mb-3")}
+    >
+      {options.map(({ key, route: optionRoute, label, hint }) => {
+        const selected = profile === key;
+        return (
+          <button
+            key={key}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            disabled={disabled}
+            onClick={() => onChange(key)}
+            className={cn(
+              "rounded-lg border px-2.5 py-2 text-left transition-colors disabled:opacity-60",
+              selected
+                ? "border-primary bg-primary/10 ring-1 ring-primary/30"
+                : "border-border bg-muted/20 hover:bg-muted/40",
+            )}
+          >
+            <p className="text-sm font-semibold leading-tight">{label}</p>
+            <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">{hint}</p>
+            <p className="mt-1.5 text-xs font-semibold tabular-nums">
+              {ui.route.aboutMinutes} {estimateWalkMinutes(optionRoute)}
+              <span className="ml-0.5 font-medium text-muted-foreground">{ui.route.min}</span>
+              <span className="ml-1 font-normal text-muted-foreground">
+                · {formatDistance(optionRoute.distance, locale)}
+              </span>
+            </p>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 function matchBuildingsFromSpeech(buildings: BarrierBuilding[], transcript: string): BarrierBuilding[] {
@@ -306,6 +383,10 @@ export function RoutePanel(props: RoutePanelProps) {
     onClearPoint,
     onSwap,
     route,
+    routeFast = null,
+    routeComfort = null,
+    routeProfile = "fast",
+    onRouteProfileChange,
     routeError,
     navigating,
     onStartNav,
@@ -647,6 +728,17 @@ export function RoutePanel(props: RoutePanelProps) {
             <span>{ui.route.reroutedNotice}</span>
           </div>
         )}
+
+        {routeFast && routeComfort && onRouteProfileChange ? (
+          <RouteProfilePicker
+            fast={routeFast}
+            comfort={routeComfort}
+            profile={routeProfile}
+            onChange={onRouteProfileChange}
+            disabled={navigating}
+            compact={compactSheet}
+          />
+        ) : null}
 
         {/* 경로 요약 */}
         {route && (

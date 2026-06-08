@@ -21,7 +21,7 @@ import {
   parseEntrances,
 } from "@/lib/routing/graph";
 import { elevatorIdsOnRoute, parseElevators, type ElevatorRecord } from "@/lib/routing/elevators";
-import { computeRoute } from "@/lib/routing/route";
+import { computeRoute, computeRoutePair } from "@/lib/routing/route";
 import { computeProgress } from "@/lib/routing/progress";
 import { createGpsSmoother } from "@/lib/routing/gps-smooth";
 import {
@@ -34,6 +34,7 @@ import { getSpeechGuide } from "@/lib/routing/tts";
 import type {
   BuildingEntrance,
   ComputedRoute,
+  RouteProfile,
   EntranceFeature,
   FeatureCollection,
   RoutePoint,
@@ -68,6 +69,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
   const [destination, setDestination] = useState<RoutePoint | null>(null);
   const [pickMode, setPickMode] = useState<WhichPoint | null>(null);
 
+  const [routeProfile, setRouteProfile] = useState<RouteProfile>("fast");
   const [navigating, setNavigating] = useState(false);
   /** 안내 시작 시점의 경로 — locale 변경으로 steps/coords 참조가 바뀌어도 추적 유지 */
   const [navigationRoute, setNavigationRoute] = useState<ComputedRoute | null>(null);
@@ -136,6 +138,9 @@ export function useNavigation(buildings: BarrierBuilding[]) {
   const lastRerouteAtRef = useRef(0);
   const graphRef = useRef<RoutingGraph | null>(null);
   const destinationRef = useRef<RoutePoint | null>(null);
+  const routeProfileRef = useRef<RouteProfile>("fast");
+  routeProfileRef.current = routeProfile;
+  const navDestPointRef = useRef<LatLng | null>(null);
   const userPosRef = useRef<LatLng | null>(null);
   const lastUiPosUpdateRef = useRef(0);
   const lastUiHeadingUpdateRef = useRef(0);
@@ -217,18 +222,38 @@ export function useNavigation(buildings: BarrierBuilding[]) {
   graphRef.current = graph;
   destinationRef.current = destination;
 
-  const route: ComputedRoute | null = useMemo(() => {
+  const routePair = useMemo(() => {
     if (!origin || !destination || !graph.nodes.size) return null;
-    return computeRoute(graph, origin.point, destination.point, locale);
-  }, [graph, origin, destination, locale]);
+    return computeRoutePair(graph, entranceList, origin, destination, locale);
+  }, [graph, origin, destination, locale, entranceList]);
+
+  const routeFast = routePair?.fast ?? null;
+  const routeComfort = routePair?.comfort ?? null;
+
+  const activeRoute: ComputedRoute | null = useMemo(() => {
+    if (!routePair) return null;
+    if (routeProfile === "comfort" && routePair.comfort) return routePair.comfort;
+    return routePair.fast;
+  }, [routePair, routeProfile]);
+
+  const routeEndpoints = useMemo(() => {
+    if (!routePair) return null;
+    return routeProfile === "comfort" ? routePair.endpoints.comfort : routePair.endpoints.fast;
+  }, [routePair, routeProfile]);
 
   const routeError = useMemo(() => {
     const t = getUi(locale).route.errors;
     if (!origin || !destination) return null;
     if (!graph.nodes.size) return t.loadingWalkways;
-    if (!route) return t.noRoute;
+    if (!activeRoute) return t.noRoute;
     return null;
-  }, [origin, destination, graph, route, locale]);
+  }, [origin, destination, graph, activeRoute, locale]);
+
+  useEffect(() => {
+    if (!routePair?.comfort) {
+      setRouteProfile("fast");
+    }
+  }, [routePair]);
 
   // 언어 변경 시 안내 중이면 현재 위치 기준 경로 문장만 해당 언어로 갱신
   useEffect(() => {
@@ -237,7 +262,10 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     const pos = userPosRef.current;
     const g = graphRef.current;
     if (!dest || !pos || !g?.nodes.size) return;
-    const refreshed = computeRoute(g, pos, dest.point, locale);
+    const destPoint = navDestPointRef.current ?? dest.point;
+    const refreshed = computeRoute(g, pos, destPoint, locale, {
+      profile: routeProfileRef.current,
+    });
     if (refreshed) setNavigationRoute(refreshed);
   }, [locale, navigating]);
 
@@ -387,13 +415,15 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     firstGpsFixRef.current = null;
     navSpeechBlockedUntilRef.current = 0;
     lastRerouteAtRef.current = 0;
+    navDestPointRef.current = null;
     setOffRouteM(null);
     setRerouteNotice(false);
     setLiveAnnouncement("");
   }, [clearWatch]);
 
   const startNav = useCallback(() => {
-    if (!route) return;
+    if (!activeRoute) return;
+    const route = activeRoute;
     const t = getUi(localeRef.current).route.errors;
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setGeoError(t.navGeoUnsupported);
@@ -421,6 +451,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     lastLiveStepIndexRef.current = -1;
     firstGpsFixRef.current = null;
     navigationStartedAtRef.current = Date.now();
+    navDestPointRef.current = route.coords[route.coords.length - 1] ?? destination?.point ?? null;
     setNavigationRoute(route);
     setNavigating(true);
     setRemaining(route.distance);
@@ -516,7 +547,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       },
       { enableHighAccuracy: true, maximumAge: 800, timeout: 25000 },
     );
-  }, [route, destination, clearWatch, requestCompassPermission]);
+  }, [activeRoute, destination, clearWatch, requestCompassPermission]);
 
   // GPS 갱신 → 진행 상황 계산 + 음성 안내 + 경로 이탈 재탐색
   useEffect(() => {
@@ -545,7 +576,10 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       const dest = destinationRef.current;
       const g = graphRef.current;
       if (dest && g?.nodes.size) {
-        const newRoute = computeRoute(g, userPos, dest.point, navLocale);
+        const destPoint = navDestPointRef.current ?? dest.point;
+        const newRoute = computeRoute(g, userPos, destPoint, navLocale, {
+          profile: routeProfileRef.current,
+        });
         if (newRoute) {
           lastRerouteAtRef.current = Date.now();
           setNavigationRoute(newRoute);
@@ -694,7 +728,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     };
   }, [clearWatch]);
 
-  const displayRoute = navigating && navigationRoute ? navigationRoute : route;
+  const displayRoute = navigating && navigationRoute ? navigationRoute : activeRoute;
 
   const routeElevatorIds = useMemo(
     () => elevatorIdsOnRoute(displayRoute, elevators),
@@ -711,6 +745,11 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     elevators,
     routeElevatorIds,
     route: displayRoute,
+    routeFast,
+    routeComfort,
+    routeProfile,
+    setRouteProfile,
+    routeEndpoints,
     routeError: routeError ?? geoError,
     navigating,
     voiceEnabled,

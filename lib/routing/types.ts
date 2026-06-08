@@ -42,6 +42,8 @@ export interface GraphEdge {
   type: WalkwayType;
   /** indoor.geojson 등 실내 선형의 층 (예: B1, 2F) */
   floor?: string;
+  /** QGIS DEM 기반 경사도(%) — 계단 구간은 보통 null */
+  slopePct?: number | null;
 }
 
 export interface GraphNode {
@@ -117,4 +119,16 @@ export interface ComputedRoute {
   hasElevator: boolean;
   /** coords[i] → coords[i+1] 구간의 종류 (length = coords.length - 1) */
   segmentTypes: WalkwayType[];
+}
+
+/** 빠른 경로 vs 무장애 최적 경로 */
+export type RouteProfile = "fast" | "comfort";
+
+export interface RoutePairResult {
+  fast: ComputedRoute | null;
+  comfort: ComputedRoute | null;
+  endpoints: {
+    fast: { from: LatLng; to: LatLng };
+    comfort: { from: LatLng; to: LatLng };
+  };
 }

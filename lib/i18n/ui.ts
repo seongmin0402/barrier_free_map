@@ -123,6 +123,11 @@ export type UiText = {
     min: string;
     walking: string;
     walkwayBased: string;
+    profileFast: string;
+    profileComfort: string;
+    profileFastHint: string;
+    profileComfortHint: string;
+    profilePickerAria: string;
     stairsWarning: string;
     elevatorNotice: string;
     startNav: string;
@@ -354,6 +359,11 @@ const ko: UiText = {
     min: "분",
     walking: "도보",
     walkwayBased: "보행로 기반",
+    profileFast: "빠른 경로",
+    profileComfort: "최적 경로",
+    profileFastHint: "최단 · 승강기 우선",
+    profileComfortHint: "계단 없음 · 경사로",
+    profilePickerAria: "경로 유형 선택",
     stairsWarning: "경로에 계단이 포함되어 있습니다",
     elevatorNotice: "승강기 구간이 포함된 경로입니다",
     startNav: "안내 시작",
@@ -597,6 +607,11 @@ const en: UiText = {
     min: "min",
     walking: "Walking",
     walkwayBased: "Walkway network",
+    profileFast: "Fast route",
+    profileComfort: "Comfort route",
+    profileFastHint: "Shortest · elevator preferred",
+    profileComfortHint: "No stairs · ramps",
+    profilePickerAria: "Choose route type",
     stairsWarning: "This route includes stairs",
     elevatorNotice: "This route includes an elevator segment",
     startNav: "Start guidance",

@@ -140,8 +140,8 @@ export default function RoutePage() {
           onBuildingSelect={nav.handleBuildingSelect}
           routeLine={nav.route?.coords ?? null}
           routeSegments={nav.route?.segmentTypes ?? null}
-          originPoint={nav.origin?.point ?? null}
-          destPoint={nav.destination?.point ?? null}
+          originPoint={nav.routeEndpoints?.from ?? nav.origin?.point ?? null}
+          destPoint={nav.routeEndpoints?.to ?? nav.destination?.point ?? null}
           liveUserPosition={nav.navigating ? nav.userPos : null}
           liveUserPositionRef={nav.userPosRef}
           pickMode={nav.pickMode}
@@ -171,6 +171,10 @@ export default function RoutePage() {
           onClearPoint={nav.clearPoint}
           onSwap={nav.swap}
           route={nav.route}
+          routeFast={nav.routeFast}
+          routeComfort={nav.routeComfort}
+          routeProfile={nav.routeProfile}
+          onRouteProfileChange={nav.setRouteProfile}
           routeError={nav.routeError}
           navigating={nav.navigating}
           onStartNav={nav.startNav}
