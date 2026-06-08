@@ -504,61 +504,74 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       }
     })();
 
+    const applyGpsReading = (pos: GeolocationPosition) => {
+      const raw = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      const here = gpsSmootherRef.current.filter(raw, pos.coords.accuracy);
+      const isFirstFix = !firstGpsFixRef.current;
+      if (!firstGpsFixRef.current) firstGpsFixRef.current = here;
+
+      const prev = prevGpsRef.current;
+      const movedM = prev ? haversineMeters(prev, here) : 0;
+      const movementBearing =
+        prev && movedM > 0.4 ? bearingDeg(prev, here) : null;
+
+      navMotionRef.current = {
+        gpsHeading:
+          pos.coords.heading != null && Number.isFinite(pos.coords.heading) && pos.coords.heading >= 0
+            ? pos.coords.heading
+            : null,
+        speedMps:
+          pos.coords.speed != null && Number.isFinite(pos.coords.speed) && pos.coords.speed >= 0
+            ? pos.coords.speed
+            : null,
+        movedMeters: movedM,
+        movementBearing,
+      };
+
+      const heading = resolveNavigationHeading(
+        prev,
+        here,
+        pos.coords.heading,
+        routeHeadingNavRef.current,
+      );
+      userPosRef.current = here;
+      prevGpsRef.current = here;
+
+      const now = Date.now();
+      if (isFirstFix || now - lastUiPosUpdateRef.current >= 420) {
+        lastUiPosUpdateRef.current = now;
+        setUserPos(here);
+      }
+
+      if (heading != null) {
+        lastGpsHeadingRef.current = heading;
+        routeHeadingNavRef.current = heading;
+        if (isFirstFix || now - lastUiHeadingUpdateRef.current >= 500) {
+          lastUiHeadingUpdateRef.current = now;
+          setUserHeading(heading);
+        }
+      }
+    };
+
+    const onGpsError = (err: GeolocationPositionError) => {
+      const te = getUi(localeRef.current).route.errors;
+      let msg = te.trackFailed;
+      if (err.code === 1) msg = te.geoDenied;
+      setGeoError(msg);
+    };
+
+    // 캐시된 위치로 마커를 먼저 띄운 뒤 고정밀 watch로 정밀 추적
+    navigator.geolocation.getCurrentPosition(
+      applyGpsReading,
+      () => {
+        /* 캐시 없음 — watchPosition 첫 fix까지 대기 */
+      },
+      { enableHighAccuracy: false, maximumAge: 10000, timeout: 6000 },
+    );
+
     watchIdRef.current = navigator.geolocation.watchPosition(
-      (pos) => {
-        const raw = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        const here = gpsSmootherRef.current.filter(raw, pos.coords.accuracy);
-        const isFirstFix = !firstGpsFixRef.current;
-        if (!firstGpsFixRef.current) firstGpsFixRef.current = here;
-
-        const prev = prevGpsRef.current;
-        const movedM = prev ? haversineMeters(prev, here) : 0;
-        const movementBearing =
-          prev && movedM > 0.4 ? bearingDeg(prev, here) : null;
-
-        navMotionRef.current = {
-          gpsHeading:
-            pos.coords.heading != null && Number.isFinite(pos.coords.heading) && pos.coords.heading >= 0
-              ? pos.coords.heading
-              : null,
-          speedMps:
-            pos.coords.speed != null && Number.isFinite(pos.coords.speed) && pos.coords.speed >= 0
-              ? pos.coords.speed
-              : null,
-          movedMeters: movedM,
-          movementBearing,
-        };
-
-        const heading = resolveNavigationHeading(
-          prev,
-          here,
-          pos.coords.heading,
-          routeHeadingNavRef.current,
-        );
-        userPosRef.current = here;
-        prevGpsRef.current = here;
-
-        const now = Date.now();
-        if (isFirstFix || now - lastUiPosUpdateRef.current >= 420) {
-          lastUiPosUpdateRef.current = now;
-          setUserPos(here);
-        }
-
-        if (heading != null) {
-          lastGpsHeadingRef.current = heading;
-          routeHeadingNavRef.current = heading;
-          if (isFirstFix || now - lastUiHeadingUpdateRef.current >= 500) {
-            lastUiHeadingUpdateRef.current = now;
-            setUserHeading(heading);
-          }
-        }
-      },
-      (err) => {
-        const te = getUi(localeRef.current).route.errors;
-        let msg = te.trackFailed;
-        if (err.code === 1) msg = te.geoDenied;
-        setGeoError(msg);
-      },
+      applyGpsReading,
+      onGpsError,
       { enableHighAccuracy: true, maximumAge: 800, timeout: 25000 },
     );
   }, [activeRoute, destination, clearWatch, requestCompassPermission]);

@@ -95,6 +95,15 @@ function RoutePageMapInner({
   );
 }
 
+/** 안내 중에도 null→첫 GPS 수신 시에는 지도에 마커가 바로 뜨도록 허용 */
+function navUserPosNeedsRender(prev: LatLng | null, next: LatLng | null): boolean {
+  if (prev === next) return false;
+  if (!prev && next) return true;
+  if (prev && !next) return true;
+  if (!prev || !next) return false;
+  return prev.lat !== next.lat || prev.lng !== next.lng;
+}
+
 function mapPropsAreEqual(prev: RoutePageMapProps, next: RoutePageMapProps): boolean {
   const skipVolatileNav = prev.navigating && next.navigating;
 
@@ -120,7 +129,9 @@ function mapPropsAreEqual(prev: RoutePageMapProps, next: RoutePageMapProps): boo
     if (prev[key] !== next[key]) return false;
   }
 
-  if (!skipVolatileNav) {
+  if (skipVolatileNav) {
+    if (navUserPosNeedsRender(prev.userPos, next.userPos)) return false;
+  } else {
     if (prev.userPos !== next.userPos) return false;
     if (prev.userHeading !== next.userHeading) return false;
     if (prev.routeHeading !== next.routeHeading) return false;

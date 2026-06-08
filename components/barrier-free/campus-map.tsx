@@ -240,6 +240,14 @@ function syncRoutePolylines(
   segmentRefs.current.length = spans.length;
 }
 
+function liveUserPosNeedsRender(prev: LatLng | null | undefined, next: LatLng | null | undefined): boolean {
+  if (prev === next) return false;
+  if (!prev && next) return true;
+  if (prev && !next) return true;
+  if (!prev || !next) return false;
+  return prev.lat !== next.lat || prev.lng !== next.lng;
+}
+
 function campusMapPropsAreEqual(prev: CampusMapProps, next: CampusMapProps): boolean {
   const skipVolatileNav =
     prev.followUser &&
@@ -276,7 +284,9 @@ function campusMapPropsAreEqual(prev: CampusMapProps, next: CampusMapProps): boo
     if (prev[key] !== next[key]) return false;
   }
 
-  if (!skipVolatileNav) {
+  if (skipVolatileNav) {
+    if (liveUserPosNeedsRender(prev.liveUserPosition, next.liveUserPosition)) return false;
+  } else {
     if (prev.liveUserPosition !== next.liveUserPosition) return false;
     if (prev.userHeading !== next.userHeading) return false;
     if (prev.routeHeading !== next.routeHeading) return false;
@@ -1370,7 +1380,9 @@ function CampusMapInner({
 
   /** GPS 수신 전 출발점·경로 시작점으로 미리 맞춤 */
   useEffect(() => {
-    if (!sdkLoaded || !followUser || !navigationMode || liveUserPosition || followPaused) return;
+    const hasGps =
+      liveUserPosition != null || liveUserPosRefProp.current?.current != null;
+    if (!sdkLoaded || !followUser || !navigationMode || hasGps || followPaused) return;
     const map = mapInstanceRef.current;
     const maps = window.naver?.maps as NMaps | undefined;
     if (!map || !maps?.LatLng) return;
@@ -1399,14 +1411,15 @@ function CampusMapInner({
 
   /** 첫 GPS 수신 시 즉시 사용자 위치로 맞춤 */
   useEffect(() => {
-    if (!sdkLoaded || !followUser || !navigationMode || followPaused || !liveUserPosition) return;
+    const firstPos = liveUserPosition ?? liveUserPosRefProp.current?.current;
+    if (!sdkLoaded || !followUser || !navigationMode || followPaused || !firstPos) return;
     if (hasNavCenteredRef.current) return;
 
     const heading = resolveFusedHeading();
-    displayPosRef.current = { ...liveUserPosition };
-    targetPosRef.current = liveUserPosition;
+    displayPosRef.current = { ...firstPos };
+    targetPosRef.current = firstPos;
 
-    queueNavCamera(liveUserPosition, heading, {
+    queueNavCamera(firstPos, heading, {
       snap: true,
       adjustViewport: true,
       force: true,
@@ -1476,13 +1489,19 @@ function CampusMapInner({
       | undefined;
     const PointCtor = maps.Point as (new (x: number, y: number) => unknown) | undefined;
 
-    if (!liveUserPosition) {
-      try {
-        navUserMarkerRef.current?.setMap(null);
-      } catch {
-        /* ignore */
+    const refPos = liveUserPosRefProp.current?.current;
+    const effectivePos =
+      liveUserPosition ?? (followUser && navigationMode ? refPos : null);
+
+    if (!effectivePos) {
+      if (!followUser || !navigationMode) {
+        try {
+          navUserMarkerRef.current?.setMap(null);
+        } catch {
+          /* ignore */
+        }
+        navUserMarkerRef.current = null;
       }
-      navUserMarkerRef.current = null;
       return;
     }
 
@@ -1490,7 +1509,7 @@ function CampusMapInner({
       return;
     }
 
-    const pos = displayPosRef.current ?? liveUserPosition;
+    const pos = displayPosRef.current ?? effectivePos;
     const ll = new LatLngCtor(pos.lat, pos.lng);
     const h = displayHeadingRef.current;
     if (navUserMarkerRef.current?.setPosition) {
@@ -1569,8 +1588,23 @@ function CampusMapInner({
       const headingForCam = displayHeadingRef.current;
       const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
       const PointCtor = maps.Point as (new (x: number, y: number) => unknown) | undefined;
+      const MarkerCtor = maps.Marker as
+        | (new (opts: Record<string, unknown>) => {
+            setMap: (t: unknown) => void;
+            setPosition?: (p: unknown) => void;
+            setIcon?: (icon: unknown) => void;
+          })
+        | undefined;
       const ll = new LatLngCtor(display.lat, display.lng);
-      if (navUserMarkerRef.current?.setPosition) {
+      if (!navUserMarkerRef.current && MarkerCtor && PointCtor) {
+        navUserMarkerRef.current = new MarkerCtor({
+          map,
+          position: ll,
+          zIndex: 500,
+          icon: { content: navArrowHtml(headingForCam), anchor: new PointCtor(14, 14) },
+        }) as typeof navUserMarkerRef.current;
+        lastMarkerHeadingRef.current = headingForCam;
+      } else if (navUserMarkerRef.current?.setPosition) {
         navUserMarkerRef.current.setPosition(ll);
       }
 
