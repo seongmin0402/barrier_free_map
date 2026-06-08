@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { buildRouteToBuildingUrl } from "@/lib/routing/route-launch";
+import type { BarrierBuilding } from "@/lib/building-types";
 import { cn } from "@/lib/utils";
 import { Header } from "@/components/barrier-free/header";
 import { Sidebar } from "@/components/barrier-free/sidebar";
@@ -22,6 +25,7 @@ const facilitySearchTerms: Record<string, string[]> = {
 };
 
 export default function BarrierFreeMapPage() {
+  const router = useRouter();
   const { settings, updateSettings } = useAppSettings();
   const ui = useUi();
   const [searchQuery, setSearchQuery] = useState("");
@@ -69,6 +73,14 @@ export default function BarrierFreeMapPage() {
       setIsSidebarOpen(false);
     }
   }, []);
+
+  const handleBuildingDirections = useCallback(
+    (building: BarrierBuilding) => {
+      setSelectedBuildingId(null);
+      router.push(buildRouteToBuildingUrl(building.id));
+    },
+    [router],
+  );
 
   return (
     <div
@@ -151,7 +163,11 @@ export default function BarrierFreeMapPage() {
             />
           </div>
 
-          <BuildingDetail building={selectedBuilding} onClose={() => setSelectedBuildingId(null)} />
+          <BuildingDetail
+            building={selectedBuilding}
+            onClose={() => setSelectedBuildingId(null)}
+            onDirections={handleBuildingDirections}
+          />
         </main>
       </div>
 

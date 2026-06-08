@@ -342,6 +342,16 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     setDestination(origin);
   }, [origin, destination]);
 
+  /** 출발=현재 GPS, 도착=건물 — 건물 상세 길찾기 등 */
+  const launchToBuildingFromGps = useCallback(
+    (building: BarrierBuilding) => {
+      if (navigating) return;
+      selectBuilding("destination", building);
+      useCurrentLocation("origin");
+    },
+    [navigating, selectBuilding, useCurrentLocation],
+  );
+
   const stopNav = useCallback(() => {
     setNavigating(false);
     setNavigationRoute(null);
@@ -655,6 +665,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     useCurrentLocation,
     clearPoint,
     swap,
+    launchToBuildingFromGps,
     startNav,
     stopNav,
   };

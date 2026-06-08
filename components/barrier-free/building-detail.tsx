@@ -31,6 +31,37 @@ import { isUnsurveyedBuilding } from "@/lib/merge-campus-buildings";
 interface BuildingDetailProps {
   building: BarrierBuilding | null;
   onClose: () => void;
+  onDirections?: (building: BarrierBuilding) => void;
+}
+
+function DetailFooterActions({
+  building,
+  ui,
+  onClose,
+  onDirections,
+}: {
+  building: BarrierBuilding;
+  ui: UiText;
+  onClose: () => void;
+  onDirections?: (building: BarrierBuilding) => void;
+}) {
+  return (
+    <div className="flex gap-2 border-t border-border pt-3">
+      <Button variant="outline" className="flex-1" type="button" onClick={onClose}>
+        {ui.building.close}
+      </Button>
+      {onDirections ? (
+        <Button
+          className="flex-[1.4] gap-1.5 font-semibold"
+          type="button"
+          onClick={() => onDirections(building)}
+        >
+          <Navigation className="h-4 w-4" aria-hidden />
+          {ui.page.directions}
+        </Button>
+      ) : null}
+    </div>
+  );
 }
 
 function FacilityStatusCard({
@@ -91,11 +122,13 @@ function BuildingFullSections({
   onPhotoClick,
   ui,
   onClose,
+  onDirections,
 }: {
   building: BarrierBuilding;
   onPhotoClick: (url: string, alt: string) => void;
   ui: UiText;
   onClose: () => void;
+  onDirections?: (building: BarrierBuilding) => void;
 }) {
   const floorsSorted = sortFloorPhotoGroups(building.floorPhotoGroups ?? []);
   const floorsWithPhotos = floorsSorted.filter((g) => g.images?.length);
@@ -104,44 +137,6 @@ function BuildingFullSections({
     : "";
 
   const parkingAvailable = building.parkingCapacity > 0;
-
-  const naverSearchUrl =
-    Number.isFinite(building.lat) && Number.isFinite(building.lng)
-      ? `https://map.naver.com/p/search/${encodeURIComponent(building.name)}/${building.lng},${building.lat},PLACE`
-      : `https://map.naver.com/p/search/${encodeURIComponent(building.name)}`;
-
-  const openNaverRoute = useCallback(() => {
-    const hasCoords = Number.isFinite(building.lat) && Number.isFinite(building.lng);
-    if (!hasCoords) {
-      window.open(naverSearchUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-
-    const ua = window.navigator.userAgent;
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
-    if (!isMobile) {
-      window.open(naverSearchUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-
-    const destinationName = encodeURIComponent(building.name);
-    const appName = encodeURIComponent("barrier-free-map");
-    const routeScheme = `nmap://route/walk?dlat=${building.lat}&dlng=${building.lng}&dname=${destinationName}&appname=${appName}`;
-
-    const fallbackTimer = window.setTimeout(() => {
-      window.open(naverSearchUrl, "_blank", "noopener,noreferrer");
-    }, 1200);
-
-    window.location.href = routeScheme;
-
-    const clearFallback = () => {
-      window.clearTimeout(fallbackTimer);
-      document.removeEventListener("visibilitychange", clearFallback);
-      window.removeEventListener("pagehide", clearFallback);
-    };
-    document.addEventListener("visibilitychange", clearFallback, { once: true });
-    window.addEventListener("pagehide", clearFallback, { once: true });
-  }, [building.lat, building.lng, building.name, naverSearchUrl]);
 
   const statusPositive = (value: boolean, useExists = false) =>
     value ? (useExists ? ui.building.statusExists : ui.building.statusAvailable) : ui.building.statusNone;
@@ -158,15 +153,12 @@ function BuildingFullSections({
         <p className="rounded-lg border border-dashed border-border bg-muted/30 px-3 py-4 text-sm text-muted-foreground">
           {ui.building.unsurveyedNotice}
         </p>
-        <div className="flex gap-2 pt-1">
-          <Button variant="outline" className="flex-1" type="button" onClick={onClose}>
-            {ui.building.close}
-          </Button>
-          <Button className="flex-1 gap-1.5" type="button" onClick={openNaverRoute}>
-            <Navigation className="h-4 w-4" />
-            {ui.building.naverMap}
-          </Button>
-        </div>
+        <DetailFooterActions
+          building={building}
+          ui={ui}
+          onClose={onClose}
+          onDirections={onDirections}
+        />
       </div>
     );
   }
@@ -286,20 +278,17 @@ function BuildingFullSections({
         </div>
       ) : null}
 
-      <div className="flex gap-2 pt-1">
-        <Button variant="outline" className="flex-1" type="button" onClick={onClose}>
-          {ui.building.close}
-        </Button>
-        <Button className="flex-1 gap-1.5" type="button" onClick={openNaverRoute}>
-          <Navigation className="h-4 w-4" />
-          {ui.building.naverMap}
-        </Button>
-      </div>
+      <DetailFooterActions
+        building={building}
+        ui={ui}
+        onClose={onClose}
+        onDirections={onDirections}
+      />
     </div>
   );
 }
 
-export function BuildingDetail({ building, onClose }: BuildingDetailProps) {
+export function BuildingDetail({ building, onClose, onDirections }: BuildingDetailProps) {
   const ui = useUi();
   const [lightbox, setLightbox] = useState<{ url: string; alt: string } | null>(null);
 
@@ -360,6 +349,7 @@ export function BuildingDetail({ building, onClose }: BuildingDetailProps) {
               onPhotoClick={openLightbox}
               ui={ui}
               onClose={onClose}
+              onDirections={onDirections}
             />
           </div>
         </DialogContent>

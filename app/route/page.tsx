@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { parseRouteLaunchSearch } from "@/lib/routing/route-launch";
 import { Navigation } from "lucide-react";
 import { useAppSettings } from "@/components/app-settings-provider";
 import { CampusMap } from "@/components/barrier-free/campus-map";
@@ -23,11 +24,24 @@ export default function RoutePage() {
   const [sheetVh, setSheetVh] = useState(28);
 
   const nav = useNavigation(buildings);
-  const setNavOpen = nav.setOpen;
+  const { setOpen: setNavOpen, launchToBuildingFromGps } = nav;
+
+  const routeLaunchAppliedRef = useRef(false);
 
   useEffect(() => {
     setNavOpen(true);
   }, [setNavOpen]);
+
+  useEffect(() => {
+    if (routeLaunchAppliedRef.current || typeof window === "undefined") return;
+    const launch = parseRouteLaunchSearch(window.location.search);
+    if (!launch?.fromGps) return;
+    const building = buildings.find((b) => b.id === launch.buildingId);
+    if (!building) return;
+    routeLaunchAppliedRef.current = true;
+    launchToBuildingFromGps(building);
+    window.history.replaceState(null, "", "/route");
+  }, [buildings, launchToBuildingFromGps]);
 
   const goHome = () => {
     nav.close();
