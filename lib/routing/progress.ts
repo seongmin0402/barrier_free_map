@@ -13,7 +13,23 @@ export interface RouteProgress {
   offRoute: number;
   /** 경로상 가장 가까운 좌표 */
   snapped: LatLng;
+  /** 가장 가까운 세그먼트 인덱스 — 다음 계산 힌트용 */
+  nearestSegmentIndex: number;
 }
+
+export type ComputeProgressOptions = {
+  /** 직전 계산의 nearestSegmentIndex — 근처만 스캔 */
+  segmentHint?: number;
+};
+
+type ProgressRouteCache = {
+  cum: number[];
+  total: number;
+  stepAlong: number[];
+  segList: { type: WalkwayType }[];
+};
+
+const progressCache = new WeakMap<ComputedRoute, ProgressRouteCache>();
 
 /** 좌표열의 누적 보행 거리 배열 */
 function cumulativeWalkDistances(coords: LatLng[], segs: WalkwayType[]): number[] {
@@ -25,53 +41,106 @@ function cumulativeWalkDistances(coords: LatLng[], segs: WalkwayType[]): number[
   return cum;
 }
 
+function stepAlongDistance(step: RouteStep, coords: LatLng[], cum: number[]): number {
+  const idx = indexOfCoord(coords, step.at);
+  if (idx >= 0) return cum[idx];
+  let bi = 0;
+  let bd = Infinity;
+  for (let i = 0; i < coords.length; i++) {
+    const d = haversineMeters(step.at, coords[i]);
+    if (d < bd) {
+      bd = d;
+      bi = i;
+    }
+  }
+  return cum[bi];
+}
+
+function getProgressCache(route: ComputedRoute): ProgressRouteCache {
+  let cached = progressCache.get(route);
+  if (cached) return cached;
+
+  const { coords, steps, segmentTypes } = route;
+  const segList = segmentTypes.map((type) => ({ type }));
+  const cum = cumulativeWalkDistances(coords, segmentTypes);
+  const stepAlong = steps.map((step) => stepAlongDistance(step, coords, cum));
+
+  cached = {
+    cum,
+    total: cum[cum.length - 1] ?? 0,
+    stepAlong,
+    segList,
+  };
+  progressCache.set(route, cached);
+  return cached;
+}
+
+function findNearestSegment(
+  user: LatLng,
+  coords: LatLng[],
+  cum: number[],
+  segList: { type: WalkwayType }[],
+  segmentHint?: number,
+): { bestDist: number; bestAlong: number; bestSnap: LatLng; bestSeg: number } {
+  const segCount = coords.length - 1;
+  if (segCount < 1) {
+    return { bestDist: Infinity, bestAlong: 0, bestSnap: coords[0], bestSeg: 0 };
+  }
+
+  const scanRange = (start: number, end: number) => {
+    let bestDist = Infinity;
+    let bestAlong = 0;
+    let bestSnap: LatLng = coords[0];
+    let bestSeg = 0;
+
+    const s = Math.max(0, start);
+    const e = Math.min(segCount - 1, end);
+    for (let i = s; i <= e; i++) {
+      const { point, distance, t } = projectOnSegment(user, coords[i], coords[i + 1]);
+      if (distance < bestDist) {
+        bestDist = distance;
+        const segWalkLen = walkPathLengthBetween(coords, segList, i, i + 1);
+        bestAlong = cum[i] + segWalkLen * t;
+        bestSnap = point;
+        bestSeg = i;
+      }
+    }
+    return { bestDist, bestAlong, bestSnap, bestSeg };
+  };
+
+  const hint = Number.isFinite(segmentHint) ? Math.floor(segmentHint!) : 0;
+  let result = scanRange(hint - 10, hint + 28);
+
+  if (result.bestDist > 22) {
+    result = scanRange(0, segCount - 1);
+  }
+
+  return result;
+}
+
 /** GPS 위치를 경로에 투영해 진행 상황 계산 */
 export function computeProgress(
   route: ComputedRoute,
   user: LatLng,
+  options: ComputeProgressOptions = {},
 ): RouteProgress | null {
-  const { coords, steps, segmentTypes } = route;
+  const { coords, steps } = route;
   if (coords.length < 2) return null;
 
-  const cum = cumulativeWalkDistances(coords, segmentTypes);
-  const total = cum[cum.length - 1];
-  const segList = segmentTypes.map((type) => ({ type }));
+  const cache = getProgressCache(route);
+  const { cum, total, stepAlong, segList } = cache;
 
-  // 가장 가까운 세그먼트 찾기
-  let bestDist = Infinity;
-  let bestAlong = 0;
-  let bestSnap: LatLng = coords[0];
-  for (let i = 0; i < coords.length - 1; i++) {
-    const { point, distance, t } = projectOnSegment(user, coords[i], coords[i + 1]);
-    if (distance < bestDist) {
-      bestDist = distance;
-      const segWalkLen = walkPathLengthBetween(coords, segList, i, i + 1);
-      bestAlong = cum[i] + segWalkLen * t;
-      bestSnap = point;
-    }
-  }
+  const { bestDist, bestAlong, bestSnap, bestSeg } = findNearestSegment(
+    user,
+    coords,
+    cum,
+    segList,
+    options.segmentHint,
+  );
 
-  // 각 단계의 경로상 위치(누적거리)
-  const stepAlong = (step: RouteStep): number => {
-    const idx = indexOfCoord(coords, step.at);
-    if (idx >= 0) return cum[idx];
-    // 참조가 안 맞으면 좌표로 최근접 탐색
-    let bi = 0;
-    let bd = Infinity;
-    for (let i = 0; i < coords.length; i++) {
-      const d = haversineMeters(step.at, coords[i]);
-      if (d < bd) {
-        bd = d;
-        bi = i;
-      }
-    }
-    return cum[bi];
-  };
-
-  // 현재 위치 기준 안내 단계 — 지나지 않은 다음 단계, 기본은 출발(0)
   let stepIndex = 0;
   for (let i = 0; i < steps.length; i++) {
-    const along = stepAlong(steps[i]);
+    const along = stepAlong[i];
     if (along > bestAlong + 14) {
       stepIndex = i;
       break;
@@ -79,11 +148,8 @@ export function computeProgress(
     stepIndex = i;
   }
 
-  const nextAlong = stepAlong(steps[stepIndex]);
-  const distanceToNext = Math.max(0, nextAlong - bestAlong);
   const remaining = Math.max(0, total - bestAlong);
 
-  // GPS가 경로 끝에 붙었지만 실제로는 멀리 있는 경우 arrive 단계로 점프하지 않음
   const arriveIdx = steps.length - 1;
   if (
     stepIndex === arriveIdx &&
@@ -93,7 +159,7 @@ export function computeProgress(
     stepIndex = Math.max(0, arriveIdx - 1);
   }
 
-  const adjustedNextAlong = stepAlong(steps[stepIndex]);
+  const adjustedNextAlong = stepAlong[stepIndex] ?? 0;
   const adjustedDistanceToNext = Math.max(0, adjustedNextAlong - bestAlong);
 
   return {
@@ -102,5 +168,6 @@ export function computeProgress(
     remaining,
     offRoute: bestDist,
     snapped: bestSnap,
+    nearestSegmentIndex: bestSeg,
   };
 }

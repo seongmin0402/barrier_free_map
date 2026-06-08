@@ -29,6 +29,7 @@ import {
   NAV_POS_LERP,
   shouldRecenterEdgeFollow,
 } from "@/lib/routing/nav-camera";
+import { preloadRouteTiles } from "@/lib/routing/nav-tile-preload";
 import type { DeviceHeadingSnapshot, NavMotionSnapshot } from "@/lib/device-orientation";
 import { compassAgeMs } from "@/lib/device-orientation";
 import { segmentColor } from "@/lib/routing/style";
@@ -494,14 +495,24 @@ function markerPinHtml(color: string, label: string) {
   </div>`;
 }
 
-function navArrowHtml(headingDeg = 0) {
-  const deg = Number.isFinite(headingDeg) ? headingDeg : 0;
-  return `<div aria-hidden="true" style="width:28px;height:28px;transform:translate(-50%,-50%) rotate(${deg}deg);filter:drop-shadow(0 1px 2px rgba(0,0,0,.35));">
-    <svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="14" cy="14" r="11" fill="#2563eb" stroke="#ffffff" stroke-width="2.5"/>
-      <path fill="#ffffff" d="M14 6.5 L19.5 20 H14 V15.5 H9 L14 6.5 Z"/>
-    </svg>
+const NAV_ARROW_ROTATE_ID = "bf-nav-user-arrow-rotate";
+
+function navArrowHtmlStatic() {
+  return `<div aria-hidden="true" style="width:28px;height:28px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35));">
+    <div id="${NAV_ARROW_ROTATE_ID}" style="width:28px;height:28px;transform:rotate(0deg);transform-origin:14px 14px;">
+      <svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="14" cy="14" r="11" fill="#2563eb" stroke="#ffffff" stroke-width="2.5"/>
+        <path fill="#ffffff" d="M14 6.5 L19.5 20 H14 V15.5 H9 L14 6.5 Z"/>
+      </svg>
+    </div>
   </div>`;
+}
+
+function setNavArrowRotation(headingDeg: number) {
+  const el = document.getElementById(NAV_ARROW_ROTATE_ID);
+  if (!el) return;
+  const deg = Number.isFinite(headingDeg) ? headingDeg : 0;
+  el.style.transform = `rotate(${deg}deg)`;
 }
 
 function CampusMapInner({
@@ -578,6 +589,8 @@ function CampusMapInner({
   const lastAppliedCamRef = useRef<{ lat: number; lng: number; heading: number } | null>(null);
   const navFollowSessionRef = useRef(false);
   const navBootstrapDoneRef = useRef(false);
+  const tilePreloadCancelRef = useRef<(() => void) | null>(null);
+  const tilePreloadDoneRef = useRef(false);
   const lastRouteDrawSigRef = useRef("");
   const lastCameraApplyAtRef = useRef(0);
   const mapIsIdleRef = useRef(true);
@@ -1274,7 +1287,8 @@ function CampusMapInner({
       mapLayout !== "route" ||
       !routeLine ||
       routeLine.length < 2 ||
-      routeElevators.length === 0
+      routeElevators.length === 0 ||
+      (navigationMode && followUser && !followPaused)
     ) {
       clearElevatorMarkers();
       return;
@@ -1312,7 +1326,70 @@ function CampusMapInner({
     }
 
     return clearElevatorMarkers;
-  }, [sdkLoaded, mapReadyEpoch, mapLayout, routeLine, routeElevators, ui]);
+  }, [sdkLoaded, mapReadyEpoch, mapLayout, routeLine, routeElevators, navigationMode, followUser, followPaused, ui]);
+
+  /** 길안내 중 건물 수동 라벨 숨김 */
+  useEffect(() => {
+    if (!sdkLoaded || manualLabelMarkersRef.current.length === 0) return;
+    const map = mapInstanceRef.current;
+    const hideInNav = navigationMode && followUser && !followPaused;
+    const zoom = (map as { getZoom?: () => number } | null)?.getZoom?.() ?? 16;
+    const shouldShow = !hideInNav && zoom >= 17;
+    for (const marker of manualLabelMarkersRef.current) {
+      try {
+        marker.setMap(shouldShow ? map : null);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [sdkLoaded, navigationMode, followUser, followPaused, mapReadyEpoch]);
+
+  /** GPS 대기 중 경로 코리더 타일 프리로드 (GPS 수신 후 취소) */
+  useEffect(() => {
+    const hasGps =
+      liveUserPosition != null || liveUserPosRefProp.current?.current != null;
+    if (
+      !sdkLoaded ||
+      !followUser ||
+      !navigationMode ||
+      followPaused ||
+      hasGps ||
+      !routeLine ||
+      routeLine.length < 2 ||
+      tilePreloadDoneRef.current
+    ) {
+      return;
+    }
+
+    const map = mapInstanceRef.current;
+    const maps = window.naver?.maps as NMaps | undefined;
+    if (!map || !maps?.LatLng || !navBootstrapDoneRef.current) return;
+
+    tilePreloadDoneRef.current = true;
+    const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
+    tilePreloadCancelRef.current?.();
+    tilePreloadCancelRef.current = preloadRouteTiles(
+      map as Parameters<typeof preloadRouteTiles>[0],
+      (lat, lng) => new LatLngCtor(lat, lng),
+      routeLine,
+      () => {
+        programmaticCameraRef.current = true;
+      },
+    );
+
+    return () => {
+      tilePreloadCancelRef.current?.();
+      tilePreloadCancelRef.current = null;
+    };
+  }, [
+    sdkLoaded,
+    followUser,
+    navigationMode,
+    followPaused,
+    liveUserPosition,
+    routeLine,
+    mapReadyEpoch,
+  ]);
 
   /** 경로가 생기면 경로 전체가 보이도록 맞춤 (안내 중에는 카메라 루프가 담당) */
   useEffect(() => {
@@ -1362,6 +1439,9 @@ function CampusMapInner({
     if (navFollowSessionRef.current) return;
     navFollowSessionRef.current = true;
     navBootstrapDoneRef.current = false;
+    tilePreloadDoneRef.current = false;
+    tilePreloadCancelRef.current?.();
+    tilePreloadCancelRef.current = null;
 
     setFollowPaused(false);
     navZoomSetRef.current = false;
@@ -1471,6 +1551,8 @@ function CampusMapInner({
     });
     navSnapPendingRef.current = false;
     navBootstrapDoneRef.current = true;
+    tilePreloadCancelRef.current?.();
+    tilePreloadCancelRef.current = null;
 
     const maps = window.naver?.maps as NMaps | undefined;
     const map = mapInstanceRef.current;
@@ -1489,11 +1571,12 @@ function CampusMapInner({
         position: ll,
         zIndex: 500,
         icon: {
-          content: navArrowHtml(cameraHeading),
+          content: navArrowHtmlStatic(),
           anchor: new PointCtor(14, 14),
         },
       }) as typeof navUserMarkerRef.current;
       lastMarkerHeadingRef.current = cameraHeading;
+      setNavArrowRotation(cameraHeading);
     }
   }, [
     sdkLoaded,
@@ -1589,7 +1672,7 @@ function CampusMapInner({
         map,
         position: ll,
         zIndex: 500,
-        icon: { content: navArrowHtml(h), anchor: new PointCtor(14, 14) },
+        icon: { content: navArrowHtmlStatic(), anchor: new PointCtor(14, 14) },
       }) as typeof navUserMarkerRef.current;
     }
   }, [sdkLoaded, mapReadyEpoch, liveUserPosition, followUser, navigationMode, followPaused]);
@@ -1671,25 +1754,21 @@ function CampusMapInner({
           map,
           position: ll,
           zIndex: 500,
-          icon: { content: navArrowHtml(headingForCam), anchor: new PointCtor(14, 14) },
+          icon: { content: navArrowHtmlStatic(), anchor: new PointCtor(14, 14) },
         }) as typeof navUserMarkerRef.current;
         lastMarkerHeadingRef.current = headingForCam;
+        setNavArrowRotation(headingForCam);
       } else if (navUserMarkerRef.current?.setPosition) {
         navUserMarkerRef.current.setPosition(ll);
       }
 
-      if (PointCtor != null && navUserMarkerRef.current?.setIcon) {
-        const prevH = lastMarkerHeadingRef.current;
-        if (
-          prevH == null ||
-          Math.abs(((headingForCam - prevH + 540) % 360) - 180) > markerHeadingThreshold
-        ) {
-          lastMarkerHeadingRef.current = headingForCam;
-          navUserMarkerRef.current.setIcon({
-            content: navArrowHtml(headingForCam),
-            anchor: new PointCtor(14, 14),
-          });
-        }
+      const prevH = lastMarkerHeadingRef.current;
+      if (
+        prevH == null ||
+        Math.abs(((headingForCam - prevH + 540) % 360) - 180) > markerHeadingThreshold
+      ) {
+        lastMarkerHeadingRef.current = headingForCam;
+        setNavArrowRotation(headingForCam);
       }
 
       const bottomObstructionVh =

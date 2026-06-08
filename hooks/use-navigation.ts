@@ -136,10 +136,10 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     distanceToNext: number;
   } | null>(null);
   const metricsAnimRef = useRef<number | null>(null);
-  const lastMetricsUiAtRef = useRef(0);
   const lastProgressUiAtRef = useRef(0);
   const lastProgressStepRef = useRef(-1);
   const lastProgressComputeAtRef = useRef(0);
+  const lastProgressSegRef = useRef(0);
   const gpsSmootherRef = useRef(createGpsSmoother());
   const navigationStartedAtRef = useRef<number>(0);
   const firstGpsFixRef = useRef<LatLng | null>(null);
@@ -477,6 +477,14 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     navDestPointRef.current = route.coords[route.coords.length - 1] ?? destination?.point ?? null;
     setNavigationRoute(route);
     setNavigating(true);
+    const firstStepDist = route.steps[0]?.distance ?? route.distance;
+    metricsDisplayRef.current = { remaining: route.distance, distanceToNext: firstStepDist };
+    metricsTargetRef.current = {
+      remaining: route.distance,
+      distanceToNext: firstStepDist,
+      stepIndex: 0,
+    };
+    lastProgressSegRef.current = 0;
     setRemaining(route.distance);
     setDistanceToNext(null);
 
@@ -596,8 +604,11 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     if (computeNow - lastProgressComputeAtRef.current < 280) return;
     lastProgressComputeAtRef.current = computeNow;
 
-    const progress = computeProgress(activeRoute, userPos);
+    const progress = computeProgress(activeRoute, userPos, {
+      segmentHint: lastProgressSegRef.current,
+    });
     if (!progress) return;
+    lastProgressSegRef.current = progress.nearestSegmentIndex;
 
     const alongRoute = headingAlongRoute(activeRoute, progress);
     if (alongRoute != null) routeHeadingNavRef.current = alongRoute;
@@ -739,15 +750,8 @@ export function useNavigation(buildings: BarrierBuilding[]) {
 
         metricsDisplayRef.current = {
           remaining: nextRemaining,
-          distanceToNext: nextDist,
+          distanceToNext: Math.max(0, nextDist),
         };
-
-        const now = Date.now();
-        if (now - lastMetricsUiAtRef.current >= 220) {
-          lastMetricsUiAtRef.current = now;
-          setRemaining(Math.round(nextRemaining));
-          setDistanceToNext(Math.max(0, Math.round(nextDist)));
-        }
       }
       metricsAnimRef.current = requestAnimationFrame(tick);
     };

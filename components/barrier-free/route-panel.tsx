@@ -43,6 +43,8 @@ import { useUi } from "@/hooks/use-ui";
 import { shortBuildingName } from "@/lib/building-display-name";
 import { remainingDistanceLabel } from "@/lib/i18n/navigation";
 import { formatDistance } from "@/lib/routing/geo";
+import type { NavMetricsDisplayRef } from "@/hooks/use-navigation";
+import { useNavMetricsDisplay } from "@/hooks/use-nav-metrics-display";
 import { estimateWalkMinutes } from "@/lib/routing/route-estimate";
 import { stepDisplayMeta, stepManeuverStyle } from "@/lib/routing/step-display";
 import { isUnsurveyedBuilding } from "@/lib/merge-campus-buildings";
@@ -81,6 +83,7 @@ interface RoutePanelProps {
   onStopNav: () => void;
   currentStepIndex: number;
   remaining: number | null;
+  metricsDisplayRef?: NavMetricsDisplayRef;
   voiceEnabled: boolean;
   onToggleVoice: (v: boolean) => void;
   liveAnnouncement?: string;
@@ -393,6 +396,7 @@ export function RoutePanel(props: RoutePanelProps) {
     onStopNav,
     currentStepIndex,
     remaining,
+    metricsDisplayRef,
     voiceEnabled,
     onToggleVoice,
     liveAnnouncement = "",
@@ -404,6 +408,11 @@ export function RoutePanel(props: RoutePanelProps) {
 
   const { locale } = useAppSettings();
   const ui = useUi();
+  const { remaining: liveRemaining } = useNavMetricsDisplay(
+    metricsDisplayRef ?? { current: null },
+    navigating && metricsDisplayRef != null,
+  );
+  const displayRemaining = navigating && metricsDisplayRef ? liveRemaining : remaining;
   const SNAP_PEEK = 28;
   const SNAP_HALF = 46;
   const SNAP_FULL = 82;
@@ -825,8 +834,8 @@ export function RoutePanel(props: RoutePanelProps) {
 
             {navigating && (
               <p className="mt-2 text-center text-xs font-medium text-blue-700 dark:text-blue-300">
-                {remaining != null
-                  ? `${ui.route.navActive} · ${remainingDistanceLabel(locale)} ${formatDistance(remaining, locale)}`
+                {displayRemaining != null
+                  ? `${ui.route.navActive} · ${remainingDistanceLabel(locale)} ${formatDistance(displayRemaining, locale)}`
                   : ui.route.acquiringGps}
               </p>
             )}

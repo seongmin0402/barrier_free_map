@@ -1,14 +1,13 @@
 "use client";
 
-import { memo, useEffect, useState, type RefObject } from "react";
+import { memo } from "react";
 import { Navigation } from "lucide-react";
 import { arriveMessage, remainingDistanceLabel } from "@/lib/i18n/navigation";
 import { formatDistance } from "@/lib/routing/geo";
 import type { AppLocale } from "@/lib/app-settings";
 import type { NavMetricsDisplayRef } from "@/hooks/use-navigation";
+import { useNavMetricsDisplay } from "@/hooks/use-nav-metrics-display";
 import { cn } from "@/lib/utils";
-
-const METRICS_UI_INTERVAL_MS = 220;
 
 export type RouteNavHudProps = {
   navigating: boolean;
@@ -23,47 +22,6 @@ export type RouteNavHudProps = {
   };
 };
 
-function useHudMetrics(
-  metricsDisplayRef: NavMetricsDisplayRef,
-  active: boolean,
-): { remaining: number | null; distanceToNext: number | null } {
-  const [metrics, setMetrics] = useState<{
-    remaining: number | null;
-    distanceToNext: number | null;
-  }>({ remaining: null, distanceToNext: null });
-
-  useEffect(() => {
-    if (!active) {
-      setMetrics({ remaining: null, distanceToNext: null });
-      return;
-    }
-
-    let frame: number | null = null;
-    let lastUiAt = 0;
-
-    const tick = (now: number) => {
-      if (now - lastUiAt >= METRICS_UI_INTERVAL_MS) {
-        lastUiAt = now;
-        const snap = metricsDisplayRef.current;
-        if (snap) {
-          setMetrics({
-            remaining: Math.round(snap.remaining),
-            distanceToNext: Math.max(0, Math.round(snap.distanceToNext)),
-          });
-        }
-      }
-      frame = requestAnimationFrame(tick);
-    };
-
-    frame = requestAnimationFrame(tick);
-    return () => {
-      if (frame != null) cancelAnimationFrame(frame);
-    };
-  }, [active, metricsDisplayRef]);
-
-  return metrics;
-}
-
 function RouteNavHudInner({
   navigating,
   hasUserPos,
@@ -73,7 +31,7 @@ function RouteNavHudInner({
   metricsDisplayRef,
   labels,
 }: RouteNavHudProps) {
-  const { remaining, distanceToNext } = useHudMetrics(metricsDisplayRef, navigating);
+  const { remaining, distanceToNext } = useNavMetricsDisplay(metricsDisplayRef, navigating);
 
   if (!navigating) return null;
 
@@ -84,7 +42,6 @@ function RouteNavHudInner({
 
   return (
     <>
-      {/* 모바일 실시간 안내 — 지도 좌상단 */}
       <div
         className={cn(
           "pointer-events-none absolute z-40 max-w-[min(calc(100%-1.5rem),18rem)] sm:hidden",
@@ -113,7 +70,6 @@ function RouteNavHudInner({
         </div>
       </div>
 
-      {/* 데스크톱 안내 배너 */}
       <div className="absolute left-[calc(22rem+0.75rem)] top-3 z-40 hidden max-w-xs rounded-xl bg-blue-600 px-4 py-3 text-white shadow-xl sm:block">
         <div className="flex items-start gap-3">
           <Navigation className="mt-0.5 h-6 w-6 shrink-0" />

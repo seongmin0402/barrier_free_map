@@ -128,6 +128,7 @@ export default function RoutePage() {
           onStopNav={nav.stopNav}
           currentStepIndex={nav.currentStepIndex}
           remaining={nav.remaining}
+          metricsDisplayRef={nav.metricsDisplayRef}
           voiceEnabled={nav.voiceEnabled}
           onToggleVoice={nav.setVoiceEnabled}
           liveAnnouncement={nav.liveAnnouncement}
