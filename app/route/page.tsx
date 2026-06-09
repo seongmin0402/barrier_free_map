@@ -37,7 +37,8 @@ export default function RoutePage() {
   const ui = useUi();
   const { buildings } = useCampusBuildings(ui.page.loadError);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [sheetVh, setSheetVh] = useState(28);
+  /** RoutePanel 모바일 기본(SNAP_HALF)과 맞춤 — 지도 fitBounds 하단 여백 계산용 */
+  const [sheetVh, setSheetVh] = useState(46);
   const [followPaused, setFollowPaused] = useState(false);
 
   const nav = useNavigation(buildings);

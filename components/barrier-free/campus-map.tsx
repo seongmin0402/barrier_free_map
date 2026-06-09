@@ -378,6 +378,8 @@ type MapFitOptions = {
   maxZoom?: number;
   /** fitBounds 후에도 이보다 작게 줌아웃하지 않음 */
   minZoom?: number;
+  /** 모바일 하단 시트(vh) — fitBounds 시 아래 여백으로 반영해 캠퍼스가 시트 위쪽에 오도록 */
+  bottomObstructionVh?: number;
 };
 
 function campusOverviewFitOptions(mapLayout: "explore" | "route"): MapFitOptions {
@@ -385,10 +387,35 @@ function campusOverviewFitOptions(mapLayout: "explore" | "route"): MapFitOptions
   if (mapLayout === "explore" && mobile) {
     return { padding: 16, maxZoom: 18, minZoom: 17 };
   }
+  if (mapLayout === "route" && mobile) {
+    return { padding: 12, maxZoom: 18, minZoom: 17 };
+  }
   if (mobile) {
     return { padding: 36, maxZoom: 17, minZoom: 15 };
   }
   return { padding: 60, maxZoom: 18, minZoom: 15 };
+}
+
+function resolveFitBoundsPadding(
+  map: unknown,
+  options?: MapFitOptions,
+): number | { top: number; right: number; bottom: number; left: number } {
+  const side = options?.padding ?? 70;
+  const bottomVh = options?.bottomObstructionVh ?? 0;
+  if (bottomVh <= 0) return side;
+
+  const mapH =
+    (map as { getSize?: () => { height?: number } }).getSize?.()?.height ??
+    (typeof window !== "undefined" ? window.innerHeight : 0);
+  if (!mapH || mapH < 1) return side;
+
+  const bottomPx = Math.round((bottomVh / 100) * mapH) + 12;
+  return {
+    top: 40,
+    right: side,
+    bottom: bottomPx,
+    left: side,
+  };
 }
 
 function footprintBoundsPoints(collection: FootprintFeatureCollection | null): LatLng[] {
@@ -440,7 +467,7 @@ function fitToPoints(
     const bounds = new BoundsCtor();
     for (const p of pts) bounds.extend(new LatLngCtor(p.lat, p.lng));
     m.fitBounds?.(bounds, {
-      padding: options?.padding ?? 70,
+      padding: resolveFitBoundsPadding(m, options),
       maxZoom: options?.maxZoom ?? 17,
     });
     if (options?.minZoom != null && m.getZoom) {
@@ -458,8 +485,12 @@ function fitCampusOverview(
   buildings: BarrierBuilding[],
   footprintCollection: FootprintFeatureCollection | null,
   mapLayout: "explore" | "route",
+  bottomObstructionVh = 0,
 ) {
-  const opts = campusOverviewFitOptions(mapLayout);
+  const opts: MapFitOptions = {
+    ...campusOverviewFitOptions(mapLayout),
+    ...(bottomObstructionVh > 0 ? { bottomObstructionVh } : {}),
+  };
   const footprintPts = footprintBoundsPoints(footprintCollection);
   if (footprintPts.length >= 2) {
     fitToPoints(maps, map, footprintPts, opts);
@@ -904,7 +935,8 @@ function CampusMapInner({
 
     const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
 
-    const initialZoom = isMobileMapViewport() && mapLayout === "explore" ? 17 : 16;
+    const initialZoom =
+      isMobileMapViewport() && (mapLayout === "explore" || mapLayout === "route") ? 17 : 16;
 
     const map = new MapCtor(el, {
       center: new LatLngCtor(centerMemo.lat, centerMemo.lng),
@@ -1014,8 +1046,18 @@ function CampusMapInner({
       }
     }
 
+    const routeSheetVh =
+      mapLayout === "route" && isMobileMapViewport() ? mobileSheetVhRef.current : 0;
+
     const applyCampusFit = () => {
-      fitCampusOverview(maps as NMaps, map, buildings, footprintCollection, mapLayout);
+      fitCampusOverview(
+        maps as NMaps,
+        map,
+        buildings,
+        footprintCollection,
+        mapLayout,
+        routeSheetVh,
+      );
     };
 
     applyCampusFit();
@@ -1045,20 +1087,54 @@ function CampusMapInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sdkLoaded, clientId, centerMemo.lat, centerMemo.lng, buildings, teardown, showFacilityPins, mapLayout, footprintCollection]);
 
-  /** 폴리곤 로드 후 모바일 탐색 화면 — 한 번 더 캠퍼스에 맞춤 (초기 fitBounds 시 영역이 넓게 잡히는 경우 보정) */
+  /** 폴리곤 로드 후 모바일 — 한 번 더 캠퍼스에 맞춤 (초기 fitBounds 시 영역이 넓게 잡히는 경우 보정) */
   useEffect(() => {
-    if (!sdkLoaded || mapLayout !== "explore" || !footprintCollection?.features.length) return;
+    if (!sdkLoaded || !footprintCollection?.features.length) return;
     if (!isMobileMapViewport()) return;
+    if (mapLayout !== "explore" && mapLayout !== "route") return;
+    if (mapLayout === "route" && (navigationMode || followUser)) return;
+
     const map = mapInstanceRef.current;
     const maps = window.naver?.maps as NMaps | undefined;
     if (!map || !maps) return;
 
-    exploreFitAfterFootprintRef.current = true;
-    fitCampusOverview(maps, map, buildings, footprintCollection, mapLayout);
+    const sheetVh = mapLayout === "route" ? mobileSheetVhRef.current : 0;
+    if (mapLayout === "explore") exploreFitAfterFootprintRef.current = true;
+
+    const refit = () =>
+      fitCampusOverview(maps, map, buildings, footprintCollection, mapLayout, sheetVh);
+
+    refit();
     requestAnimationFrame(() => {
-      fitCampusOverview(maps, map, buildings, footprintCollection, mapLayout);
+      refit();
+      requestAnimationFrame(refit);
     });
-  }, [sdkLoaded, mapLayout, footprintCollection, buildings, mapReadyEpoch]);
+  }, [sdkLoaded, mapLayout, footprintCollection, buildings, mapReadyEpoch, navigationMode, followUser]);
+
+  /** 길찾기 모바일 — 하단 시트 높이에 맞춰 캠퍼스 뷰 재맞춤 */
+  useEffect(() => {
+    if (!sdkLoaded || mapLayout !== "route" || !isMobileMapViewport()) return;
+    if (navigationMode || followUser) return;
+
+    const map = mapInstanceRef.current;
+    const maps = window.naver?.maps as NMaps | undefined;
+    if (!map || !maps) return;
+
+    const refit = () =>
+      fitCampusOverview(
+        maps,
+        map,
+        buildings,
+        footprintCollection,
+        mapLayout,
+        mobileSheetVhRef.current,
+      );
+
+    requestAnimationFrame(() => {
+      refit();
+      requestAnimationFrame(refit);
+    });
+  }, [sdkLoaded, mapLayout, mobileSheetVh, footprintCollection, buildings, navigationMode, followUser, mapReadyEpoch]);
 
   useEffect(() => {
     if (!sdkLoaded || !footprintCollection?.features.length) return;
@@ -1933,7 +2009,16 @@ function CampusMapInner({
   const showCampusOverview = useCallback(() => {
     const maps = window.naver?.maps as NMaps | undefined;
     if (!maps || !mapInstanceRef.current) return;
-    fitCampusOverview(maps, mapInstanceRef.current, buildings, footprintCollection, mapLayout);
+    const sheetVh =
+      mapLayout === "route" && isMobileMapViewport() ? mobileSheetVhRef.current : 0;
+    fitCampusOverview(
+      maps,
+      mapInstanceRef.current,
+      buildings,
+      footprintCollection,
+      mapLayout,
+      sheetVh,
+    );
   }, [buildings, footprintCollection, mapLayout]);
 
   const applyMapType = useCallback((key: MapTypeOptionId) => {
