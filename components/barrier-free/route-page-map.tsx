@@ -29,6 +29,7 @@ export type RoutePageMapProps = {
   routeElevatorIds: Set<string>;
   onBuildingSelect: (id: string) => void;
   onMapPick: (point: LatLng) => void;
+  onFollowPausedChange?: (paused: boolean) => void;
 };
 
 function RoutePageMapInner({
@@ -50,6 +51,7 @@ function RoutePageMapInner({
   routeElevatorIds,
   onBuildingSelect,
   onMapPick,
+  onFollowPausedChange,
 }: RoutePageMapProps) {
   const mapRouteDisplay = useMemo(() => {
     if (!route?.coords || route.coords.length < 2) {
@@ -91,6 +93,7 @@ function RoutePageMapInner({
       mobileSheetVh={mobileSheetVh}
       elevators={elevators}
       routeElevatorIds={routeElevatorIds}
+      onFollowPausedChange={onFollowPausedChange}
     />
   );
 }
@@ -122,6 +125,7 @@ function mapPropsAreEqual(prev: RoutePageMapProps, next: RoutePageMapProps): boo
     "navMotionRef",
     "onBuildingSelect",
     "onMapPick",
+    "onFollowPausedChange",
   ];
 
   for (const key of stableKeys) {

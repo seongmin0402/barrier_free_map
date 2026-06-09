@@ -90,6 +90,8 @@ interface CampusMapProps {
   /** 메인 지도 우측 컨트롤에 표시할 길찾기 링크 */
   directionsHref?: string;
   directionsLabel?: string;
+  /** 지도 추적 일시정지 상태 — 길찾기 페이지 HUD 배치용 */
+  onFollowPausedChange?: (paused: boolean) => void;
 }
 
 function deriveCenter(items: BarrierBuilding[]) {
@@ -281,6 +283,7 @@ function campusMapPropsAreEqual(prev: CampusMapProps, next: CampusMapProps): boo
     "directionsLabel",
     "onBuildingSelect",
     "onMapPick",
+    "onFollowPausedChange",
     "liveUserPositionRef",
     "deviceHeadingRef",
     "navMotionRef",
@@ -546,6 +549,7 @@ function CampusMapInner({
   routeElevatorIds,
   directionsHref,
   directionsLabel,
+  onFollowPausedChange,
 }: CampusMapProps) {
   const ui = useUi();
   const clientId = process.env.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID ?? "";
@@ -575,6 +579,14 @@ function CampusMapInner({
   const myLocationMarkerRef = useRef<{ setMap: (v: unknown) => void; setPosition?: (p: unknown) => void } | null>(null);
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
   const [followPaused, setFollowPaused] = useState(false);
+
+  useEffect(() => {
+    onFollowPausedChange?.(followPaused);
+  }, [followPaused, onFollowPausedChange]);
+
+  useEffect(() => {
+    if (!navigationMode) onFollowPausedChange?.(false);
+  }, [navigationMode, onFollowPausedChange]);
   const displayPosRef = useRef<LatLng | null>(null);
   const displayHeadingRef = useRef(0);
   const targetPosRef = useRef<LatLng | null>(null);
@@ -2191,7 +2203,7 @@ function CampusMapInner({
           </div>
         )}
 
-        {navigationMode && followPaused && (
+        {navigationMode && followPaused && mapLayout !== "route" && (
           <div
             className={cn(
               mapBannerClass,

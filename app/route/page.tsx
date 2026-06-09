@@ -21,6 +21,7 @@ export default function RoutePage() {
   const { buildings } = useCampusBuildings(ui.page.loadError);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [sheetVh, setSheetVh] = useState(28);
+  const [followPaused, setFollowPaused] = useState(false);
 
   const nav = useNavigation(buildings);
   const { setOpen: setNavOpen, launchToBuildingFromGps } = nav;
@@ -81,6 +82,8 @@ export default function RoutePage() {
           bannerText={bannerText}
           locale={locale}
           metricsDisplayRef={nav.metricsDisplayRef}
+          followPaused={followPaused}
+          followPausedHint={ui.route.followPausedHint}
           labels={hudLabels}
         />
 
@@ -103,6 +106,7 @@ export default function RoutePage() {
           routeElevatorIds={nav.routeElevatorIds}
           onBuildingSelect={nav.handleBuildingSelect}
           onMapPick={nav.handleMapPick}
+          onFollowPausedChange={setFollowPaused}
         />
 
         <RoutePanel

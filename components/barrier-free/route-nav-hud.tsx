@@ -16,6 +16,8 @@ export type RouteNavHudProps = {
   bannerText: string;
   locale: AppLocale;
   metricsDisplayRef: NavMetricsDisplayRef;
+  followPaused?: boolean;
+  followPausedHint?: string;
   labels: {
     navActive: string;
     acquiringGps: string;
@@ -29,6 +31,8 @@ function RouteNavHudInner({
   bannerText,
   locale,
   metricsDisplayRef,
+  followPaused = false,
+  followPausedHint,
   labels,
 }: RouteNavHudProps) {
   const { remaining, distanceToNext } = useNavMetricsDisplay(metricsDisplayRef, navigating);
@@ -40,14 +44,25 @@ function RouteNavHudInner({
       ? `${remainingDistanceLabel(locale)} ${formatDistance(remaining, locale)}`
       : null;
 
+  const followPausedBanner =
+    followPaused && followPausedHint ? (
+      <div className="rounded-lg border border-border bg-card/95 px-3 py-2 text-xs leading-snug text-muted-foreground shadow-md backdrop-blur-sm">
+        {followPausedHint}
+      </div>
+    ) : null;
+
+  const mobileHudTop = "top-[max(0.75rem,env(safe-area-inset-top))]";
+
   return (
     <>
       <div
         className={cn(
-          "pointer-events-none absolute z-40 max-w-[min(calc(100%-1.5rem),18rem)] sm:hidden",
-          "left-3 top-[max(0.75rem,env(safe-area-inset-top))]",
+          "pointer-events-none absolute z-40 flex max-w-[min(calc(100%-1.5rem),18rem)] flex-col gap-2 sm:hidden",
+          "left-3",
+          mobileHudTop,
         )}
       >
+        {followPausedBanner}
         <div className="rounded-xl bg-blue-600 px-3 py-2.5 text-white shadow-xl ring-1 ring-blue-500/40">
           {!hasUserPos ? (
             <>
@@ -70,7 +85,14 @@ function RouteNavHudInner({
         </div>
       </div>
 
-      <div className="absolute left-[calc(22rem+0.75rem)] top-3 z-40 hidden max-w-xs rounded-xl bg-blue-600 px-4 py-3 text-white shadow-xl sm:block">
+      <div
+        className={cn(
+          "absolute left-[calc(22rem+0.75rem)] z-40 hidden max-w-xs flex-col gap-2 sm:flex",
+          mobileHudTop,
+        )}
+      >
+        {followPausedBanner}
+        <div className="rounded-xl bg-blue-600 px-4 py-3 text-white shadow-xl">
         <div className="flex items-start gap-3">
           <Navigation className="mt-0.5 h-6 w-6 shrink-0" />
           <div className="min-w-0">
@@ -96,6 +118,7 @@ function RouteNavHudInner({
             ) : null}
           </div>
         </div>
+        </div>
       </div>
     </>
   );
@@ -109,6 +132,8 @@ function hudPropsAreEqual(prev: RouteNavHudProps, next: RouteNavHudProps): boole
     prev.bannerText === next.bannerText &&
     prev.locale === next.locale &&
     prev.metricsDisplayRef === next.metricsDisplayRef &&
+    prev.followPaused === next.followPaused &&
+    prev.followPausedHint === next.followPausedHint &&
     prev.labels.navActive === next.labels.navActive &&
     prev.labels.acquiringGps === next.labels.acquiringGps
   );
