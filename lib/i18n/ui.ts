@@ -245,14 +245,14 @@ const ko: UiText = {
     elevator: "엘리베이터",
     ramp: "경사로",
     toilet: "장애인 화장실",
-    braille: "점자블록",
+    braille: "점자 표시",
     "auto-door": "자동문",
   },
   facilitiesShort: {
     elevator: "엘리베이터",
     ramp: "경사로",
     toilet: "화장실",
-    braille: "점자",
+    braille: "점자 표시",
     "auto-door": "자동문",
   },
   grade: {

@@ -20,7 +20,7 @@ const facilitySearchTerms: Record<string, string[]> = {
   elevator: ["elevator", "엘리베이터", "승강기"],
   ramp: ["ramp", "경사로"],
   toilet: ["toilet", "화장실", "장애인 화장실"],
-  braille: ["braille", "점자", "점자블록"],
+  braille: ["braille", "점자", "점자 표시", "점자표시"],
   "auto-door": ["auto-door", "자동문", "자동 문"],
 };
 
