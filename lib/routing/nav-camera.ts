@@ -258,6 +258,8 @@ export type NavigationCameraOptions = {
   lookAheadM?: number;
   /** 카메라 look-ahead 방향(deg). 미지정 시 headingDeg 사용 */
   lookAheadHeadingDeg?: number;
+  /** true면 줌 변경 없이 중심만 이동 (내 위치 복귀 등) */
+  preserveZoom?: boolean;
 };
 
 
@@ -302,9 +304,11 @@ export function applyNavigationCamera(
 
   if (!projection?.fromCoordToOffset || !size?.width || !size?.height) {
     if (options.snap) {
-      const zoom = options.zoom ?? NAV_FOLLOW_ZOOM;
-      const curZoom = map.getZoom?.() ?? 0;
-      if (options.snap || curZoom < zoom) map.setZoom?.(zoom);
+      if (!options.preserveZoom) {
+        const zoom = options.zoom ?? NAV_FOLLOW_ZOOM;
+        const curZoom = map.getZoom?.() ?? 0;
+        if (options.snap || curZoom < zoom) map.setZoom?.(zoom);
+      }
       const heading = Number.isFinite(headingDeg) ? headingDeg : 0;
       const lookAheadHeading = Number.isFinite(options.lookAheadHeadingDeg)
         ? options.lookAheadHeadingDeg!
@@ -338,10 +342,12 @@ export function applyNavigationCamera(
     return { originX: userOffset.x, originY: userOffset.y };
   }
 
-  const zoom = options.zoom ?? NAV_FOLLOW_ZOOM;
-  const curZoom = map.getZoom?.() ?? 0;
-  if (options.snap || curZoom < zoom) {
-    map.setZoom?.(zoom);
+  if (!options.preserveZoom) {
+    const zoom = options.zoom ?? NAV_FOLLOW_ZOOM;
+    const curZoom = map.getZoom?.() ?? 0;
+    if (options.snap || curZoom < zoom) {
+      map.setZoom?.(zoom);
+    }
   }
 
   const heading = Number.isFinite(headingDeg) ? headingDeg : 0;

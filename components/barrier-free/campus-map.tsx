@@ -650,6 +650,8 @@ function CampusMapInner({
   const lastSheetVhForViewportRef = useRef(mobileSheetVh);
   const mobileSheetVhRef = useRef(mobileSheetVh);
   const programmaticCameraRef = useRef(false);
+  const programmaticCameraTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suppressFollowPauseUntilRef = useRef(0);
   const liveUserPosRefProp = useRef(liveUserPositionRef);
   liveUserPosRefProp.current = liveUserPositionRef;
   const lastCameraFrameRef = useRef(0);
@@ -666,6 +668,7 @@ function CampusMapInner({
     cameraHeading: number;
     snap?: boolean;
     adjustViewport?: boolean;
+    preserveZoom?: boolean;
   } | null>(null);
   const followPausedRef = useRef(followPaused);
   followPausedRef.current = followPaused;
@@ -693,6 +696,18 @@ function CampusMapInner({
   }, [deviceHeadingRef, navMotionRef]);
 
   const onMapIdleRef = useRef<(() => void) | null>(null);
+
+  const markProgrammaticCamera = useCallback((holdMs = 450) => {
+    programmaticCameraRef.current = true;
+    suppressFollowPauseUntilRef.current = Date.now() + holdMs;
+    if (programmaticCameraTimerRef.current != null) {
+      clearTimeout(programmaticCameraTimerRef.current);
+    }
+    programmaticCameraTimerRef.current = setTimeout(() => {
+      programmaticCameraRef.current = false;
+      programmaticCameraTimerRef.current = null;
+    }, holdMs);
+  }, []);
 
   const flushPendingNavCamera = useCallback((force = false) => {
     if (followPausedRef.current && !force) return;
@@ -732,7 +747,7 @@ function CampusMapInner({
     }
 
     try {
-      programmaticCameraRef.current = true;
+      markProgrammaticCamera(pending.snap ? 480 : 380);
       mapIsIdleRef.current = false;
       applyNavigationCamera(
         camMap,
@@ -744,6 +759,7 @@ function CampusMapInner({
           snap: pending.snap,
           bottomObstructionVh,
           adjustViewport: pending.adjustViewport,
+          preserveZoom: pending.preserveZoom,
           lookAheadHeadingDeg: pending.cameraHeading,
         },
       );
@@ -766,16 +782,19 @@ function CampusMapInner({
       pendingNavCameraRef.current = null;
     } catch {
       /* ignore */
-    } finally {
-      programmaticCameraRef.current = false;
     }
-  }, [mapLayout]);
+  }, [mapLayout, markProgrammaticCamera]);
 
   const queueNavCamera = useCallback(
     (
       user: LatLng,
       markerHeading: number,
-      opts: { snap?: boolean; adjustViewport?: boolean; force?: boolean } = {},
+      opts: {
+        snap?: boolean;
+        adjustViewport?: boolean;
+        force?: boolean;
+        preserveZoom?: boolean;
+      } = {},
     ) => {
       if (!isNavMapLatLng(user)) return;
       const cameraHeading = routeHeadingRef.current ?? markerHeading;
@@ -785,6 +804,7 @@ function CampusMapInner({
         cameraHeading,
         snap: opts.snap,
         adjustViewport: opts.adjustViewport,
+        preserveZoom: opts.preserveZoom,
       };
 
       if (opts.force || opts.snap || mapIsIdleRef.current) {
@@ -1306,6 +1326,9 @@ function CampusMapInner({
     if (routeUnchanged) {
       return;
     }
+    if (followUser && navigationMode) {
+      suppressFollowPauseUntilRef.current = Date.now() + 650;
+    }
     lastRouteDrawSigRef.current = drawSig;
 
     routeMarkersRef.current.forEach((m) => {
@@ -1369,7 +1392,7 @@ function CampusMapInner({
       });
       routeMarkersRef.current = [];
     };
-  }, [sdkLoaded, mapReadyEpoch, routeLine, routeSegments, originPoint, destPoint, ui]);
+  }, [sdkLoaded, mapReadyEpoch, routeLine, routeSegments, originPoint, destPoint, ui, followUser, navigationMode]);
 
   /** 재검색으로 경로만 바뀔 때 — 마커·카메라 스냅 없이 현재 GPS 보간 위치 유지 */
   useEffect(() => {
@@ -1384,6 +1407,7 @@ function CampusMapInner({
       lastNavRouteSigDuringFollowRef.current &&
       lastNavRouteSigDuringFollowRef.current !== sig
     ) {
+      suppressFollowPauseUntilRef.current = Date.now() + 650;
       navSnapPendingRef.current = false;
       pendingNavCameraRef.current = null;
       lastAppliedCamRef.current = null;
@@ -1594,7 +1618,7 @@ function CampusMapInner({
         : 0;
 
     try {
-      programmaticCameraRef.current = true;
+      markProgrammaticCamera(480);
       mapIsIdleRef.current = false;
       applyNavigationCamera(
         map as Parameters<typeof applyNavigationCamera>[0],
@@ -1619,8 +1643,6 @@ function CampusMapInner({
       }
     } catch {
       /* ignore */
-    } finally {
-      programmaticCameraRef.current = false;
     }
   }, [
     sdkLoaded,
@@ -1632,6 +1654,7 @@ function CampusMapInner({
     routeLine,
     mapReadyEpoch,
     mapLayout,
+    markProgrammaticCamera,
   ]);
 
   /** 첫 GPS 수신 시 즉시 사용자 위치로 맞춤 */
@@ -1710,6 +1733,7 @@ function CampusMapInner({
 
     const pauseFollow = () => {
       if (programmaticCameraRef.current) return;
+      if (Date.now() < suppressFollowPauseUntilRef.current) return;
       setFollowPaused(true);
     };
 
@@ -2044,32 +2068,44 @@ function CampusMapInner({
     [navigationMode],
   );
 
-  const resumeNavigationFollow = useCallback(() => {
-    const latest = liveUserPosRefProp.current?.current ?? targetPosRef.current;
-    if (latest && isNavMapLatLng(latest)) {
-      targetPosRef.current = latest;
-      displayPosRef.current = { ...latest };
-    }
-    pendingNavCameraRef.current = null;
+  /** 안내 중 — 유효 GPS로 줌 유지·중심만 복귀 (내 위치 / 경로 맞춤) */
+  const softRecenterOnUser = useCallback(() => {
+    const latest =
+      liveUserPosRefProp.current?.current ??
+      targetPosRef.current ??
+      displayPosRef.current;
+    if (!latest || !isNavMapLatLng(latest)) return;
+
+    targetPosRef.current = latest;
+    displayPosRef.current = { ...latest };
+    navSnapPendingRef.current = false;
     setFollowPaused(false);
-  }, []);
+
+    const heading = resolveFusedHeading();
+    queueNavCamera(latest, heading, {
+      snap: true,
+      adjustViewport: true,
+      preserveZoom: true,
+      force: true,
+    });
+  }, [queueNavCamera, resolveFusedHeading]);
 
   const fitRouteOnMap = useCallback(() => {
     if (!routeLine || routeLine.length < 2) return;
     if (navigationMode) {
-      resumeNavigationFollow();
+      softRecenterOnUser();
       return;
     }
     setFollowPaused(true);
     const maps = window.naver?.maps as NMaps | undefined;
     if (!maps || !mapInstanceRef.current) return;
     fitToPoints(maps as NMaps, mapInstanceRef.current, routeLine, { padding: 70, maxZoom: 17 });
-  }, [routeLine, navigationMode, resumeNavigationFollow]);
+  }, [routeLine, navigationMode, softRecenterOnUser]);
 
   const handleNavigationLocatePress = useCallback(() => {
     if (!navigationMode) return;
-    resumeNavigationFollow();
-  }, [navigationMode, resumeNavigationFollow]);
+    softRecenterOnUser();
+  }, [navigationMode, softRecenterOnUser]);
 
   const showCampusOverview = useCallback(() => {
     const maps = window.naver?.maps as NMaps | undefined;

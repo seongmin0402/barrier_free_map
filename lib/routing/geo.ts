@@ -34,6 +34,13 @@ export function filterNavMapPoints(list: LatLng[]): LatLng[] {
   return list.filter(isNavMapLatLng);
 }
 
+/** GPS 수신용 — 캠퍼스 밖이어도 유효 좌표면 허용 (카메라용 isNavMapLatLng와 분리) */
+export function isPlausibleGpsLatLng(p: LatLng): boolean {
+  if (!isFiniteLatLng(p)) return false;
+  if (Math.abs(p.lat) < 1e-4 && Math.abs(p.lng) < 1e-4) return false;
+  return true;
+}
+
 const EARTH_RADIUS_M = 6371000;
 
 function toRad(deg: number): number {
