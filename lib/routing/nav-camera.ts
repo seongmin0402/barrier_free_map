@@ -1,4 +1,4 @@
-import { bearingDeg, type LatLng } from "./geo";
+import { bearingDeg, isNavMapLatLng, type LatLng } from "./geo";
 import type { ComputedRoute } from "./types";
 import type { RouteProgress } from "./progress";
 
@@ -260,14 +260,6 @@ export type NavigationCameraOptions = {
   lookAheadHeadingDeg?: number;
 };
 
-function isValidLatLng(user: LatLng): boolean {
-  return (
-    Number.isFinite(user.lat) &&
-    Number.isFinite(user.lng) &&
-    Math.abs(user.lat) <= 90 &&
-    Math.abs(user.lng) <= 180
-  );
-}
 
 /** 하단 시트를 고려한 사용자 마커 목표 화면 좌표 */
 function navigationUserScreenTarget(
@@ -302,7 +294,7 @@ export function applyNavigationCamera(
   headingDeg: number,
   options: NavigationCameraOptions = {},
 ): { originX: number; originY: number } | null {
-  if (!isValidLatLng(user)) return null;
+  if (!isNavMapLatLng(user)) return null;
 
   const projection = map.getProjection?.();
   const size = map.getSize?.();

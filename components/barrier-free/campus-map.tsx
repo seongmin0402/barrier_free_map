@@ -24,7 +24,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { BarrierBuilding } from "@/lib/building-types";
-import type { LatLng } from "@/lib/routing/geo";
+import { filterNavMapPoints, isNavMapLatLng, type LatLng } from "@/lib/routing/geo";
 import type { ElevatorRecord } from "@/lib/routing/elevators";
 import {
   applyNavigationCamera,
@@ -464,7 +464,7 @@ function fitToPoints(
   const BoundsCtor = maps.LatLngBounds as unknown as new (a?: unknown, b?: unknown) => {
     extend(ll: unknown): void;
   };
-  const pts = list.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+  const pts = filterNavMapPoints(list);
   const m = map as {
     setCenter?: (c: unknown) => void;
     setZoom?: (z: number) => void;
@@ -777,6 +777,7 @@ function CampusMapInner({
       markerHeading: number,
       opts: { snap?: boolean; adjustViewport?: boolean; force?: boolean } = {},
     ) => {
+      if (!isNavMapLatLng(user)) return;
       const cameraHeading = routeHeadingRef.current ?? markerHeading;
       pendingNavCameraRef.current = {
         user,
@@ -1392,7 +1393,7 @@ function CampusMapInner({
         liveUserPosRefProp.current?.current ??
         targetPosRef.current ??
         displayPosRef.current;
-      if (keep) {
+      if (keep && isNavMapLatLng(keep)) {
         targetPosRef.current = keep;
         displayPosRef.current = { ...keep };
       }
@@ -1637,6 +1638,7 @@ function CampusMapInner({
   useEffect(() => {
     const firstPos = liveUserPosition ?? liveUserPosRefProp.current?.current;
     if (!sdkLoaded || !followUser || !navigationMode || followPaused || !firstPos) return;
+    if (!isNavMapLatLng(firstPos)) return;
     if (hasNavCenteredRef.current) return;
 
     const heading = resolveFusedHeading();
@@ -1820,14 +1822,22 @@ function CampusMapInner({
         return;
       }
 
+      const targetOk = isNavMapLatLng(target);
       let display = displayPosRef.current;
-      const shouldSnap = navSnapPendingRef.current || !display;
-      if (shouldSnap || !display) {
-        display = { ...target };
-        navSnapPendingRef.current = false;
-      } else {
+      const snapCamera = (navSnapPendingRef.current || !display) && targetOk;
+      if (snapCamera || !display) {
+        if (targetOk) {
+          display = { ...target };
+          navSnapPendingRef.current = false;
+        }
+      } else if (targetOk && display) {
         const posT = 1 - (1 - posLerp) ** dt;
         display = lerpLatLng(display, target, posT);
+      }
+
+      if (!display) {
+        navAnimFrameRef.current = requestAnimationFrame(tick);
+        return;
       }
       displayPosRef.current = display;
 
@@ -1879,11 +1889,11 @@ function CampusMapInner({
 
       const needsViewportAdjust = !viewportAdjustedRef.current;
 
-      if (shouldSnap || needsViewportAdjust) {
+      if (snapCamera || needsViewportAdjust) {
         queueNavCamera(display, headingForCam, {
-          snap: shouldSnap,
+          snap: snapCamera,
           adjustViewport: needsViewportAdjust,
-          force: shouldSnap,
+          force: snapCamera,
         });
         navAnimFrameRef.current = requestAnimationFrame(tick);
         return;
@@ -2034,28 +2044,27 @@ function CampusMapInner({
     [navigationMode],
   );
 
+  const resumeNavigationFollow = useCallback(() => {
+    const latest = liveUserPosRefProp.current?.current ?? targetPosRef.current;
+    if (latest && isNavMapLatLng(latest)) {
+      targetPosRef.current = latest;
+      displayPosRef.current = { ...latest };
+    }
+    pendingNavCameraRef.current = null;
+    setFollowPaused(false);
+  }, []);
+
   const fitRouteOnMap = useCallback(() => {
     if (!routeLine || routeLine.length < 2) return;
+    if (navigationMode) {
+      resumeNavigationFollow();
+      return;
+    }
     setFollowPaused(true);
     const maps = window.naver?.maps as NMaps | undefined;
     if (!maps || !mapInstanceRef.current) return;
     fitToPoints(maps as NMaps, mapInstanceRef.current, routeLine, { padding: 70, maxZoom: 17 });
-  }, [routeLine]);
-
-  const resumeNavigationFollow = useCallback(() => {
-    const latest = liveUserPosRefProp.current?.current ?? targetPosRef.current;
-    if (latest) {
-      targetPosRef.current = latest;
-      displayPosRef.current = { ...latest };
-    }
-    lastAppliedCamRef.current = null;
-    pendingNavCameraRef.current = null;
-    navZoomSetRef.current = false;
-    navSnapPendingRef.current = true;
-    hasNavCenteredRef.current = false;
-    viewportAdjustedRef.current = false;
-    setFollowPaused(false);
-  }, []);
+  }, [routeLine, navigationMode, resumeNavigationFollow]);
 
   const handleNavigationLocatePress = useCallback(() => {
     if (!navigationMode) return;

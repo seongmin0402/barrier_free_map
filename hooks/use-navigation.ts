@@ -14,7 +14,7 @@ import {
 } from "@/lib/i18n/navigation";
 import { getUi } from "@/lib/i18n/ui";
 import type { LatLng } from "@/lib/routing/geo";
-import { formatDistance, haversineMeters, bearingDeg } from "@/lib/routing/geo";
+import { formatDistance, haversineMeters, bearingDeg, isNavMapLatLng } from "@/lib/routing/geo";
 import {
   buildRoutingGraph,
   mainEntranceForBuilding,
@@ -519,7 +519,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     if (Date.now() - lastManualRerouteAtRef.current < MANUAL_REROUTE_COOLDOWN_MS) return;
 
     const pos = userPosRef.current;
-    if (!pos) {
+    if (!pos || !isNavMapLatLng(pos)) {
       setGeoError(t.errors.geoUnavailable);
       return;
     }
@@ -794,6 +794,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     const applyGpsReading = (pos: GeolocationPosition) => {
       const raw = { lat: pos.coords.latitude, lng: pos.coords.longitude };
       const here = gpsSmootherRef.current.filter(raw, pos.coords.accuracy);
+      if (!isNavMapLatLng(here)) return;
       const isFirstFix = !firstGpsFixRef.current;
       if (!firstGpsFixRef.current) firstGpsFixRef.current = here;
 

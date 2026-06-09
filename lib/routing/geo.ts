@@ -5,6 +5,35 @@ export interface LatLng {
   lng: number;
 }
 
+/** 공주대 신관 캠퍼스 주변 — 잘못된 GPS·경로 좌표로 지도가 튀는 것 방지 */
+export const CAMPUS_NAV_MAP_BOUNDS = {
+  minLat: 36.43,
+  maxLat: 36.52,
+  minLng: 127.08,
+  maxLng: 127.2,
+} as const;
+
+export function isFiniteLatLng(p: LatLng): boolean {
+  return (
+    Number.isFinite(p.lat) &&
+    Number.isFinite(p.lng) &&
+    Math.abs(p.lat) <= 90 &&
+    Math.abs(p.lng) <= 180
+  );
+}
+
+/** 길안내·지도 카메라에 쓸 수 있는 좌표 (null island·캠퍼스 밖 오류 GPS 제외) */
+export function isNavMapLatLng(p: LatLng): boolean {
+  if (!isFiniteLatLng(p)) return false;
+  if (Math.abs(p.lat) < 1e-4 && Math.abs(p.lng) < 1e-4) return false;
+  const { minLat, maxLat, minLng, maxLng } = CAMPUS_NAV_MAP_BOUNDS;
+  return p.lat >= minLat && p.lat <= maxLat && p.lng >= minLng && p.lng <= maxLng;
+}
+
+export function filterNavMapPoints(list: LatLng[]): LatLng[] {
+  return list.filter(isNavMapLatLng);
+}
+
 const EARTH_RADIUS_M = 6371000;
 
 function toRad(deg: number): number {
