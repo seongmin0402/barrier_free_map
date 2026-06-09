@@ -2,7 +2,16 @@
 
 import { useEffect, useRef, useCallback, useMemo, useState, memo, type RefObject } from "react";
 import Script from "next/script";
-import { Plus, Minus, Locate, Maximize2, SlidersHorizontal, Route, Navigation } from "lucide-react";
+import {
+  Plus,
+  Minus,
+  Locate,
+  Maximize2,
+  SlidersHorizontal,
+  Route,
+  Navigation,
+  RefreshCw,
+} from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -93,6 +102,8 @@ interface CampusMapProps {
   directionsLabel?: string;
   /** 지도 추적 일시정지 상태 — 길찾기 페이지 HUD 배치용 */
   onFollowPausedChange?: (paused: boolean) => void;
+  /** 안내 중 현재 위치 기준 경로 재검색 */
+  onRerouteRoute?: () => void;
 }
 
 function deriveCenter(items: BarrierBuilding[]) {
@@ -287,6 +298,7 @@ function campusMapPropsAreEqual(prev: CampusMapProps, next: CampusMapProps): boo
     "onBuildingSelect",
     "onMapPick",
     "onFollowPausedChange",
+    "onRerouteRoute",
     "liveUserPositionRef",
     "deviceHeadingRef",
     "navMotionRef",
@@ -587,6 +599,7 @@ function CampusMapInner({
   directionsHref,
   directionsLabel,
   onFollowPausedChange,
+  onRerouteRoute,
 }: CampusMapProps) {
   const ui = useUi();
   const clientId = process.env.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID ?? "";
@@ -2438,6 +2451,19 @@ function CampusMapInner({
                   title={followPaused ? ui.route.resumeFollow : ui.map.myLocationTitle}
                 >
                   <Locate className="h-4 w-4 sm:h-5 sm:w-5" />
+                </Button>
+              )}
+              {navigationMode && onRerouteRoute && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon"
+                  onClick={onRerouteRoute}
+                  className="h-9 w-9 shadow-md"
+                  aria-label={ui.route.rerouteManual}
+                  title={ui.route.rerouteManual}
+                >
+                  <RefreshCw className="h-4 w-4 sm:h-5 sm:w-5" />
                 </Button>
               )}
               {routeLine && routeLine.length >= 2 && (

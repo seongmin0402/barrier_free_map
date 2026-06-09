@@ -12,3 +12,6 @@ export const REROUTE_MIN_START_MS = 4000;
 
 /** 연속 재탐색 최소 간격(ms) */
 export const REROUTE_COOLDOWN_MS = 8000;
+
+/** 수동 재검색 버튼 연타 방지(ms) */
+export const MANUAL_REROUTE_COOLDOWN_MS = 2500;

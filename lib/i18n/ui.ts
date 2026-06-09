@@ -155,6 +155,8 @@ export type UiText = {
     total: string;
     fitRoute: string;
     resumeFollow: string;
+    rerouteManual: string;
+    rerouteFinding: string;
     followPausedHint: string;
     errors: {
       loadingWalkways: string;
@@ -391,6 +393,8 @@ const ko: UiText = {
     total: "총",
     fitRoute: "경로 맞춤",
     resumeFollow: "추적 재개",
+    rerouteManual: "경로 재검색",
+    rerouteFinding: "경로를 다시 찾습니다.",
     followPausedHint: "지도를 직접 이동 중 — 내 위치 버튼을 누르면 다시 따라갑니다",
     errors: {
       loadingWalkways: "보행로 데이터를 불러오는 중입니다…",
@@ -639,6 +643,8 @@ const en: UiText = {
     total: "Total",
     fitRoute: "Fit route",
     resumeFollow: "Resume tracking",
+    rerouteManual: "Recalculate route",
+    rerouteFinding: "Finding a new route…",
     followPausedHint: "Map moved manually — tap My location to follow again",
     errors: {
       loadingWalkways: "Loading walkway data…",

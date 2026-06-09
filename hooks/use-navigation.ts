@@ -24,6 +24,7 @@ import { elevatorIdsOnRoute, parseElevators, type ElevatorRecord } from "@/lib/r
 import { computeRoute, computeRoutePair } from "@/lib/routing/route";
 import { computeProgress } from "@/lib/routing/progress";
 import {
+  MANUAL_REROUTE_COOLDOWN_MS,
   OFF_ROUTE_ARRIVE_MAX_M,
   OFF_ROUTE_REROUTE_M,
   REROUTE_COOLDOWN_MS,
@@ -409,6 +410,63 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     [navigating, selectBuilding, useCurrentLocation],
   );
 
+  const applyRerouteResult = useCallback(
+    (newRoute: ComputedRoute, options?: { departAnnouncement?: string }) => {
+      lastRerouteAtRef.current = Date.now();
+      setNavigationRoute(newRoute);
+      setCurrentStepIndex(0);
+      setRemaining(newRoute.distance);
+      setDistanceToNext(null);
+      setRerouteNotice(true);
+      lastLiveStepIndexRef.current = -1;
+      speechPhaseRef.current = { stepIndex: -1, phase: "far" };
+      navSpeechBlockedUntilRef.current = Date.now() + 5500;
+      lastProgressStepRef.current = -1;
+      lastProgressSegRef.current = 0;
+
+      if (options?.departAnnouncement) {
+        announce(options.departAnnouncement, { force: true });
+        const departStep =
+          newRoute.steps.find((s) => s.maneuver === "depart") ?? newRoute.steps[0];
+        if (departStep) {
+          lastSpokenStepRef.current = newRoute.steps.indexOf(departStep);
+        }
+      }
+    },
+    [announce],
+  );
+
+  /** 안내 중 — 현재 GPS에서 목적지까지 수동 재탐색 */
+  const rerouteFromCurrentPosition = useCallback(() => {
+    if (!navigating) return;
+    const navLocale = localeRef.current;
+    const t = getUi(navLocale).route;
+    if (Date.now() - lastRerouteAtRef.current < MANUAL_REROUTE_COOLDOWN_MS) return;
+
+    const pos = userPosRef.current;
+    if (!pos) {
+      setGeoError(t.errors.geoUnavailable);
+      return;
+    }
+
+    const dest = destinationRef.current;
+    const g = graphRef.current;
+    if (!dest || !g?.nodes.size) return;
+
+    announce(t.rerouteFinding, { force: true });
+
+    const destPoint = navDestPointRef.current ?? dest.point;
+    const newRoute = computeRoute(g, pos, destPoint, navLocale, {
+      profile: routeProfileRef.current,
+    });
+
+    if (newRoute) {
+      applyRerouteResult(newRoute);
+    } else {
+      setGeoError(t.errors.rerouteFailed);
+    }
+  }, [navigating, announce, applyRerouteResult]);
+
   const stopNav = useCallback(() => {
     setNavigating(false);
     setNavigationRoute(null);
@@ -636,23 +694,12 @@ export function useNavigation(buildings: BarrierBuilding[]) {
           profile: routeProfileRef.current,
         });
         if (newRoute) {
-          lastRerouteAtRef.current = Date.now();
-          setNavigationRoute(newRoute);
-          setCurrentStepIndex(0);
-          setRemaining(newRoute.distance);
-          setDistanceToNext(null);
-          setRerouteNotice(true);
-          lastLiveStepIndexRef.current = -1;
-          speechPhaseRef.current = { stepIndex: -1, phase: "far" };
-          navSpeechBlockedUntilRef.current = Date.now() + 5500;
-
           const departStep =
             newRoute.steps.find((s) => s.maneuver === "depart") ?? newRoute.steps[0];
-          if (departStep) {
-            const rerouteText = offRouteRerouteSpeech(navLocale, departStep.text);
-            announce(rerouteText, { force: true });
-            lastSpokenStepRef.current = newRoute.steps.indexOf(departStep);
-          }
+          const rerouteText = departStep
+            ? offRouteRerouteSpeech(navLocale, departStep.text)
+            : undefined;
+          applyRerouteResult(newRoute, { departAnnouncement: rerouteText });
           return;
         }
         setGeoError(getUi(navLocale).route.errors.rerouteFailed);
@@ -726,7 +773,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       announce(arriveMessage(navLocale), { force: true });
       stopNav();
     }
-  }, [navigating, navigationRoute, userPos, stopNav, hasArrived, announce]);
+  }, [navigating, navigationRoute, userPos, stopNav, hasArrived, announce, applyRerouteResult]);
 
   /** 남은 거리·다음 안내 거리 부드럽게 보간 */
   useEffect(() => {
@@ -839,5 +886,6 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     launchToBuildingFromGps,
     startNav,
     stopNav,
+    rerouteFromCurrentPosition,
   };
 }

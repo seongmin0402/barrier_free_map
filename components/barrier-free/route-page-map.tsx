@@ -30,6 +30,7 @@ export type RoutePageMapProps = {
   onBuildingSelect: (id: string) => void;
   onMapPick: (point: LatLng) => void;
   onFollowPausedChange?: (paused: boolean) => void;
+  onRerouteRoute?: () => void;
 };
 
 function RoutePageMapInner({
@@ -52,6 +53,7 @@ function RoutePageMapInner({
   onBuildingSelect,
   onMapPick,
   onFollowPausedChange,
+  onRerouteRoute,
 }: RoutePageMapProps) {
   const mapRouteDisplay = useMemo(() => {
     if (!route?.coords || route.coords.length < 2) {
@@ -94,6 +96,7 @@ function RoutePageMapInner({
       elevators={elevators}
       routeElevatorIds={routeElevatorIds}
       onFollowPausedChange={onFollowPausedChange}
+      onRerouteRoute={onRerouteRoute}
     />
   );
 }
@@ -126,6 +129,7 @@ function mapPropsAreEqual(prev: RoutePageMapProps, next: RoutePageMapProps): boo
     "onBuildingSelect",
     "onMapPick",
     "onFollowPausedChange",
+    "onRerouteRoute",
   ];
 
   for (const key of stableKeys) {

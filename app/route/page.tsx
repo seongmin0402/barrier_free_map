@@ -126,6 +126,7 @@ export default function RoutePage() {
             onBuildingSelect={nav.handleBuildingSelect}
             onMapPick={nav.handleMapPick}
             onFollowPausedChange={setFollowPaused}
+            onRerouteRoute={nav.rerouteFromCurrentPosition}
           />
         </div>
 
