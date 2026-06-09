@@ -1,18 +1,35 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { parseRouteLaunchSearch } from "@/lib/routing/route-launch";
 import { useAppSettings } from "@/components/app-settings-provider";
 import { RouteNavHud } from "@/components/barrier-free/route-nav-hud";
-import { RoutePageMap } from "@/components/barrier-free/route-page-map";
 import { RoutePanel } from "@/components/barrier-free/route-panel";
-import { SettingsPanel } from "@/components/barrier-free/settings-panel";
 import { useNavigation } from "@/hooks/use-navigation";
 import { useCampusBuildings } from "@/hooks/use-campus-buildings";
 import { useUi } from "@/hooks/use-ui";
 import { NavLiveRegion } from "@/components/barrier-free/nav-live-region";
 import { arriveMessage } from "@/lib/i18n/navigation";
+
+const RoutePageMap = dynamic(
+  () => import("@/components/barrier-free/route-page-map").then((m) => m.RoutePageMap),
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        className="relative min-h-0 flex-1 animate-pulse bg-muted/40"
+        aria-hidden
+      />
+    ),
+  },
+);
+
+const SettingsPanel = dynamic(
+  () => import("@/components/barrier-free/settings-panel").then((m) => m.SettingsPanel),
+  { ssr: false },
+);
 
 export default function RoutePage() {
   const router = useRouter();
@@ -87,27 +104,29 @@ export default function RoutePage() {
           labels={hudLabels}
         />
 
-        <RoutePageMap
-          buildings={buildings}
-          route={nav.route}
-          routeEndpoints={nav.routeEndpoints}
-          origin={nav.origin}
-          destination={nav.destination}
-          navigating={nav.navigating}
-          userPos={nav.userPos}
-          userPosRef={nav.userPosRef}
-          userHeading={nav.userHeading}
-          routeHeading={nav.routeHeading}
-          deviceHeadingRef={nav.deviceHeadingRef}
-          navMotionRef={nav.navMotionRef}
-          pickMode={nav.pickMode}
-          mobileSheetVh={sheetVh}
-          elevators={nav.elevators}
-          routeElevatorIds={nav.routeElevatorIds}
-          onBuildingSelect={nav.handleBuildingSelect}
-          onMapPick={nav.handleMapPick}
-          onFollowPausedChange={setFollowPaused}
-        />
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <RoutePageMap
+            buildings={buildings}
+            route={nav.route}
+            routeEndpoints={nav.routeEndpoints}
+            origin={nav.origin}
+            destination={nav.destination}
+            navigating={nav.navigating}
+            userPos={nav.userPos}
+            userPosRef={nav.userPosRef}
+            userHeading={nav.userHeading}
+            routeHeading={nav.routeHeading}
+            deviceHeadingRef={nav.deviceHeadingRef}
+            navMotionRef={nav.navMotionRef}
+            pickMode={nav.pickMode}
+            mobileSheetVh={sheetVh}
+            elevators={nav.elevators}
+            routeElevatorIds={nav.routeElevatorIds}
+            onBuildingSelect={nav.handleBuildingSelect}
+            onMapPick={nav.handleMapPick}
+            onFollowPausedChange={setFollowPaused}
+          />
+        </div>
 
         <RoutePanel
           open
@@ -142,12 +161,14 @@ export default function RoutePage() {
           onSheetVhChange={setSheetVh}
         />
 
-        <SettingsPanel
-          isOpen={isSettingsOpen}
-          onClose={() => setIsSettingsOpen(false)}
-          settings={settings}
-          onSettingsChange={updateSettings}
-        />
+        {isSettingsOpen ? (
+          <SettingsPanel
+            isOpen={isSettingsOpen}
+            onClose={() => setIsSettingsOpen(false)}
+            settings={settings}
+            onSettingsChange={updateSettings}
+          />
+        ) : null}
       </main>
     </div>
   );

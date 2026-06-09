@@ -165,8 +165,13 @@ export const NAV_FOLLOW_ZOOM = 16;
 export const NAV_LOOK_AHEAD_M = 24;
 /** 화면 가장자리 이 비율 안쪽이면 지도를 움직이지 않음 (edge follow) */
 export const NAV_EDGE_MARGIN_RATIO = 0.24;
-/** edge follow 재중심 최소 간격(ms) — 타일 요청 겹침 방지 */
+/** edge follow 재중심 최소 간격(ms) — setCenter 스냅용 */
 export const NAV_CAMERA_MIN_INTERVAL_MS = 900;
+/** 모바일 panBy edge follow — setCenter보다 가벼워 간격 단축 */
+export const NAV_CAMERA_PAN_INTERVAL_MS_MOBILE = 550;
+/** panBy 1회 최대 이동(px) — 급격한 타일 점프 방지 */
+export const NAV_EDGE_MAX_PAN_PX_MOBILE = 72;
+export const NAV_EDGE_MAX_PAN_PX_DESKTOP = 96;
 export const NAV_MAP_ROTATION_SCALE = 1.38;
 
 /** rAF 추적 보간 — 데스크톱(길안내 거의 미사용) */
@@ -264,12 +269,30 @@ function isValidLatLng(user: LatLng): boolean {
   );
 }
 
+/** 하단 시트를 고려한 사용자 마커 목표 화면 좌표 */
+function navigationUserScreenTarget(
+  size: MapSize,
+  bottomObstructionVh: number,
+): { x: number; y: number } {
+  const obstructionPx = (bottomObstructionVh / 100) * size.height;
+  const visibleH = Math.max(size.height * 0.22, size.height - obstructionPx);
+  return {
+    x: size.width * 0.5,
+    y: obstructionPx + visibleH * 0.4,
+  };
+}
+
+function clampPanDelta(panX: number, panY: number, maxPx: number): { x: number; y: number } {
+  const len = Math.hypot(panX, panY);
+  if (len <= maxPx || len < 1e-6) return { x: panX, y: panY };
+  const scale = maxPx / len;
+  return { x: panX * scale, y: panY * scale };
+}
+
 /**
- * 길안내 카메라 — setCenter(look-ahead) + (snap 시 1회) panBy 뷰포트 보정.
- * 반환값은 지도 회전 transform-origin(픽셀)입니다.
- *
- * 타일 재로딩을 줄이려면 호출 측(campus-map rAF)에서 이동·방향 임계값·최소 간격으로
- * setCenter 빈도를 제한하고, panBy는 최초 뷰포트 보정(adjustViewport) 1회만 사용한다.
+ * 길안내 카메라
+ * - snap: setCenter(look-ahead) + (1회) panBy 뷰포트 보정
+ * - edge follow: setCenter 없이 panBy만 — iOS/Android 타일 재로딩 감소
  */
 export function applyNavigationCamera(
   map: NavigationCameraMap,
@@ -280,6 +303,48 @@ export function applyNavigationCamera(
   options: NavigationCameraOptions = {},
 ): { originX: number; originY: number } | null {
   if (!isValidLatLng(user)) return null;
+
+  const projection = map.getProjection?.();
+  const size = map.getSize?.();
+  const bottomObstructionVh = Math.max(0, options.bottomObstructionVh ?? 0);
+
+  if (!projection?.fromCoordToOffset || !size?.width || !size?.height) {
+    if (options.snap) {
+      const zoom = options.zoom ?? NAV_FOLLOW_ZOOM;
+      const curZoom = map.getZoom?.() ?? 0;
+      if (options.snap || curZoom < zoom) map.setZoom?.(zoom);
+      const heading = Number.isFinite(headingDeg) ? headingDeg : 0;
+      const lookAheadHeading = Number.isFinite(options.lookAheadHeadingDeg)
+        ? options.lookAheadHeadingDeg!
+        : heading;
+      const ahead = navigationCenterForUser(
+        user,
+        lookAheadHeading,
+        options.lookAheadM ?? NAV_LOOK_AHEAD_M,
+      );
+      map.setCenter?.(createLatLng(ahead.lat, ahead.lng));
+    }
+    return size ? { originX: size.width / 2, originY: size.height / 2 } : null;
+  }
+
+  const userLl = createLatLng(user.lat, user.lng);
+  let userOffset = projection.fromCoordToOffset(userLl);
+
+  if (!options.snap && map.panBy) {
+    const target = navigationUserScreenTarget(size, bottomObstructionVh);
+    const rawPanX = target.x - userOffset.x;
+    const rawPanY = target.y - userOffset.y;
+    const maxPan = isMobileNavViewport()
+      ? NAV_EDGE_MAX_PAN_PX_MOBILE
+      : NAV_EDGE_MAX_PAN_PX_DESKTOP;
+    const { x: panX, y: panY } = clampPanDelta(rawPanX, rawPanY, maxPan);
+
+    if (Math.abs(panX) > 1 || Math.abs(panY) > 1) {
+      map.panBy(createPoint(panX, panY));
+      userOffset = projection.fromCoordToOffset(userLl);
+    }
+    return { originX: userOffset.x, originY: userOffset.y };
+  }
 
   const zoom = options.zoom ?? NAV_FOLLOW_ZOOM;
   const curZoom = map.getZoom?.() ?? 0;
@@ -294,25 +359,12 @@ export function applyNavigationCamera(
   const lookAheadM = options.lookAheadM ?? NAV_LOOK_AHEAD_M;
   const ahead = navigationCenterForUser(user, lookAheadHeading, lookAheadM);
   map.setCenter?.(createLatLng(ahead.lat, ahead.lng));
-
-  const projection = map.getProjection?.();
-  const size = map.getSize?.();
-  if (!projection?.fromCoordToOffset || !size?.width || !size?.height) {
-    return size ? { originX: size.width / 2, originY: size.height / 2 } : null;
-  }
-
-  const userLl = createLatLng(user.lat, user.lng);
-  let userOffset = projection.fromCoordToOffset(userLl);
+  userOffset = projection.fromCoordToOffset(userLl);
 
   if (options.adjustViewport && map.panBy) {
-    const obstructionVh = Math.max(0, options.bottomObstructionVh ?? 0);
-    const obstructionPx = (obstructionVh / 100) * size.height;
-    const visibleH = Math.max(size.height * 0.22, size.height - obstructionPx);
-    const targetUserY = obstructionPx + visibleH * 0.4;
-    const targetUserX = size.width * 0.5;
-
-    const panX = targetUserX - userOffset.x;
-    const panY = targetUserY - userOffset.y;
+    const target = navigationUserScreenTarget(size, bottomObstructionVh);
+    const panX = target.x - userOffset.x;
+    const panY = target.y - userOffset.y;
 
     if (Math.abs(panX) > 0.5 || Math.abs(panY) > 0.5) {
       map.panBy(createPoint(panX, panY));

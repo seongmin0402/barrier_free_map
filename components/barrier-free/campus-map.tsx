@@ -24,6 +24,7 @@ import {
   lerpAngleDeg,
   lerpLatLng,
   NAV_CAMERA_MIN_INTERVAL_MS,
+  NAV_CAMERA_PAN_INTERVAL_MS_MOBILE,
   NAV_FOLLOW_ZOOM,
   NAV_HEADING_LERP,
   NAV_HEADING_LERP_MOBILE,
@@ -1774,7 +1775,10 @@ function CampusMapInner({
       }
 
       const edgeExceeded = shouldRecenterEdgeFollow(userOffset, size, bottomObstructionVh);
-      const camDue = now - lastCameraApplyAtRef.current >= NAV_CAMERA_MIN_INTERVAL_MS;
+      const camInterval = isMobileNav
+        ? NAV_CAMERA_PAN_INTERVAL_MS_MOBILE
+        : NAV_CAMERA_MIN_INTERVAL_MS;
+      const camDue = now - lastCameraApplyAtRef.current >= camInterval;
 
       if (edgeExceeded && camDue) {
         queueNavCamera(display, headingForCam);
