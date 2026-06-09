@@ -2,7 +2,7 @@ import type { AppLocale } from "@/lib/app-settings";
 import type { Metadata } from "next";
 
 export const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL ?? "https://barrier-free-map-eta.vercel.app";
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://knu-bfmap.com";
 
 const META = {
   ko: {

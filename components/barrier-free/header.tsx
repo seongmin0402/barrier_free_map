@@ -1,12 +1,14 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { Download, Search, Settings } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InstallGuideDialog } from "@/components/barrier-free/install-guide-dialog";
 import { useUi } from "@/hooks/use-ui";
+import { SITE_URL } from "@/lib/site-metadata";
 
 interface HeaderProps {
   onSettingsClick: () => void;
@@ -31,6 +33,15 @@ export function Header({ onSettingsClick, searchQuery, onSearchChange }: HeaderP
     ? ui.header.searchPlaceholderShort
     : ui.header.searchPlaceholder;
 
+  const logoLabel = `${ui.header.university} ${ui.header.subtitleFull}`;
+
+  const handleLogoClick = (e: MouseEvent<HTMLAnchorElement>) => {
+    if (window.location.pathname === "/") {
+      e.preventDefault();
+      window.location.href = SITE_URL;
+    }
+  };
+
   return (
     <header className="relative border-b border-border bg-card px-3 py-2.5 shadow-sm sm:px-4 sm:py-3">
       <div className="absolute right-3 top-2.5 z-10 flex items-center gap-1 sm:right-4 sm:top-3">
@@ -54,14 +65,22 @@ export function Header({ onSettingsClick, searchQuery, onSearchChange }: HeaderP
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4 sm:pr-[5.25rem]">
         <div className="min-w-0 pr-[5.25rem] sm:shrink-0 sm:pr-0">
-          <Image
-            src="/logo.png"
-            alt={`${ui.header.university} ${ui.header.subtitleFull}`}
-            width={240}
-            height={48}
-            className="h-9 w-auto max-w-[11rem] object-contain object-left sm:h-10 sm:max-w-[13rem]"
-            priority
-          />
+          <Link
+            href="/"
+            onClick={handleLogoClick}
+            className="inline-block rounded-sm outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            title={SITE_URL}
+            aria-label={`${logoLabel} — ${SITE_URL}`}
+          >
+            <Image
+              src="/logo.png"
+              alt=""
+              width={240}
+              height={48}
+              className="h-9 w-auto max-w-[11rem] object-contain object-left sm:h-10 sm:max-w-[13rem]"
+              priority
+            />
+          </Link>
         </div>
 
         <div className="w-full min-w-0 sm:flex-1 sm:max-w-none">
