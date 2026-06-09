@@ -385,8 +385,8 @@ type MapFitOptions = {
 function campusOverviewFitOptions(mapLayout: "explore" | "route"): MapFitOptions {
   const mobile = isMobileMapViewport();
   if (mapLayout === "explore" && mobile) {
-    /** 캠퍼스 전체 + 주변 맥락(두 번째 참고 화면) — minZoom 17이면 과확대됨 */
-    return { padding: 26, maxZoom: 16, minZoom: 15 };
+    /** 전체 캠퍼스 맥락 유지 + 이전(16)보다 한 단계 확대 */
+    return { padding: 18, maxZoom: 17, minZoom: 16 };
   }
   if (mapLayout === "route" && mobile) {
     /** 이전(15/36)과 확대판(17/12)의 중간 — 주변 맥락은 남기고 캠퍼스는 시트 위에 */
@@ -395,7 +395,7 @@ function campusOverviewFitOptions(mapLayout: "explore" | "route"): MapFitOptions
   if (mobile) {
     return { padding: 36, maxZoom: 17, minZoom: 15 };
   }
-  return { padding: 52, maxZoom: 16, minZoom: 15 };
+  return { padding: 44, maxZoom: 17, minZoom: 16 };
 }
 
 function resolveFitBoundsPadding(
@@ -938,7 +938,8 @@ function CampusMapInner({
 
     const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
 
-    const initialZoom = 16;
+    const initialZoom =
+      mapLayout === "explore" && isMobileMapViewport() ? 17 : 16;
 
     const map = new MapCtor(el, {
       center: new LatLngCtor(centerMemo.lat, centerMemo.lng),
