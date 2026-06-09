@@ -657,6 +657,7 @@ function CampusMapInner({
   const navFollowSessionRef = useRef(false);
   const navBootstrapDoneRef = useRef(false);
   const lastRouteDrawSigRef = useRef("");
+  const lastNavRouteSigDuringFollowRef = useRef("");
   const lastCameraApplyAtRef = useRef(0);
   const mapIsIdleRef = useRef(true);
   const pendingNavCameraRef = useRef<{
@@ -1368,6 +1369,45 @@ function CampusMapInner({
       routeMarkersRef.current = [];
     };
   }, [sdkLoaded, mapReadyEpoch, routeLine, routeSegments, originPoint, destPoint, ui]);
+
+  /** 재검색으로 경로만 바뀔 때 — 마커·카메라 스냅 없이 현재 GPS 보간 위치 유지 */
+  useEffect(() => {
+    if (!followUser || !navigationMode) {
+      lastNavRouteSigDuringFollowRef.current = "";
+      return;
+    }
+    const sig = routeDrawSignature(routeLine, routeSegments, originPoint, destPoint);
+    if (!sig) return;
+
+    if (
+      lastNavRouteSigDuringFollowRef.current &&
+      lastNavRouteSigDuringFollowRef.current !== sig
+    ) {
+      navSnapPendingRef.current = false;
+      pendingNavCameraRef.current = null;
+      lastAppliedCamRef.current = null;
+      lastCameraApplyAtRef.current = 0;
+
+      const keep =
+        liveUserPosRefProp.current?.current ??
+        targetPosRef.current ??
+        displayPosRef.current;
+      if (keep) {
+        targetPosRef.current = keep;
+        displayPosRef.current = { ...keep };
+      }
+      hasNavCenteredRef.current = true;
+      navBootstrapDoneRef.current = true;
+    }
+    lastNavRouteSigDuringFollowRef.current = sig;
+  }, [
+    followUser,
+    navigationMode,
+    routeLine,
+    routeSegments,
+    originPoint,
+    destPoint,
+  ]);
 
   const routeElevatorIdSet = useMemo(() => {
     if (!routeElevatorIds) return new Set<string>();

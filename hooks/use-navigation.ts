@@ -25,10 +25,14 @@ import { computeRoute, computeRoutePair } from "@/lib/routing/route";
 import { computeProgress } from "@/lib/routing/progress";
 import {
   MANUAL_REROUTE_COOLDOWN_MS,
+  MANUAL_REROUTE_SPEECH_BLOCK_MS,
+  NAV_PROGRESS_COMPUTE_MS,
   OFF_ROUTE_ARRIVE_MAX_M,
   OFF_ROUTE_REROUTE_M,
   REROUTE_COOLDOWN_MS,
+  REROUTE_HEADING_HOLD_OFF_ROUTE_M,
   REROUTE_MIN_START_MS,
+  REROUTE_SPEECH_BLOCK_MS,
 } from "@/lib/routing/nav-thresholds";
 import { createGpsSmoother } from "@/lib/routing/gps-smooth";
 import {
@@ -152,7 +156,13 @@ export function useNavigation(buildings: BarrierBuilding[]) {
   const firstGpsFixRef = useRef<LatLng | null>(null);
   /** 출발 안내 직후 GPS 단계 안내 음성과 겹치지 않도록 */
   const navSpeechBlockedUntilRef = useRef(0);
-  const lastRerouteAtRef = useRef(0);
+  const lastAutoRerouteAtRef = useRef(0);
+  const lastManualRerouteAtRef = useRef(0);
+  const navigationRouteRef = useRef(navigationRoute);
+  navigationRouteRef.current = navigationRoute;
+  const navigatingRef = useRef(navigating);
+  navigatingRef.current = navigating;
+  const runNavProgressTickRef = useRef<(pos: LatLng) => void>(() => {});
   const graphRef = useRef<RoutingGraph | null>(null);
   const destinationRef = useRef<RoutePoint | null>(null);
   const routeProfileRef = useRef<RouteProfile>("fast");
@@ -281,7 +291,10 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     const refreshed = computeRoute(g, pos, destPoint, locale, {
       profile: routeProfileRef.current,
     });
-    if (refreshed) setNavigationRoute(refreshed);
+    if (refreshed) {
+      navigationRouteRef.current = refreshed;
+      setNavigationRoute(refreshed);
+    }
   }, [locale, navigating]);
 
   // 음성 on/off 동기화
@@ -410,19 +423,81 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     [navigating, selectBuilding, useCurrentLocation],
   );
 
-  const applyRerouteResult = useCallback(
-    (newRoute: ComputedRoute, options?: { departAnnouncement?: string }) => {
-      lastRerouteAtRef.current = Date.now();
-      setNavigationRoute(newRoute);
+  /** 재검색 후 GPS 위치 기준 진행·방향 동기화 — step 0 리셋으로 인한 마커/카메라 튐 방지 */
+  const syncProgressAfterReroute = useCallback((newRoute: ComputedRoute, pos: LatLng) => {
+    const progress = computeProgress(newRoute, pos);
+    if (!progress) {
       setCurrentStepIndex(0);
       setRemaining(newRoute.distance);
       setDistanceToNext(null);
+      return;
+    }
+
+    lastProgressSegRef.current = progress.nearestSegmentIndex;
+    lastProgressStepRef.current = progress.stepIndex;
+    setCurrentStepIndex(progress.stepIndex);
+    setOffRouteM(progress.offRoute);
+    setRemaining(progress.remaining);
+    setDistanceToNext(progress.distanceToNext);
+
+    metricsTargetRef.current = {
+      remaining: progress.remaining,
+      distanceToNext: progress.distanceToNext,
+      stepIndex: progress.stepIndex,
+    };
+    metricsDisplayRef.current = {
+      remaining: progress.remaining,
+      distanceToNext: progress.distanceToNext,
+    };
+
+    const along = headingAlongRoute(newRoute, progress);
+    let nextHeading: number | null = along;
+    if (progress.offRoute > REROUTE_HEADING_HOLD_OFF_ROUTE_M) {
+      const motion = navMotionRef.current;
+      nextHeading =
+        motion.movementBearing ??
+        lastGpsHeadingRef.current ??
+        routeHeadingNavRef.current ??
+        along;
+    }
+    if (nextHeading != null && Number.isFinite(nextHeading)) {
+      routeHeadingNavRef.current = nextHeading;
+      setRouteHeading(nextHeading);
+    }
+  }, []);
+
+  const applyRerouteResult = useCallback(
+    (
+      newRoute: ComputedRoute,
+      options?: { departAnnouncement?: string; source?: "auto" | "manual" },
+    ) => {
+      const now = Date.now();
+      const source = options?.source ?? "auto";
+      if (source === "manual") {
+        lastManualRerouteAtRef.current = now;
+      } else {
+        lastAutoRerouteAtRef.current = now;
+      }
+
+      navigationRouteRef.current = newRoute;
+      setNavigationRoute(newRoute);
       setRerouteNotice(true);
       lastLiveStepIndexRef.current = -1;
       speechPhaseRef.current = { stepIndex: -1, phase: "far" };
-      navSpeechBlockedUntilRef.current = Date.now() + 5500;
-      lastProgressStepRef.current = -1;
-      lastProgressSegRef.current = 0;
+      navSpeechBlockedUntilRef.current =
+        now +
+        (source === "manual" ? MANUAL_REROUTE_SPEECH_BLOCK_MS : REROUTE_SPEECH_BLOCK_MS);
+
+      const pos = userPosRef.current;
+      if (pos) {
+        syncProgressAfterReroute(newRoute, pos);
+      } else {
+        setCurrentStepIndex(0);
+        setRemaining(newRoute.distance);
+        setDistanceToNext(null);
+        lastProgressStepRef.current = -1;
+        lastProgressSegRef.current = 0;
+      }
 
       if (options?.departAnnouncement) {
         announce(options.departAnnouncement, { force: true });
@@ -433,15 +508,15 @@ export function useNavigation(buildings: BarrierBuilding[]) {
         }
       }
     },
-    [announce],
+    [announce, syncProgressAfterReroute],
   );
 
   /** 안내 중 — 현재 GPS에서 목적지까지 수동 재탐색 */
   const rerouteFromCurrentPosition = useCallback(() => {
-    if (!navigating) return;
+    if (!navigatingRef.current) return;
     const navLocale = localeRef.current;
     const t = getUi(navLocale).route;
-    if (Date.now() - lastRerouteAtRef.current < MANUAL_REROUTE_COOLDOWN_MS) return;
+    if (Date.now() - lastManualRerouteAtRef.current < MANUAL_REROUTE_COOLDOWN_MS) return;
 
     const pos = userPosRef.current;
     if (!pos) {
@@ -453,6 +528,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     const g = graphRef.current;
     if (!dest || !g?.nodes.size) return;
 
+    setLiveAnnouncement(t.rerouteFinding);
     announce(t.rerouteFinding, { force: true });
 
     const destPoint = navDestPointRef.current ?? dest.point;
@@ -461,18 +537,21 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     });
 
     if (newRoute) {
-      applyRerouteResult(newRoute);
+      applyRerouteResult(newRoute, { source: "manual" });
     } else {
       setGeoError(t.errors.rerouteFailed);
     }
-  }, [navigating, announce, applyRerouteResult]);
+  }, [announce, applyRerouteResult]);
 
   const stopNav = useCallback(() => {
+    navigatingRef.current = false;
     setNavigating(false);
+    navigationRouteRef.current = null;
     setNavigationRoute(null);
     clearWatch();
     getSpeechGuide().stop();
     setUserPos(null);
+    userPosRef.current = null;
     setUserHeading(null);
     setRouteHeading(null);
     prevGpsRef.current = null;
@@ -486,7 +565,8 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     navigationStartedAtRef.current = 0;
     firstGpsFixRef.current = null;
     navSpeechBlockedUntilRef.current = 0;
-    lastRerouteAtRef.current = 0;
+    lastAutoRerouteAtRef.current = 0;
+    lastManualRerouteAtRef.current = 0;
     lastProgressUiAtRef.current = 0;
     lastProgressStepRef.current = -1;
     lastProgressComputeAtRef.current = 0;
@@ -495,6 +575,131 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     setRerouteNotice(false);
     setLiveAnnouncement("");
   }, [clearWatch]);
+
+  /** GPS ref 기준 진행·이탈·재탐색 — React userPos throttle과 분리 */
+  const runNavProgressTick = useCallback(
+    (pos: LatLng) => {
+      const activeRoute = navigationRouteRef.current;
+      if (!navigatingRef.current || !activeRoute) return;
+
+      const computeNow = Date.now();
+      if (computeNow - lastProgressComputeAtRef.current < NAV_PROGRESS_COMPUTE_MS) return;
+      lastProgressComputeAtRef.current = computeNow;
+
+      const progress = computeProgress(activeRoute, pos, {
+        segmentHint: lastProgressSegRef.current,
+      });
+      if (!progress) return;
+      lastProgressSegRef.current = progress.nearestSegmentIndex;
+
+      const alongRoute = headingAlongRoute(activeRoute, progress);
+      if (alongRoute != null) routeHeadingNavRef.current = alongRoute;
+
+      const navLocale = localeRef.current;
+      const arrived = hasArrived(activeRoute, pos, progress.offRoute, progress.remaining);
+      const sinceStartMs = Date.now() - navigationStartedAtRef.current;
+
+      if (
+        !arrived &&
+        sinceStartMs > REROUTE_MIN_START_MS &&
+        progress.offRoute > OFF_ROUTE_REROUTE_M &&
+        computeNow - lastAutoRerouteAtRef.current > REROUTE_COOLDOWN_MS
+      ) {
+        const dest = destinationRef.current;
+        const g = graphRef.current;
+        if (dest && g?.nodes.size) {
+          const destPoint = navDestPointRef.current ?? dest.point;
+          const newRoute = computeRoute(g, pos, destPoint, navLocale, {
+            profile: routeProfileRef.current,
+          });
+          if (newRoute) {
+            const departStep =
+              newRoute.steps.find((s) => s.maneuver === "depart") ?? newRoute.steps[0];
+            const rerouteText = departStep
+              ? offRouteRerouteSpeech(navLocale, departStep.text)
+              : undefined;
+            applyRerouteResult(newRoute, {
+              departAnnouncement: rerouteText,
+              source: "auto",
+            });
+            return;
+          }
+          setGeoError(getUi(navLocale).route.errors.rerouteFailed);
+        }
+      }
+
+      metricsTargetRef.current = {
+        remaining: progress.remaining,
+        distanceToNext: progress.distanceToNext,
+        stepIndex: progress.stepIndex,
+      };
+
+      const progressNow = Date.now();
+      const stepChanged = progress.stepIndex !== lastProgressStepRef.current;
+      if (stepChanged || progressNow - lastProgressUiAtRef.current >= 400) {
+        lastProgressUiAtRef.current = progressNow;
+        lastProgressStepRef.current = progress.stepIndex;
+        setCurrentStepIndex(progress.stepIndex);
+        setOffRouteM(progress.offRoute);
+        if (alongRoute != null) setRouteHeading(alongRoute);
+      }
+
+      const step = activeRoute.steps[progress.stepIndex];
+      if (!step) return;
+
+      const speechAllowed = Date.now() >= navSpeechBlockedUntilRef.current;
+      const d = progress.distanceToNext;
+      const phase = navSpeechPhase(d);
+      const distLabel = formatDistance(d, navLocale);
+
+      if (step.maneuver !== "arrive" && step.maneuver !== "depart") {
+        const liveText = navStepSpeechText(
+          navLocale,
+          step.text,
+          d,
+          distLabel,
+          step.maneuver,
+          phase,
+        );
+
+        if (progress.stepIndex !== lastLiveStepIndexRef.current) {
+          lastLiveStepIndexRef.current = progress.stepIndex;
+          setLiveAnnouncement(liveText);
+        } else if (
+          speechPhaseRef.current.stepIndex === progress.stepIndex &&
+          step.maneuver !== "elevator"
+        ) {
+          const prevRank = navSpeechPhaseRank(speechPhaseRef.current.phase);
+          const nextRank = navSpeechPhaseRank(phase);
+          if (nextRank > prevRank) {
+            setLiveAnnouncement(liveText);
+          }
+        }
+
+        if (speechAllowed) {
+          const isNewStep = progress.stepIndex !== lastSpokenStepRef.current;
+          const phaseAdvanced =
+            step.maneuver !== "elevator" &&
+            speechPhaseRef.current.stepIndex === progress.stepIndex &&
+            navSpeechPhaseRank(phase) > navSpeechPhaseRank(speechPhaseRef.current.phase);
+
+          if (isNewStep || phaseAdvanced) {
+            lastSpokenStepRef.current = progress.stepIndex;
+            speechPhaseRef.current = { stepIndex: progress.stepIndex, phase };
+            announce(liveText);
+          }
+        }
+      }
+
+      if (arrived) {
+        announce(arriveMessage(navLocale), { force: true });
+        stopNav();
+      }
+    },
+    [hasArrived, announce, applyRerouteResult, stopNav],
+  );
+
+  runNavProgressTickRef.current = runNavProgressTick;
 
   const startNav = useCallback(() => {
     if (!activeRoute) return;
@@ -537,7 +742,9 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     lastLiveStepIndexRef.current = -1;
     navigationStartedAtRef.current = Date.now();
     navDestPointRef.current = route.coords[route.coords.length - 1] ?? destination?.point ?? null;
+    navigationRouteRef.current = route;
     setNavigationRoute(route);
+    navigatingRef.current = true;
     setNavigating(true);
     const firstStepDist = route.steps[0]?.distance ?? route.distance;
     metricsDisplayRef.current = { remaining: route.distance, distanceToNext: firstStepDist };
@@ -616,6 +823,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       );
       userPosRef.current = here;
       prevGpsRef.current = here;
+      runNavProgressTickRef.current(here);
 
       const now = Date.now();
       if (isFirstFix || now - lastUiPosUpdateRef.current >= 420) {
@@ -653,127 +861,16 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     watchIdRef.current = navigator.geolocation.watchPosition(
       applyGpsReading,
       onGpsError,
-      { enableHighAccuracy: true, maximumAge: 800, timeout: 25000 },
+      { enableHighAccuracy: true, maximumAge: 500, timeout: 25000 },
     );
   }, [activeRoute, destination, origin, clearWatch, requestCompassPermission]);
 
-  // GPS 갱신 → 진행 상황 계산 + 음성 안내 + 경로 이탈 재탐색
+  // userPos 상태 갱신 시 백업 tick (GPS 콜백 throttle과 이중 실행 방지는 NAV_PROGRESS_COMPUTE_MS)
   useEffect(() => {
-    const activeRoute = navigationRoute;
-    if (!navigating || !activeRoute || !userPos) return;
-
-    const computeNow = Date.now();
-    if (computeNow - lastProgressComputeAtRef.current < 280) return;
-    lastProgressComputeAtRef.current = computeNow;
-
-    const progress = computeProgress(activeRoute, userPos, {
-      segmentHint: lastProgressSegRef.current,
-    });
-    if (!progress) return;
-    lastProgressSegRef.current = progress.nearestSegmentIndex;
-
-    const alongRoute = headingAlongRoute(activeRoute, progress);
-    if (alongRoute != null) routeHeadingNavRef.current = alongRoute;
-
-    const navLocale = localeRef.current;
-    const arrived = hasArrived(activeRoute, userPos, progress.offRoute, progress.remaining);
-    const sinceStartMs = Date.now() - navigationStartedAtRef.current;
-
-    // 경로 이탈 → 현재 위치에서 목적지까지 즉시 재탐색
-    if (
-      !arrived &&
-      sinceStartMs > REROUTE_MIN_START_MS &&
-      progress.offRoute > OFF_ROUTE_REROUTE_M &&
-      Date.now() - lastRerouteAtRef.current > REROUTE_COOLDOWN_MS
-    ) {
-      const dest = destinationRef.current;
-      const g = graphRef.current;
-      if (dest && g?.nodes.size) {
-        const destPoint = navDestPointRef.current ?? dest.point;
-        const newRoute = computeRoute(g, userPos, destPoint, navLocale, {
-          profile: routeProfileRef.current,
-        });
-        if (newRoute) {
-          const departStep =
-            newRoute.steps.find((s) => s.maneuver === "depart") ?? newRoute.steps[0];
-          const rerouteText = departStep
-            ? offRouteRerouteSpeech(navLocale, departStep.text)
-            : undefined;
-          applyRerouteResult(newRoute, { departAnnouncement: rerouteText });
-          return;
-        }
-        setGeoError(getUi(navLocale).route.errors.rerouteFailed);
-      }
-    }
-
-    metricsTargetRef.current = {
-      remaining: progress.remaining,
-      distanceToNext: progress.distanceToNext,
-      stepIndex: progress.stepIndex,
-    };
-
-    const progressNow = Date.now();
-    const stepChanged = progress.stepIndex !== lastProgressStepRef.current;
-    if (stepChanged || progressNow - lastProgressUiAtRef.current >= 400) {
-      lastProgressUiAtRef.current = progressNow;
-      lastProgressStepRef.current = progress.stepIndex;
-      setCurrentStepIndex(progress.stepIndex);
-      setOffRouteM(progress.offRoute);
-      if (alongRoute != null) setRouteHeading(alongRoute);
-    }
-
-    const step = activeRoute.steps[progress.stepIndex];
-    if (!step) return;
-
-    const speechAllowed = Date.now() >= navSpeechBlockedUntilRef.current;
-    const d = progress.distanceToNext;
-    const phase = navSpeechPhase(d);
-    const distLabel = formatDistance(d, navLocale);
-
-    if (step.maneuver !== "arrive" && step.maneuver !== "depart") {
-      const liveText = navStepSpeechText(
-        navLocale,
-        step.text,
-        d,
-        distLabel,
-        step.maneuver,
-        phase,
-      );
-
-      if (progress.stepIndex !== lastLiveStepIndexRef.current) {
-        lastLiveStepIndexRef.current = progress.stepIndex;
-        setLiveAnnouncement(liveText);
-      } else if (
-        speechPhaseRef.current.stepIndex === progress.stepIndex &&
-        step.maneuver !== "elevator"
-      ) {
-        const prevRank = navSpeechPhaseRank(speechPhaseRef.current.phase);
-        const nextRank = navSpeechPhaseRank(phase);
-        if (nextRank > prevRank) {
-          setLiveAnnouncement(liveText);
-        }
-      }
-
-      if (speechAllowed) {
-        const isNewStep = progress.stepIndex !== lastSpokenStepRef.current;
-        const phaseAdvanced =
-          step.maneuver !== "elevator" &&
-          speechPhaseRef.current.stepIndex === progress.stepIndex &&
-          navSpeechPhaseRank(phase) > navSpeechPhaseRank(speechPhaseRef.current.phase);
-
-        if (isNewStep || phaseAdvanced) {
-          lastSpokenStepRef.current = progress.stepIndex;
-          speechPhaseRef.current = { stepIndex: progress.stepIndex, phase };
-          announce(liveText);
-        }
-      }
-    }
-
-    if (arrived) {
-      announce(arriveMessage(navLocale), { force: true });
-      stopNav();
-    }
-  }, [navigating, navigationRoute, userPos, stopNav, hasArrived, announce, applyRerouteResult]);
+    if (!navigating || !navigationRoute || !userPos) return;
+    const pos = userPosRef.current ?? userPos;
+    runNavProgressTickRef.current(pos);
+  }, [navigating, navigationRoute, userPos]);
 
   /** 남은 거리·다음 안내 거리 부드럽게 보간 */
   useEffect(() => {
