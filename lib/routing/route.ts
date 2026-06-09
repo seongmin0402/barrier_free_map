@@ -40,15 +40,16 @@ import type {
   WalkwayType,
 } from "./types";
 
-type RouteWeightMode = "shortest" | "elevator" | "accessible" | "accessibleFallback";
+type RouteWeightMode = "physical" | "shortest" | "elevator" | "accessible" | "accessibleFallback";
 
 export interface ComputeRouteOptions {
-  /** fast: 최단·승강기 우선 / comfort: 계단 회피·경사로 출입구 */
+  /** fast: 최단 거리(계단·승강기 무관) / comfort: 계단 없음·승강기 우선 */
   profile?: RouteProfile;
 }
 
-/** type별 비용 가중치 — shortest에서도 계단은 상대적으로 비싸게 */
+/** type별 비용 가중치 — physical은 거리만, shortest는 계단 약간 불리 */
 export function edgeWeight(type: WalkwayType, mode: RouteWeightMode = "shortest"): number {
+  if (mode === "physical") return 1;
   switch (type) {
     case "stairs":
       if (mode === "accessible") return Infinity;
@@ -1154,229 +1155,59 @@ function nodePathToRoute(
   return { coords, distance, steps, hasStairs, hasCrosswalk, hasElevator, segmentTypes };
 }
 
-function pickNodePath(
+/** 빠른 경로 — 물리 거리 기준 최단 (계단·승강기 여부 무관) */
+function pickFastNodePath(
   graph: RoutingGraph,
   startId: string,
   endId: string,
-  options: { profile?: RouteProfile } = {},
 ): { nodePath: string[]; usesElevator: boolean } | null {
-  const profile = options.profile ?? "fast";
-  const preferAccessible = profile === "comfort";
-  const candidates = collectPathCandidates(graph, startId, endId, preferAccessible);
-  if (!candidates.length) return null;
+  const physical =
+    dijkstra(graph, startId, endId, { mode: "physical" }) ??
+    dijkstra(graph, startId, endId, { mode: "shortest" });
+  if (!physical) return null;
+  return {
+    nodePath: physical,
+    usesElevator:
+      pathUsesElevator(graph, physical) || pathVisitsElevatorHub(graph, physical),
+  };
+}
+
+function pathUsesElevatorOrHub(graph: RoutingGraph, nodePath: string[]): boolean {
+  return pathUsesElevator(graph, nodePath) || pathVisitsElevatorHub(graph, nodePath);
+}
+
+/** 최적 경로 — 계단 없음, 가능하면 승강기 이용 */
+function pickComfortNodePath(
+  graph: RoutingGraph,
+  startId: string,
+  endId: string,
+): { nodePath: string[]; usesElevator: boolean } | null {
+  const candidates = collectPathCandidates(graph, startId, endId, true);
+  let stairFree = candidates.filter((path) => !pathHasStairs(graph, path));
+
+  if (!stairFree.length) {
+    const accessible = accessiblePathBetween(graph, startId, endId);
+    if (!accessible || pathHasStairs(graph, accessible)) return null;
+    stairFree = [accessible];
+  }
 
   const referencePath =
     dijkstra(graph, startId, endId, { mode: "shortest" }) ??
-    dijkstra(graph, startId, endId, { mode: "elevator" });
+    dijkstra(graph, startId, endId, { mode: "physical" });
+  const shortestDist = referencePath
+    ? pathPhysicalDistance(graph, referencePath)
+    : pathPhysicalDistance(graph, stairFree[0]);
   const corridorElevators = referencePath
     ? corridorElevatorIds(graph, referencePath)
     : new Set<string>();
-
-  let shortest = candidates[0];
-  let shortestDist = pathPhysicalDistance(graph, shortest);
-  for (const path of candidates) {
-    const d = pathPhysicalDistance(graph, path);
-    if (d < shortestDist) {
-      shortest = path;
-      shortestDist = d;
-    }
-  }
-
-  if (!graph.elevatorNodeIds.size) {
-    if (!preferAccessible) {
-      return { nodePath: shortest, usesElevator: false };
-    }
-    let best = shortest;
-    let bestScore = scorePathCandidate(
-      graph,
-      best,
-      shortestDist,
-      startId,
-      endId,
-      new Set<string>(),
-      0,
-      true,
-    );
-    for (let i = 1; i < candidates.length; i++) {
-      const score = scorePathCandidate(
-        graph,
-        candidates[i],
-        shortestDist,
-        startId,
-        endId,
-        new Set<string>(),
-        0,
-        true,
-      );
-      if (score < bestScore) {
-        best = candidates[i];
-        bestScore = score;
-      }
-    }
-    return { nodePath: best, usesElevator: false };
-  }
-
-  const startNode = graph.nodes.get(startId)!;
-  const endNode = graph.nodes.get(endId)!;
   const referenceStairM = referencePath ? pathStairMeters(graph, referencePath) : 0;
 
-  const elevatorCandidates = candidates.filter((path) => {
-    if (!pathVisitsElevatorHub(graph, path) && !pathUsesElevator(graph, path)) return false;
-    for (const evId of elevatorIdsOnPath(graph, path)) {
-      const n = graph.nodes.get(evId)!;
-      if (progressAlongRoute(n, startNode, endNode) < 0.05) return false;
-    }
-    if (pathNearBackwardElevator(graph, path, startNode, endNode)) return false;
-    const dist = pathPhysicalDistance(graph, path);
-    if (!withinElevatorExtendedBudget(dist, shortestDist)) return false;
-    if (!withinElevatorComfortBudget(dist, shortestDist)) {
-      const stairSave = referenceStairM - pathStairMeters(graph, path);
-      if (stairSave < 12) return false;
-    }
-    return true;
-  });
+  const maxDist = shortestDist * ACCESSIBLE_DETOUR_RATIO + ACCESSIBLE_DETOUR_EXTRA_M;
+  let pool = stairFree.filter((path) => pathPhysicalDistance(graph, path) <= maxDist);
+  if (!pool.length) pool = stairFree;
 
-  /** 최단 경로 근처 승강기가 있으면 해당 허브를 경유하는 경로 우선 */
-  if (corridorElevators.size > 0) {
-    const corridorHubPaths = candidates.filter((path) => {
-      if (!pathUsesCorridorElevator(graph, path, corridorElevators)) return false;
-      if (pathNearBackwardElevator(graph, path, startNode, endNode)) return false;
-      const dist = pathPhysicalDistance(graph, path);
-      if (!withinElevatorComfortBudget(dist, shortestDist)) {
-        if (!withinElevatorExtendedBudget(dist, shortestDist)) return false;
-        if (referenceStairM < 8 && pathStairMeters(graph, path) >= referenceStairM) return false;
-      }
-      return true;
-    });
-
-    if (corridorHubPaths.length > 0) {
-      let bestHub = corridorHubPaths[0];
-      let bestHubScore = scorePathCandidate(
-        graph,
-        bestHub,
-        shortestDist,
-        startId,
-        endId,
-        corridorElevators,
-        referenceStairM,
-        preferAccessible,
-      );
-      for (let i = 1; i < corridorHubPaths.length; i++) {
-        const score = scorePathCandidate(
-          graph,
-          corridorHubPaths[i],
-          shortestDist,
-          startId,
-          endId,
-          corridorElevators,
-          referenceStairM,
-          preferAccessible,
-        );
-        if (score < bestHubScore) {
-          bestHub = corridorHubPaths[i];
-          bestHubScore = score;
-        }
-      }
-      return {
-        nodePath: bestHub,
-        usesElevator: pathUsesElevator(graph, bestHub) || pathVisitsElevatorHub(graph, bestHub),
-      };
-    }
-  }
-
-  const comfortElevatorPaths = elevatorCandidates.filter((path) =>
-    isComfortElevatorPath(
-      graph,
-      path,
-      shortestDist,
-      startNode,
-      endNode,
-      corridorElevators,
-    ),
-  );
-
-  if (comfortElevatorPaths.length > 0) {
-    let bestComfort = comfortElevatorPaths[0];
-    let bestComfortScore = scorePathCandidate(
-      graph,
-      bestComfort,
-      shortestDist,
-      startId,
-      endId,
-      corridorElevators,
-      referenceStairM,
-      preferAccessible,
-    );
-    for (let i = 1; i < comfortElevatorPaths.length; i++) {
-      const score = scorePathCandidate(
-        graph,
-        comfortElevatorPaths[i],
-        shortestDist,
-        startId,
-        endId,
-        corridorElevators,
-        referenceStairM,
-        preferAccessible,
-      );
-      if (score < bestComfortScore) {
-        bestComfort = comfortElevatorPaths[i];
-        bestComfortScore = score;
-      }
-    }
-    return {
-      nodePath: bestComfort,
-      usesElevator: true,
-    };
-  }
-
-  /** 가는 방향 “길 위” 승강기 중 출발 직후가 아닌 구간(≈15% 이후) */
-  const midCorridorElevatorPaths = elevatorCandidates.filter((path) =>
-    elevatorsUsedOnPath(graph, path).some((id) => {
-      if (!corridorElevators.has(id)) return false;
-      const n = graph.nodes.get(id)!;
-      return progressAlongRoute(n, startNode, endNode) >= 0.15;
-    }),
-  );
-
-  const midOnlyElevatorPaths = midCorridorElevatorPaths.filter((path) => {
-    const onPath = elevatorsUsedOnPath(graph, path);
-    const hasStartNear = onPath.some((id) => {
-      const n = graph.nodes.get(id)!;
-      return progressAlongRoute(n, startNode, endNode) < 0.12;
-    });
-    return !hasStartNear;
-  });
-
-  const singleMidElevatorPaths = midCorridorElevatorPaths.filter((path) => {
-    const onPath = elevatorsUsedOnPath(graph, path);
-    if (onPath.length !== 1) return false;
-    const n = graph.nodes.get(onPath[0])!;
-    return (
-      corridorElevators.has(onPath[0]) &&
-      progressAlongRoute(n, startNode, endNode) >= 0.15
-    );
-  });
-
-  let pool = elevatorCandidates.length > 0 ? elevatorCandidates : candidates;
-
-  if (singleMidElevatorPaths.length > 0) {
-    pool = singleMidElevatorPaths;
-  } else if (midOnlyElevatorPaths.length > 0) {
-    pool = midOnlyElevatorPaths;
-  } else if (midCorridorElevatorPaths.length > 0) {
-    pool = midCorridorElevatorPaths;
-  }
-
-  if (preferAccessible) {
-    const stairFree = pool.filter((path) => pathStairMeters(graph, path) === 0);
-    if (stairFree.length) {
-      const maxDist = shortestDist * ACCESSIBLE_DETOUR_RATIO + ACCESSIBLE_DETOUR_EXTRA_M;
-      const viable = stairFree.filter(
-        (path) => pathPhysicalDistance(graph, path) <= maxDist,
-      );
-      if (viable.length) pool = viable;
-    }
-  }
+  const elevatorPool = pool.filter((path) => pathUsesElevatorOrHub(graph, path));
+  if (elevatorPool.length) pool = elevatorPool;
 
   let best = pool[0];
   let bestScore = scorePathCandidate(
@@ -1387,7 +1218,7 @@ function pickNodePath(
     endId,
     corridorElevators,
     referenceStairM,
-    preferAccessible,
+    true,
   );
   for (let i = 1; i < pool.length; i++) {
     const score = scorePathCandidate(
@@ -1398,7 +1229,7 @@ function pickNodePath(
       endId,
       corridorElevators,
       referenceStairM,
-      preferAccessible,
+      true,
     );
     if (score < bestScore) {
       best = pool[i];
@@ -1406,10 +1237,25 @@ function pickNodePath(
     }
   }
 
+  if (pathHasStairs(graph, best)) return null;
+
   return {
     nodePath: best,
-    usesElevator: pathUsesElevator(graph, best) || pathVisitsElevatorHub(graph, best),
+    usesElevator: pathUsesElevatorOrHub(graph, best),
   };
+}
+
+function pickNodePath(
+  graph: RoutingGraph,
+  startId: string,
+  endId: string,
+  options: { profile?: RouteProfile } = {},
+): { nodePath: string[]; usesElevator: boolean } | null {
+  const profile = options.profile ?? "fast";
+  if (profile === "comfort") {
+    return pickComfortNodePath(graph, startId, endId);
+  }
+  return pickFastNodePath(graph, startId, endId);
 }
 
 function pickBestComfortEntrance(
