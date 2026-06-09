@@ -43,6 +43,7 @@ import { useUi } from "@/hooks/use-ui";
 import { shortBuildingName } from "@/lib/building-display-name";
 import { remainingDistanceLabel } from "@/lib/i18n/navigation";
 import { formatDistance } from "@/lib/routing/geo";
+import { OFF_ROUTE_WARN_M } from "@/lib/routing/nav-thresholds";
 import type { NavMetricsDisplayRef } from "@/hooks/use-navigation";
 import { useNavMetricsDisplay } from "@/hooks/use-nav-metrics-display";
 import { routesAreDistinct } from "@/lib/routing/route";
@@ -725,7 +726,7 @@ export function RoutePanel(props: RoutePanelProps) {
           </div>
         )}
 
-        {navigating && offRouteM != null && offRouteM > 40 && !rerouteNotice && (
+        {navigating && offRouteM != null && offRouteM > OFF_ROUTE_WARN_M && !rerouteNotice && (
           <div className="flex items-start gap-2 rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-100">
             <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
             <span>{ui.route.offRouteWarning}</span>

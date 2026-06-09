@@ -23,6 +23,12 @@ import {
 import { elevatorIdsOnRoute, parseElevators, type ElevatorRecord } from "@/lib/routing/elevators";
 import { computeRoute, computeRoutePair } from "@/lib/routing/route";
 import { computeProgress } from "@/lib/routing/progress";
+import {
+  OFF_ROUTE_ARRIVE_MAX_M,
+  OFF_ROUTE_REROUTE_M,
+  REROUTE_COOLDOWN_MS,
+  REROUTE_MIN_START_MS,
+} from "@/lib/routing/nav-thresholds";
 import { createGpsSmoother } from "@/lib/routing/gps-smooth";
 import {
   headingAlongRoute,
@@ -168,8 +174,6 @@ export function useNavigation(buildings: BarrierBuilding[]) {
 
   const { deviceHeadingRef, requestPermission: requestCompassPermission } = useDeviceHeading(navigating);
 
-  const OFF_ROUTE_THRESHOLD_M = 40;
-  const REROUTE_COOLDOWN_MS = 8000;
 
   /** 목적지까지 실제 거리 + 경로 잔여 + 최소 이동을 만족할 때만 도착 처리 */
   const hasArrived = useCallback(
@@ -181,7 +185,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       const dest = activeRoute.coords[activeRoute.coords.length - 1];
       const distToDest = haversineMeters(pos, dest);
       if (distToDest > 14) return false;
-      if (offRoute > 32) return false;
+      if (offRoute > OFF_ROUTE_ARRIVE_MAX_M) return false;
 
       if (firstGpsFixRef.current) {
         const moved = haversineMeters(firstGpsFixRef.current, pos);
@@ -620,8 +624,8 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     // 경로 이탈 → 현재 위치에서 목적지까지 즉시 재탐색
     if (
       !arrived &&
-      sinceStartMs > 4000 &&
-      progress.offRoute > OFF_ROUTE_THRESHOLD_M &&
+      sinceStartMs > REROUTE_MIN_START_MS &&
+      progress.offRoute > OFF_ROUTE_REROUTE_M &&
       Date.now() - lastRerouteAtRef.current > REROUTE_COOLDOWN_MS
     ) {
       const dest = destinationRef.current;
