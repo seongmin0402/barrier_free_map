@@ -1,6 +1,6 @@
 import type { WalkwayType } from "./types";
 
-/** 보행로 종류별 경로 색상 — 실내·일반 보행은 동일 파랑, 시설별 4색만 사용 */
+/** 보행로 종류별 경로 색상 — 계단(빨강)·경사로(보라)·횡단보도(초록) 구분 */
 export function segmentColor(type: WalkwayType): string {
   switch (type) {
     case "crosswalk":
@@ -8,7 +8,7 @@ export function segmentColor(type: WalkwayType): string {
     case "stairs":
       return "#dc2626";
     case "ramp":
-      return "#ea580c";
+      return "#9333ea";
     case "elevator":
     case "indoor":
       return "#2563eb";

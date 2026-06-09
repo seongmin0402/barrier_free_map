@@ -133,6 +133,7 @@ function shouldHideFootprintsInNav(): boolean {
 type NaverRoutePolyline = {
   setMap: (t: unknown) => void;
   setPath?: (path: unknown) => void;
+  setOptions?: (opts: Record<string, unknown>) => void;
 };
 
 interface RouteColorSpan {
@@ -229,6 +230,7 @@ function syncRoutePolylines(
     let poly = segmentRefs.current[i];
     if (poly?.setPath) {
       poly.setPath(slice);
+      poly.setOptions?.({ strokeColor: span.color });
     } else {
       poly = new PolylineCtor({
         map,
