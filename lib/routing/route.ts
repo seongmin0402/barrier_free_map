@@ -99,8 +99,10 @@ const ELEVATOR_ON_CORRIDOR_M = 55;
 /** 경로에 승강기가 2곳 이상이면 불필요한 우회로 간주 — 추가 패널티 */
 const EXTRA_ELEVATOR_STOP_PENALTY_M = 130;
 /** 계단 없는 경로가 최단 대비 허용하는 우회 */
-const ACCESSIBLE_DETOUR_RATIO = 1.48;
-const ACCESSIBLE_DETOUR_EXTRA_M = 90;
+const ACCESSIBLE_DETOUR_RATIO = 1.32;
+const ACCESSIBLE_DETOUR_EXTRA_M = 55;
+/** 목적지 근처(진행 65%+) 승강기 우회 허용 추가 거리(m) */
+const LATE_ELEVATOR_MAX_EXTRA_M = 32;
 
 interface SegmentInfo {
   type: WalkwayType;
@@ -527,7 +529,9 @@ function scorePathCandidate(
   }
 
   const detour = dist - shortestDist;
-  if (!comfortElevator && detour > ELEVATOR_COMFORT_CLOSE_M) {
+  if (preferAccessible && detour > 15) {
+    score += detour * 0.72;
+  } else if (!comfortElevator && detour > ELEVATOR_COMFORT_CLOSE_M) {
     score += (detour - ELEVATOR_COMFORT_CLOSE_M) * 0.9;
   } else if (!comfortElevator && detour > 0) {
     score += detour * 0.25;
@@ -1176,20 +1180,66 @@ function pathUsesElevatorOrHub(graph: RoutingGraph, nodePath: string[]): boolean
   return pathUsesElevator(graph, nodePath) || pathVisitsElevatorHub(graph, nodePath);
 }
 
-/** 최적 경로 — 계단 없음, 가능하면 승강기 이용 */
+/** 목적지 직전 불필요한 승강기·되돌아감 우회 */
+function isWastefulComfortDetour(
+  graph: RoutingGraph,
+  nodePath: string[],
+  startId: string,
+  endId: string,
+  baselineDist: number,
+): boolean {
+  const startNode = graph.nodes.get(startId)!;
+  const endNode = graph.nodes.get(endId)!;
+  const dist = pathPhysicalDistance(graph, nodePath);
+
+  if (pathNearBackwardElevator(graph, nodePath, startNode, endNode)) return true;
+
+  const maxDist = baselineDist * ACCESSIBLE_DETOUR_RATIO + ACCESSIBLE_DETOUR_EXTRA_M;
+  if (dist > maxDist) return true;
+
+  for (const evId of elevatorsUsedOnPath(graph, nodePath)) {
+    const n = graph.nodes.get(evId)!;
+    const prog = progressAlongRoute(n, startNode, endNode);
+    if (prog > 0.65 && dist > baselineDist + LATE_ELEVATOR_MAX_EXTRA_M) return true;
+  }
+
+  return false;
+}
+
+/** 최적 경로 — 계단 없음, 불필요한 승강기·우회 제거 */
 function pickComfortNodePath(
   graph: RoutingGraph,
   startId: string,
   endId: string,
 ): { nodePath: string[]; usesElevator: boolean } | null {
+  const accessibleDirect = dijkstra(graph, startId, endId, { mode: "accessible" });
+  const baselinePath =
+    accessibleDirect && !pathHasStairs(graph, accessibleDirect)
+      ? accessibleDirect
+      : accessiblePathBetween(graph, startId, endId);
+  const baselineDist = baselinePath
+    ? pathPhysicalDistance(graph, baselinePath)
+    : Infinity;
+
   const candidates = collectPathCandidates(graph, startId, endId, true);
-  let stairFree = candidates.filter((path) => !pathHasStairs(graph, path));
+  const seenStairFree = new Set<string>();
+  const stairFree: string[][] = [];
+
+  const addStairFree = (path: string[] | null) => {
+    if (!path?.length || pathHasStairs(graph, path)) return;
+    const sig = pathSignature(path);
+    if (seenStairFree.has(sig)) return;
+    seenStairFree.add(sig);
+    stairFree.push(path);
+  };
+
+  addStairFree(accessibleDirect);
+  for (const path of candidates) addStairFree(path);
 
   if (!stairFree.length) {
-    const accessible = accessiblePathBetween(graph, startId, endId);
-    if (!accessible || pathHasStairs(graph, accessible)) return null;
-    stairFree = [accessible];
+    addStairFree(accessiblePathBetween(graph, startId, endId));
   }
+  if (!stairFree.length) return null;
 
   const referencePath =
     dijkstra(graph, startId, endId, { mode: "shortest" }) ??
@@ -1202,12 +1252,14 @@ function pickComfortNodePath(
     : new Set<string>();
   const referenceStairM = referencePath ? pathStairMeters(graph, referencePath) : 0;
 
-  const maxDist = shortestDist * ACCESSIBLE_DETOUR_RATIO + ACCESSIBLE_DETOUR_EXTRA_M;
-  let pool = stairFree.filter((path) => pathPhysicalDistance(graph, path) <= maxDist);
-  if (!pool.length) pool = stairFree;
-
-  const elevatorPool = pool.filter((path) => pathUsesElevatorOrHub(graph, path));
-  if (elevatorPool.length) pool = elevatorPool;
+  const baselineForFilter = Number.isFinite(baselineDist) ? baselineDist : shortestDist;
+  let pool = stairFree.filter(
+    (path) => !isWastefulComfortDetour(graph, path, startId, endId, baselineForFilter),
+  );
+  if (!pool.length) {
+    pool = stairFree.filter((path) => !pathHasStairs(graph, path));
+  }
+  if (!pool.length) return null;
 
   let best = pool[0];
   let bestScore = scorePathCandidate(
@@ -1238,6 +1290,22 @@ function pickComfortNodePath(
   }
 
   if (pathHasStairs(graph, best)) return null;
+
+  if (baselinePath && !pathHasStairs(graph, baselinePath)) {
+    const bestDist = pathPhysicalDistance(graph, best);
+    const baseDist = pathPhysicalDistance(graph, baselinePath);
+    const bestUsesLift = pathUsesElevatorOrHub(graph, best);
+    const baseUsesLift = pathUsesElevatorOrHub(graph, baselinePath);
+    if (
+      bestUsesLift &&
+      !baseUsesLift &&
+      bestDist > baseDist + LATE_ELEVATOR_MAX_EXTRA_M
+    ) {
+      best = baselinePath;
+    } else if (bestDist > baseDist + 50 && !bestUsesLift) {
+      best = baselinePath;
+    }
+  }
 
   return {
     nodePath: best,
@@ -1277,7 +1345,9 @@ function pickBestComfortEntrance(
     if (!startSnap) continue;
     const path = accessiblePathBetween(graph, startSnap.id, otherSnap.id);
     if (!path) continue;
-    const cost = pathWeightedCost(graph, path, "accessibleFallback");
+    const walkM = pathPhysicalDistance(graph, path);
+    const approachBias = haversineMeters(entrance.point, otherPoint) * 0.08;
+    const cost = walkM + approachBias;
     if (cost < bestCost) {
       bestCost = cost;
       best = entrance.point;
@@ -1327,7 +1397,7 @@ export function resolveComfortRouteEndpoints(
         if (!endSnap) continue;
         const path = accessiblePathBetween(graph, startSnap.id, endSnap.id);
         if (!path) continue;
-        const cost = pathWeightedCost(graph, path, "accessibleFallback");
+        const cost = pathPhysicalDistance(graph, path);
         if (cost < bestCost) {
           bestCost = cost;
           bestFrom = fromEntrance.point;
@@ -1368,18 +1438,73 @@ export function computeRoutePair(
     destination,
   );
 
-  return {
-    fast: computeRoute(graph, fastEndpoints.from, fastEndpoints.to, locale, {
-      profile: "fast",
-    }),
-    comfort: computeRoute(graph, comfortEndpoints.from, comfortEndpoints.to, locale, {
+  const fastRoute = computeRoute(graph, fastEndpoints.from, fastEndpoints.to, locale, {
+    profile: "fast",
+  });
+  const comfortRoute =
+    computeRoute(graph, comfortEndpoints.from, comfortEndpoints.to, locale, {
       profile: "comfort",
-    }),
+    }) ??
+    computeRoute(graph, fastEndpoints.from, fastEndpoints.to, locale, {
+      profile: "comfort",
+    });
+
+  return {
+    fast: fastRoute,
+    comfort: comfortRoute,
     endpoints: {
       fast: fastEndpoints,
       comfort: comfortEndpoints,
     },
   };
+}
+
+function routeSampleKey(route: ComputedRoute): string {
+  const n = route.coords.length;
+  if (n < 2) return "";
+  const idx = [0, Math.floor(n * 0.33), Math.floor(n * 0.66), n - 1];
+  return idx
+    .map((i) => {
+      const c = route.coords[i];
+      return `${c.lat.toFixed(4)},${c.lng.toFixed(4)}`;
+    })
+    .join("|");
+}
+
+/** UI — 빠른/최적 경로 선택 표시 여부 (실질적으로 다를 때만) */
+export function routesAreDistinct(a: ComputedRoute, b: ComputedRoute): boolean {
+  if (a === b) return false;
+
+  const sampleA = routeSampleKey(a);
+  const sampleB = routeSampleKey(b);
+  if (
+    sampleA &&
+    sampleB &&
+    sampleA === sampleB &&
+    Math.abs(a.distance - b.distance) <= 12
+  ) {
+    return false;
+  }
+
+  if (a.hasStairs !== b.hasStairs) return true;
+  if (a.hasElevator !== b.hasElevator) return true;
+  if (Math.abs(a.distance - b.distance) > 12) return true;
+  if (a.segmentTypes.join("\0") !== b.segmentTypes.join("\0")) return true;
+
+  const eps = 1e-4;
+  const coordDiff = (p: LatLng, q: LatLng) =>
+    Math.abs(p.lat - q.lat) > eps || Math.abs(p.lng - q.lng) > eps;
+
+  const samples = [0, 0.33, 0.66, 1] as const;
+  for (const t of samples) {
+    const ai = Math.min(a.coords.length - 1, Math.floor((a.coords.length - 1) * t));
+    const bi = Math.min(b.coords.length - 1, Math.floor((b.coords.length - 1) * t));
+    const ac = a.coords[ai];
+    const bc = b.coords[bi];
+    if (ac && bc && coordDiff(ac, bc)) return true;
+  }
+
+  return false;
 }
 
 /**

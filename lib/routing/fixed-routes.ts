@@ -661,9 +661,14 @@ export function tryFixedRoutePair(
     ? { from: dreamEntrance, to: humanitiesMain }
     : { from: humanitiesMain, to: dreamEntrance };
 
+  const comfortRoute = route;
+  const fastRoute =
+    computeRoute(graph, endpoints.from, endpoints.to, locale, { profile: "fast" }) ??
+    comfortRoute;
+
   return {
-    fast: route,
-    comfort: route,
+    fast: fastRoute,
+    comfort: comfortRoute,
     endpoints: { fast: endpoints, comfort: endpoints },
   };
 }

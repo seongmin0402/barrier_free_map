@@ -45,6 +45,7 @@ import { remainingDistanceLabel } from "@/lib/i18n/navigation";
 import { formatDistance } from "@/lib/routing/geo";
 import type { NavMetricsDisplayRef } from "@/hooks/use-navigation";
 import { useNavMetricsDisplay } from "@/hooks/use-nav-metrics-display";
+import { routesAreDistinct } from "@/lib/routing/route";
 import { estimateWalkMinutes } from "@/lib/routing/route-estimate";
 import { stepDisplayMeta, stepManeuverStyle } from "@/lib/routing/step-display";
 import { isUnsurveyedBuilding } from "@/lib/merge-campus-buildings";
@@ -738,7 +739,7 @@ export function RoutePanel(props: RoutePanelProps) {
           </div>
         )}
 
-        {routeFast && routeComfort && routeFast !== routeComfort && onRouteProfileChange ? (
+        {routeFast && routeComfort && routesAreDistinct(routeFast, routeComfort) && onRouteProfileChange ? (
           <RouteProfilePicker
             fast={routeFast}
             comfort={routeComfort}
