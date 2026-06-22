@@ -754,12 +754,19 @@ export function useNavigation(buildings: BarrierBuilding[]) {
 
     const applyGpsReading = (pos: GeolocationPosition) => {
       const raw = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-      const here = gpsSmootherRef.current.filter(raw, pos.coords.accuracy);
+      if (!isPlausibleGpsLatLng(raw)) return;
+
+      const prev = prevGpsRef.current;
+      const accuracy = pos.coords.accuracy ?? null;
+      if (prev && haversineMeters(prev, raw) > 400) {
+        gpsSmootherRef.current.hardSnap(raw);
+      }
+
+      const here = gpsSmootherRef.current.filter(raw, accuracy);
       if (!isPlausibleGpsLatLng(here)) return;
       const isFirstFix = !firstGpsFixRef.current;
       if (!firstGpsFixRef.current) firstGpsFixRef.current = here;
 
-      const prev = prevGpsRef.current;
       const movedM = prev ? haversineMeters(prev, here) : 0;
       const movementBearing =
         prev && movedM > 0.4 ? bearingDeg(prev, here) : null;
@@ -799,6 +806,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
         if (isFirstFix || now - lastUiHeadingUpdateRef.current >= 500) {
           lastUiHeadingUpdateRef.current = now;
           setUserHeading(heading);
+          setRouteHeading(heading);
         }
       }
     };
@@ -812,23 +820,29 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       setGeoError(msg);
     };
 
-    const beginNavigating = (initialPos: LatLng | null) => {
+    const seedLiveOrigin = (point: LatLng) => {
+      setOrigin({
+        kind: "gps",
+        label: getUi(localeRef.current).route.currentLocationLabel,
+        point,
+      });
+    };
+
+    const beginNavigating = (initialPos: LatLng | null, accuracyM?: number | null) => {
+      gpsSmootherRef.current.reset();
       firstGpsFixRef.current = null;
       prevGpsRef.current = null;
 
       if (initialPos && isPlausibleGpsLatLng(initialPos)) {
-        userPosRef.current = initialPos;
-        firstGpsFixRef.current = initialPos;
-        prevGpsRef.current = initialPos;
-        gpsSmootherRef.current.filter(initialPos, null);
-        setUserPos(initialPos);
-        if (origin?.kind === "gps") {
-          setOrigin({
-            kind: "gps",
-            label: getUi(localeRef.current).route.currentLocationLabel,
-            point: initialPos,
-          });
-        }
+        const seeded =
+          accuracyM != null && accuracyM <= 80
+            ? gpsSmootherRef.current.hardSnap(initialPos)
+            : gpsSmootherRef.current.filter(initialPos, accuracyM);
+        userPosRef.current = seeded;
+        firstGpsFixRef.current = seeded;
+        prevGpsRef.current = seeded;
+        setUserPos(seeded);
+        seedLiveOrigin(seeded);
       } else {
         userPosRef.current = null;
         setUserPos(null);
@@ -880,33 +894,21 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       );
     };
 
-    const originFallback =
-      origin?.kind === "gps" && origin.point ? { ...origin.point } : null;
-
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const raw = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        const here = gpsSmootherRef.current.filter(raw, pos.coords.accuracy);
-        if (!isPlausibleGpsLatLng(here)) {
-          setGeoError(t.geoUnavailable);
+        if (!isPlausibleGpsLatLng(raw)) {
+          beginNavigating(null);
           return;
         }
-        beginNavigating(here);
+        beginNavigating(raw, pos.coords.accuracy);
       },
-      (err) => {
-        if (originFallback && isPlausibleGpsLatLng(originFallback)) {
-          beginNavigating(originFallback);
-          return;
-        }
-        let msg = t.geoFailed;
-        if (err.code === 1) msg = t.geoDenied;
-        else if (err.code === 2) msg = t.geoUnavailable;
-        else if (err.code === 3) msg = t.geoTimeout;
-        setGeoError(msg);
+      () => {
+        beginNavigating(null);
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 },
     );
-  }, [activeRoute, destination, origin, clearWatch, requestCompassPermission]);
+  }, [activeRoute, destination, clearWatch, requestCompassPermission]);
 
   // userPos 상태 갱신 시 백업 tick (GPS 콜백 throttle과 이중 실행 방지는 NAV_PROGRESS_COMPUTE_MS)
   useEffect(() => {
@@ -1005,6 +1007,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     liveAnnouncement,
     userPos,
     userPosRef,
+    routeHeadingNavRef,
     metricsDisplayRef,
     userHeading,
     routeHeading,

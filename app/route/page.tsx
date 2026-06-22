@@ -117,6 +117,7 @@ export default function RoutePage() {
             userPosRef={nav.userPosRef}
             userHeading={nav.userHeading}
             routeHeading={nav.routeHeading}
+            routeHeadingNavRef={nav.routeHeadingNavRef}
             deviceHeadingRef={nav.deviceHeadingRef}
             navMotionRef={nav.navMotionRef}
             pickMode={nav.pickMode}

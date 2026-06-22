@@ -21,6 +21,7 @@ export type RoutePageMapProps = {
   userPosRef: RefObject<LatLng | null>;
   userHeading: number | null;
   routeHeading: number | null;
+  routeHeadingNavRef: RefObject<number | null>;
   deviceHeadingRef: RefObject<DeviceHeadingSnapshot>;
   navMotionRef: RefObject<NavMotionSnapshot>;
   pickMode: "origin" | "destination" | null;
@@ -44,6 +45,7 @@ function RoutePageMapInner({
   userPosRef,
   userHeading,
   routeHeading,
+  routeHeadingNavRef,
   deviceHeadingRef,
   navMotionRef,
   pickMode,
@@ -64,11 +66,12 @@ function RoutePageMapInner({
 
   const mapOriginPoint = useMemo(() => {
     if (navigating) {
-      if (userPos) return userPos;
+      const live = userPosRef.current ?? userPos;
+      if (live) return live;
       if (origin?.kind === "gps" && origin.point) return origin.point;
     }
     return routeEndpoints?.from ?? origin?.point ?? null;
-  }, [navigating, userPos, origin, routeEndpoints]);
+  }, [navigating, userPos, userPosRef, origin, routeEndpoints]);
 
   const mapDestPoint = useMemo(
     () => routeEndpoints?.to ?? destination?.point ?? null,
@@ -92,6 +95,7 @@ function RoutePageMapInner({
       navigationMode={navigating}
       userHeading={userHeading}
       routeHeading={routeHeading}
+      routeHeadingLiveRef={routeHeadingNavRef}
       deviceHeadingRef={deviceHeadingRef}
       navMotionRef={navMotionRef}
       mapLayout="route"
@@ -127,6 +131,7 @@ function mapPropsAreEqual(prev: RoutePageMapProps, next: RoutePageMapProps): boo
     "elevators",
     "routeElevatorIds",
     "userPosRef",
+    "routeHeadingNavRef",
     "deviceHeadingRef",
     "navMotionRef",
     "onBuildingSelect",

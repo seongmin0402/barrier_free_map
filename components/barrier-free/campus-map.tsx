@@ -87,6 +87,8 @@ interface CampusMapProps {
   userHeading?: number | null;
   /** 경로 진행 방향 (deg) */
   routeHeading?: number | null;
+  /** 안내 중 실시간 경로 방향 — memo 리렌더 없이 rAF에서 읽음 */
+  routeHeadingLiveRef?: RefObject<number | null>;
   /** 기기 나침반 (DeviceOrientation) — rAF에서 직접 읽음 */
   deviceHeadingRef?: RefObject<DeviceHeadingSnapshot>;
   /** GPS 속도·이동 방향 스냅샷 */
@@ -304,6 +306,7 @@ function campusMapPropsAreEqual(prev: CampusMapProps, next: CampusMapProps): boo
     "liveUserPositionRef",
     "deviceHeadingRef",
     "navMotionRef",
+    "routeHeadingLiveRef",
   ];
 
   for (const key of stableKeys) {
@@ -592,6 +595,7 @@ function CampusMapInner({
   navigationMode = false,
   userHeading = null,
   routeHeading = null,
+  routeHeadingLiveRef,
   deviceHeadingRef,
   navMotionRef,
   mapLayout = "explore",
@@ -674,6 +678,12 @@ function CampusMapInner({
   } | null>(null);
   const followPausedRef = useRef(followPaused);
   followPausedRef.current = followPaused;
+  const followUserRef = useRef(followUser);
+  followUserRef.current = followUser;
+  const navigationModeRef = useRef(navigationMode);
+  navigationModeRef.current = navigationMode;
+  const routeHeadingLiveRefProp = useRef(routeHeadingLiveRef);
+  routeHeadingLiveRefProp.current = routeHeadingLiveRef;
   mobileSheetVhRef.current = mobileSheetVh;
   const userHeadingRef = useRef(userHeading);
   const routeHeadingRef = useRef(routeHeading);
@@ -684,17 +694,19 @@ function CampusMapInner({
     const now = Date.now();
     const compass = deviceHeadingRef?.current;
     const motion = navMotionRef?.current;
+    const liveRouteHeading =
+      routeHeadingLiveRefProp.current?.current ?? routeHeadingRef.current;
     const fused = fuseNavigationHeading({
       compassHeading: compass?.heading ?? null,
       compassAgeMs: compass ? compassAgeMs(compass, now) : Infinity,
       gpsHeading: motion?.gpsHeading ?? userHeadingRef.current,
       movementBearing: motion?.movementBearing ?? null,
-      routeHeading: routeHeadingRef.current,
+      routeHeading: liveRouteHeading,
       speedMps: motion?.speedMps ?? null,
       movedMeters: motion?.movedMeters ?? 0,
     });
     if (fused != null) return fused;
-    return routeHeadingRef.current ?? userHeadingRef.current ?? displayHeadingRef.current;
+    return liveRouteHeading ?? userHeadingRef.current ?? displayHeadingRef.current;
   }, [deviceHeadingRef, navMotionRef]);
 
   const onMapIdleRef = useRef<(() => void) | null>(null);
@@ -743,7 +755,6 @@ function CampusMapInner({
         userOffset &&
         !shouldRecenterEdgeFollow(userOffset, size, bottomObstructionVh)
       ) {
-        pendingNavCameraRef.current = null;
         return;
       }
     }
@@ -814,7 +825,9 @@ function CampusMapInner({
       } = {},
     ) => {
       if (!isPlausibleGpsLatLng(user)) return;
-      const cameraHeading = routeHeadingRef.current ?? markerHeading;
+      const liveRouteHeading =
+        routeHeadingLiveRefProp.current?.current ?? routeHeadingRef.current;
+      const cameraHeading = liveRouteHeading ?? markerHeading;
       pendingNavCameraRef.current = {
         user,
         markerHeading,
@@ -1105,6 +1118,8 @@ function CampusMapInner({
       mapLayout === "route" && isMobileMapViewport() ? mobileSheetVhRef.current : 0;
 
     const applyCampusFit = () => {
+      if (followUserRef.current && navigationModeRef.current) return;
+      markProgrammaticCamera(700);
       fitCampusOverview(
         maps as NMaps,
         map,
@@ -1115,13 +1130,17 @@ function CampusMapInner({
       );
     };
 
-    applyCampusFit();
-
-    requestAnimationFrame(() => {
-      relayoutMap();
+    if (!(followUserRef.current && navigationModeRef.current)) {
       applyCampusFit();
-      requestAnimationFrame(applyCampusFit);
-    });
+      requestAnimationFrame(() => {
+        relayoutMap();
+        applyCampusFit();
+        requestAnimationFrame(applyCampusFit);
+      });
+    } else {
+      suppressFollowPauseUntilRef.current = Date.now() + 900;
+      setFollowPaused(false);
+    }
 
     const initiallySelected = selectedIdRef.current;
     if (initiallySelected) {
@@ -1325,7 +1344,10 @@ function CampusMapInner({
     const maps = window.naver?.maps as NMaps | undefined;
     if (!map || !maps?.LatLng) return;
 
-    const drawSig = routeDrawSignature(routeLine, routeSegments, originPoint, destPoint);
+    const drawSig =
+      followUser && navigationMode
+        ? routeDrawSignature(routeLine, routeSegments, null, destPoint)
+        : routeDrawSignature(routeLine, routeSegments, originPoint, destPoint);
     const routeUnchanged =
       drawSig.length > 0 &&
       drawSig === lastRouteDrawSigRef.current &&
@@ -1417,7 +1439,7 @@ function CampusMapInner({
       lastNavRouteSigDuringFollowRef.current = "";
       return;
     }
-    const sig = routeDrawSignature(routeLine, routeSegments, originPoint, destPoint);
+    const sig = routeDrawSignature(routeLine, routeSegments, null, destPoint);
     if (!sig) return;
 
     if (
@@ -1543,8 +1565,19 @@ function CampusMapInner({
     const maps = window.naver?.maps as NMaps | undefined;
     const map = mapInstanceRef.current;
     if (!maps || !map) return;
-    fitToPoints(maps as NMaps, map, routeLine, { padding: 70, maxZoom: 17 });
-  }, [sdkLoaded, mapReadyEpoch, routeLine, followUser]);
+
+    const offCampusOrigin =
+      originPoint != null &&
+      isPlausibleGpsLatLng(originPoint) &&
+      shouldUseDirectUserSnap(originPoint);
+    const fitPoints =
+      offCampusOrigin && originPoint ? [originPoint, ...routeLine] : routeLine;
+
+    fitToPoints(maps as NMaps, map, fitPoints, {
+      padding: offCampusOrigin ? 48 : 70,
+      maxZoom: offCampusOrigin ? 14 : 17,
+    });
+  }, [sdkLoaded, mapReadyEpoch, routeLine, followUser, originPoint]);
 
   /** GPS 목표 위치·방향 갱신 */
   useEffect(() => {
@@ -1565,9 +1598,24 @@ function CampusMapInner({
       if (followUser && navigationMode) {
         viewportAdjustedRef.current = false;
         hasNavCenteredRef.current = false;
+        navSnapPendingRef.current = true;
       }
     }
   }, [mobileSheetVh, followUser, navigationMode]);
+
+  /** 지도 재초기화 후 안내 추적 상태 복구 */
+  const prevMapEpochRef = useRef(mapReadyEpoch);
+  useEffect(() => {
+    if (mapReadyEpoch === prevMapEpochRef.current) return;
+    prevMapEpochRef.current = mapReadyEpoch;
+    if (!followUser || !navigationMode) return;
+    hasNavCenteredRef.current = false;
+    navSnapPendingRef.current = true;
+    navBootstrapDoneRef.current = false;
+    viewportAdjustedRef.current = false;
+    setFollowPaused(false);
+    suppressFollowPauseUntilRef.current = Date.now() + 900;
+  }, [mapReadyEpoch, followUser, navigationMode]);
 
   useEffect(() => {
     const h = resolveFusedHeading();
@@ -2031,24 +2079,42 @@ function CampusMapInner({
 
   /** 안내 중 — 유효 GPS로 줌 유지·중심만 복귀 (내 위치 / 경로 맞춤) */
   const softRecenterOnUser = useCallback(() => {
-    const latest =
+    setFollowPaused(false);
+    navSnapPendingRef.current = true;
+    hasNavCenteredRef.current = false;
+    suppressFollowPauseUntilRef.current = Date.now() + 700;
+
+    const snapTo = (latest: LatLng) => {
+      if (!isPlausibleGpsLatLng(latest)) return;
+      targetPosRef.current = latest;
+      displayPosRef.current = { ...latest };
+      const heading = resolveFusedHeading();
+      queueNavCamera(latest, heading, {
+        snap: true,
+        adjustViewport: true,
+        preserveZoom: !shouldUseDirectUserSnap(latest),
+        force: true,
+      });
+    };
+
+    const cached =
       liveUserPosRefProp.current?.current ??
       targetPosRef.current ??
       displayPosRef.current;
-    if (!latest || !isPlausibleGpsLatLng(latest)) return;
+    if (cached && isPlausibleGpsLatLng(cached)) {
+      snapTo(cached);
+    }
 
-    targetPosRef.current = latest;
-    displayPosRef.current = { ...latest };
-    navSnapPendingRef.current = false;
-    setFollowPaused(false);
-
-    const heading = resolveFusedHeading();
-    queueNavCamera(latest, heading, {
-      snap: true,
-      adjustViewport: true,
-      preserveZoom: true,
-      force: true,
-    });
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        snapTo({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+      () => {
+        /* cached 위치 유지 */
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 8000 },
+    );
   }, [queueNavCamera, resolveFusedHeading]);
 
   const fitRouteOnMap = useCallback(() => {
