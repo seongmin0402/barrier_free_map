@@ -24,7 +24,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { BarrierBuilding } from "@/lib/building-types";
-import { filterNavMapPoints, isNavMapLatLng, type LatLng } from "@/lib/routing/geo";
+import { filterNavMapPoints, isPlausibleGpsLatLng, type LatLng } from "@/lib/routing/geo";
 import type { ElevatorRecord } from "@/lib/routing/elevators";
 import {
   applyNavigationCamera,
@@ -796,7 +796,7 @@ function CampusMapInner({
         preserveZoom?: boolean;
       } = {},
     ) => {
-      if (!isNavMapLatLng(user)) return;
+      if (!isPlausibleGpsLatLng(user)) return;
       const cameraHeading = routeHeadingRef.current ?? markerHeading;
       pendingNavCameraRef.current = {
         user,
@@ -1417,7 +1417,7 @@ function CampusMapInner({
         liveUserPosRefProp.current?.current ??
         targetPosRef.current ??
         displayPosRef.current;
-      if (keep && isNavMapLatLng(keep)) {
+      if (keep && isPlausibleGpsLatLng(keep)) {
         targetPosRef.current = keep;
         displayPosRef.current = { ...keep };
       }
@@ -1661,7 +1661,7 @@ function CampusMapInner({
   useEffect(() => {
     const firstPos = liveUserPosition ?? liveUserPosRefProp.current?.current;
     if (!sdkLoaded || !followUser || !navigationMode || followPaused || !firstPos) return;
-    if (!isNavMapLatLng(firstPos)) return;
+    if (!isPlausibleGpsLatLng(firstPos)) return;
     if (hasNavCenteredRef.current) return;
 
     const heading = resolveFusedHeading();
@@ -1846,7 +1846,7 @@ function CampusMapInner({
         return;
       }
 
-      const targetOk = isNavMapLatLng(target);
+      const targetOk = isPlausibleGpsLatLng(target);
       let display = displayPosRef.current;
       const snapCamera = (navSnapPendingRef.current || !display) && targetOk;
       if (snapCamera || !display) {
@@ -2074,7 +2074,7 @@ function CampusMapInner({
       liveUserPosRefProp.current?.current ??
       targetPosRef.current ??
       displayPosRef.current;
-    if (!latest || !isNavMapLatLng(latest)) return;
+    if (!latest || !isPlausibleGpsLatLng(latest)) return;
 
     targetPosRef.current = latest;
     displayPosRef.current = { ...latest };

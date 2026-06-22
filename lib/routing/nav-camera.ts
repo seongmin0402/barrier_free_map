@@ -1,4 +1,4 @@
-import { bearingDeg, isNavMapLatLng, type LatLng } from "./geo";
+import { bearingDeg, isPlausibleGpsLatLng, type LatLng } from "./geo";
 import type { ComputedRoute } from "./types";
 import type { RouteProgress } from "./progress";
 
@@ -296,7 +296,7 @@ export function applyNavigationCamera(
   headingDeg: number,
   options: NavigationCameraOptions = {},
 ): { originX: number; originY: number } | null {
-  if (!isNavMapLatLng(user)) return null;
+  if (!isPlausibleGpsLatLng(user)) return null;
 
   const projection = map.getProjection?.();
   const size = map.getSize?.();

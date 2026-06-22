@@ -395,7 +395,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
           else if (err.code === 3) msg = t.geoTimeout;
           setGeoError(msg);
         },
-        { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 },
       );
     },
     [setPoint],
@@ -771,7 +771,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     const departStep = route.steps.find((s) => s.maneuver === "depart") ?? route.steps[0];
     const departText = departStep?.text ?? "";
 
-    navSpeechBlockedUntilRef.current = Date.now() + 12000;
+    navSpeechBlockedUntilRef.current = Date.now() + 10000;
     setLiveAnnouncement(previewText);
 
     void (async () => {
@@ -855,14 +855,14 @@ export function useNavigation(buildings: BarrierBuilding[]) {
         () => {
           /* 캐시 없음 — watchPosition 첫 fix까지 대기 */
         },
-        { enableHighAccuracy: true, maximumAge: 4000, timeout: 8000 },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 },
       );
     }
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       applyGpsReading,
       onGpsError,
-      { enableHighAccuracy: true, maximumAge: 500, timeout: 25000 },
+      { enableHighAccuracy: true, maximumAge: 500, timeout: 12000 },
     );
   }, [activeRoute, destination, origin, clearWatch, requestCompassPermission]);
 
