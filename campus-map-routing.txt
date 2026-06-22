@@ -1,3 +1,6 @@
+﻿
+======== components/barrier-free/campus-map.tsx lines 1-107 ========
+
 "use client";
 
 import { useEffect, useRef, useCallback, useMemo, useState, memo, type RefObject } from "react";
@@ -24,7 +27,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { BarrierBuilding } from "@/lib/building-types";
-import { filterNavMapPoints, isPlausibleGpsLatLng, type LatLng } from "@/lib/routing/geo";
+import { filterNavMapPoints, isNavMapLatLng, type LatLng } from "@/lib/routing/geo";
 import type { ElevatorRecord } from "@/lib/routing/elevators";
 import {
   applyNavigationCamera,
@@ -44,10 +47,7 @@ import {
   NAV_POS_LERP_MOBILE,
   isMobileNavViewport,
   shouldRecenterEdgeFollow,
-  shouldUseDirectUserSnap,
-  snapMapToUserLocation,
 } from "@/lib/routing/nav-camera";
-import { isPageHidden, navGeolocationOptions } from "@/lib/routing/nav-runtime";
 import type { DeviceHeadingSnapshot, NavMotionSnapshot } from "@/lib/device-orientation";
 import { compassAgeMs } from "@/lib/device-orientation";
 import { segmentColor } from "@/lib/routing/style";
@@ -88,8 +88,6 @@ interface CampusMapProps {
   userHeading?: number | null;
   /** 경로 진행 방향 (deg) */
   routeHeading?: number | null;
-  /** 안내 중 실시간 경로 방향 — memo 리렌더 없이 rAF에서 읽음 */
-  routeHeadingLiveRef?: RefObject<number | null>;
   /** 기기 나침반 (DeviceOrientation) — rAF에서 직접 읽음 */
   deviceHeadingRef?: RefObject<DeviceHeadingSnapshot>;
   /** GPS 속도·이동 방향 스냅샷 */
@@ -111,22 +109,7 @@ interface CampusMapProps {
   onRerouteRoute?: () => void;
 }
 
-function deriveCenter(items: BarrierBuilding[]) {
-  const valid = items.filter((b) => Number.isFinite(b.lat) && Number.isFinite(b.lng));
-  if (!valid.length) return { lat: 36.469, lng: 127.14 };
-  return {
-    lat: valid.reduce((s, b) => s + b.lat, 0) / valid.length,
-    lng: valid.reduce((s, b) => s + b.lng, 0) / valid.length,
-  };
-}
-
-function escapeHtml(s: string) {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
+======== components/barrier-free/campus-map.tsx lines 126-318 ========
 
 function routeDrawSignature(
   line: LatLng[] | null,
@@ -307,7 +290,6 @@ function campusMapPropsAreEqual(prev: CampusMapProps, next: CampusMapProps): boo
     "liveUserPositionRef",
     "deviceHeadingRef",
     "navMotionRef",
-    "routeHeadingLiveRef",
   ];
 
   for (const key of stableKeys) {
@@ -322,82 +304,11 @@ function campusMapPropsAreEqual(prev: CampusMapProps, next: CampusMapProps): boo
     if (prev.routeHeading !== next.routeHeading) return false;
   }
 
-  return true;
-}
 
-type NMaps = NonNullable<Window["naver"]>["maps"];
-
-type FootprintPolyEntry = {
-  poly: { setMap: (target: unknown) => void; setOptions?: (opts: Record<string, unknown>) => void };
-  buildingId: string | null;
-  level: FootprintAccessibilityLevel | null;
-};
-
-function normalizeFootprintBuildingId(raw: string | null | undefined): string | null {
-  if (raw == null) return null;
-  const id = String(raw).trim();
-  return id.length > 0 ? id : null;
-}
-
-function footprintLevelForFeature(
-  feature: FootprintFeature,
-  buildingsById: Map<string, BarrierBuilding>,
-): FootprintAccessibilityLevel | null {
-  const buildingId = normalizeFootprintBuildingId(feature.properties?.id);
-  if (!buildingId) return null;
-  const building = buildingsById.get(buildingId);
-  if (!building) return null;
-  const level = building.accessibilityLevel;
-  if (level === "A" || level === "B" || level === "C") return level;
-  return null;
-}
-
-const MAP_TYPE_IDS = ["NORMAL", "TERRAIN", "SATELLITE", "HYBRID"] as const;
-
-type MapTypeOptionId = (typeof MAP_TYPE_IDS)[number];
-
-const MANUAL_BUILDING_LABELS = [
-  {
-    id: "manual-global-dorm",
-    name: "글로벌우정연수관",
-    lat: 36.4716541,
-    lng: 127.1402118,
-  },
-  {
-    id: "manual-future-history",
-    name: "미래융합역사문화관",
-    lat: 36.4704144,
-    lng: 127.1409296,
-  },
-] as const;
-const MANUAL_LABEL_LAT_OFFSET = -0.00003;
-const MANUAL_LABEL_LNG_OFFSET = -0.00003;
-
-function labelMarkerHtml(name: string) {
-  const safeName = escapeHtml(name);
-  return `<div aria-hidden="true" style="max-width:260px;padding:0;background:transparent;border:0;box-shadow:none;font-size:12px;line-height:1.25;font-weight:600;color:#2f5ea8;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:-1px -1px 0 rgba(255,255,255,.95),1px -1px 0 rgba(255,255,255,.95),-1px 1px 0 rgba(255,255,255,.95),1px 1px 0 rgba(255,255,255,.95),0 0 2px rgba(255,255,255,.95);">${safeName}</div>`;
-}
-
-function facilityPinHtml() {
-  return `<div aria-hidden="true" style="position:relative;width:22px;height:30px;display:flex;align-items:flex-end;justify-content:center;">
-    <svg width="22" height="30" viewBox="0 0 22 30" xmlns="http://www.w3.org/2000/svg">
-      <path fill="#2563eb" stroke="#ffffff" stroke-width="1.8" d="M11 1.8C6.07 1.8 2.1 5.66 2.1 10.31c0 5.58 8.21 16.89 8.58 17.49.36-.6 9.22-11.91 9.22-17.49C19.9 5.66 15.93 1.8 11 1.8z"/>
-      <circle cx="11" cy="10.1" r="3.2" fill="#ffffff"/>
-    </svg>
-  </div>`;
-}
-
-type MapFitOptions = {
-  padding?: number;
-  maxZoom?: number;
-  /** fitBounds 후에도 이보다 작게 줌아웃하지 않음 */
-  minZoom?: number;
-  /** 모바일 하단 시트(vh) — fitBounds 시 아래 여백으로 반영해 캠퍼스가 시트 위쪽에 오도록 */
-  bottomObstructionVh?: number;
-};
+======== components/barrier-free/campus-map.tsx lines 397-573 ========
 
 function campusOverviewFitOptions(mapLayout: "explore" | "route"): MapFitOptions {
-  const mobile = isMobileNavViewport();
+  const mobile = isMobileMapViewport();
   if (mapLayout === "explore" && mobile) {
     /** 전체 캠퍼스 맥락 유지 + 이전(16)보다 한 단계 확대 */
     return { padding: 18, maxZoom: 17, minZoom: 16 };
@@ -574,6 +485,8 @@ function setNavArrowRotation(headingDeg: number) {
   el.style.transform = `rotate(${deg}deg)`;
 }
 
+======== components/barrier-free/campus-map.tsx lines 575-815 ========
+
 function CampusMapInner({
   buildings,
   selectedBuilding,
@@ -592,7 +505,6 @@ function CampusMapInner({
   navigationMode = false,
   userHeading = null,
   routeHeading = null,
-  routeHeadingLiveRef,
   deviceHeadingRef,
   navMotionRef,
   mapLayout = "explore",
@@ -624,8 +536,6 @@ function CampusMapInner({
   const facilityPinMarkersRef = useRef<Array<{ setMap: (target: unknown) => void }>>([]);
   const footprintPolygonsRef = useRef<FootprintPolyEntry[]>([]);
   const [footprintCollection, setFootprintCollection] = useState<FootprintFeatureCollection | null>(null);
-  const footprintCollectionRef = useRef<FootprintFeatureCollection | null>(null);
-  footprintCollectionRef.current = footprintCollection;
   const [mapReadyEpoch, setMapReadyEpoch] = useState(0);
   const resizeObsRef = useRef<ResizeObserver | null>(null);
   const selectedIdRef = useRef<string | null>(null);
@@ -677,15 +587,6 @@ function CampusMapInner({
   } | null>(null);
   const followPausedRef = useRef(followPaused);
   followPausedRef.current = followPaused;
-  const followUserRef = useRef(followUser);
-  followUserRef.current = followUser;
-  const navigationModeRef = useRef(navigationMode);
-  navigationModeRef.current = navigationMode;
-  const routeLineRef = useRef(routeLine);
-  routeLineRef.current = routeLine;
-  const pageHiddenRef = useRef(isPageHidden());
-  const routeHeadingLiveRefProp = useRef(routeHeadingLiveRef);
-  routeHeadingLiveRefProp.current = routeHeadingLiveRef;
   mobileSheetVhRef.current = mobileSheetVh;
   const userHeadingRef = useRef(userHeading);
   const routeHeadingRef = useRef(routeHeading);
@@ -696,19 +597,17 @@ function CampusMapInner({
     const now = Date.now();
     const compass = deviceHeadingRef?.current;
     const motion = navMotionRef?.current;
-    const liveRouteHeading =
-      routeHeadingLiveRefProp.current?.current ?? routeHeadingRef.current;
     const fused = fuseNavigationHeading({
       compassHeading: compass?.heading ?? null,
       compassAgeMs: compass ? compassAgeMs(compass, now) : Infinity,
       gpsHeading: motion?.gpsHeading ?? userHeadingRef.current,
       movementBearing: motion?.movementBearing ?? null,
-      routeHeading: liveRouteHeading,
+      routeHeading: routeHeadingRef.current,
       speedMps: motion?.speedMps ?? null,
       movedMeters: motion?.movedMeters ?? 0,
     });
     if (fused != null) return fused;
-    return liveRouteHeading ?? userHeadingRef.current ?? displayHeadingRef.current;
+    return routeHeadingRef.current ?? userHeadingRef.current ?? displayHeadingRef.current;
   }, [deviceHeadingRef, navMotionRef]);
 
   const onMapIdleRef = useRef<(() => void) | null>(null);
@@ -738,9 +637,11 @@ function CampusMapInner({
     const PointCtor = maps.Point as new (x: number, y: number) => unknown;
     const camMap = map as Parameters<typeof applyNavigationCamera>[0];
     const bottomObstructionVh =
-      mapLayout === "route" && isMobileNavViewport() ? mobileSheetVhRef.current : 0;
-
-    const routeStart = routeLineRef.current?.[0] ?? null;
+      mapLayout === "route" &&
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 639px)").matches
+        ? mobileSheetVhRef.current
+        : 0;
 
     if (!force && !pending.snap && !pending.adjustViewport) {
       const size = camMap.getSize?.();
@@ -755,6 +656,7 @@ function CampusMapInner({
         userOffset &&
         !shouldRecenterEdgeFollow(userOffset, size, bottomObstructionVh)
       ) {
+        pendingNavCameraRef.current = null;
         return;
       }
     }
@@ -762,35 +664,20 @@ function CampusMapInner({
     try {
       markProgrammaticCamera(pending.snap ? 480 : 380);
       mapIsIdleRef.current = false;
-      const camOpts = {
-        snap: pending.snap,
-        bottomObstructionVh,
-        adjustViewport: pending.adjustViewport,
-        preserveZoom: pending.preserveZoom,
-        lookAheadHeadingDeg: pending.cameraHeading,
-      };
-      if (shouldUseDirectUserSnap(pending.user, routeStart)) {
-        const zoom =
-          pending.preserveZoom && camMap.getZoom?.() != null
-            ? camMap.getZoom!()
-            : NAV_FOLLOW_ZOOM;
-        snapMapToUserLocation(
-          camMap,
-          (lat, lng) => new LatLngCtor(lat, lng),
-          (x, y) => new PointCtor(x, y),
-          pending.user,
-          { zoom, bottomObstructionVh },
-        );
-      } else {
-        applyNavigationCamera(
-          camMap,
-          (lat, lng) => new LatLngCtor(lat, lng),
-          (x, y) => new PointCtor(x, y),
-          pending.user,
-          pending.markerHeading,
-          camOpts,
-        );
-      }
+      applyNavigationCamera(
+        camMap,
+        (lat, lng) => new LatLngCtor(lat, lng),
+        (x, y) => new PointCtor(x, y),
+        pending.user,
+        pending.markerHeading,
+        {
+          snap: pending.snap,
+          bottomObstructionVh,
+          adjustViewport: pending.adjustViewport,
+          preserveZoom: pending.preserveZoom,
+          lookAheadHeadingDeg: pending.cameraHeading,
+        },
+      );
       if (pending.adjustViewport) viewportAdjustedRef.current = true;
       if (pending.snap) {
         try {
@@ -824,10 +711,8 @@ function CampusMapInner({
         preserveZoom?: boolean;
       } = {},
     ) => {
-      if (!isPlausibleGpsLatLng(user)) return;
-      const liveRouteHeading =
-        routeHeadingLiveRefProp.current?.current ?? routeHeadingRef.current;
-      const cameraHeading = liveRouteHeading ?? markerHeading;
+      if (!isNavMapLatLng(user)) return;
+      const cameraHeading = routeHeadingRef.current ?? markerHeading;
       pendingNavCameraRef.current = {
         user,
         markerHeading,
@@ -844,305 +729,29 @@ function CampusMapInner({
     [flushPendingNavCamera],
   );
 
-  const [geoHintMessage, setGeoHintMessage] = useState<string | null>(null);
-  const [locationTracking, setLocationTracking] = useState(false);
-  const [scriptError, setScriptError] = useState(false);
-  const [mapTypeKey, setMapTypeKey] = useState<MapTypeOptionId>("NORMAL");
-  const [controlsOpen, setControlsOpen] = useState(false);
-  const exploreFitAfterFootprintRef = useRef(false);
-
-  selectedIdRef.current = selectedBuilding;
-  onBuildingSelectRef.current = onBuildingSelect;
-
-  const centerMemo = useMemo(() => deriveCenter(buildings), [buildings]);
-
-  /**
-   * 클라이언트 라우팅(예: / → /route)으로 진입하면 네이버 SDK가 이미 로드돼 있어
-   * <Script>의 onLoad가 다시 호출되지 않는다. 마운트 시 직접 확인하고,
-   * 로딩 중이면 잠깐 폴링해 바로 지도가 뜨도록 한다.
-   */
-  useEffect(() => {
-    if (sdkLoaded) return;
-    const ready = () =>
-      Boolean((window.naver?.maps as NMaps | undefined)?.Map && window.naver?.maps?.LatLng);
-    if (ready()) {
-      setSdkLoaded(true);
-      return;
-    }
-    const timer = window.setInterval(() => {
-      if (ready()) {
-        setScriptError(false);
-        setSdkLoaded(true);
-        window.clearInterval(timer);
-      }
-    }, 150);
-    const stop = window.setTimeout(() => window.clearInterval(timer), 10000);
-    return () => {
-      window.clearInterval(timer);
-      window.clearTimeout(stop);
-    };
-  }, [sdkLoaded]);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/data/naver.geojson")
-      .then((res) => {
-        if (!res.ok) throw new Error(String(res.status));
-        return res.json() as Promise<FootprintFeatureCollection>;
-      })
-      .then((data) => {
-        if (!cancelled && data?.type === "FeatureCollection" && Array.isArray(data.features)) {
-          setFootprintCollection(data);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setFootprintCollection(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const teardown = useCallback(() => {
-    setLocationTracking(false);
-
-    try {
-      myLocationMarkerRef.current?.setMap(null);
-    } catch {
-      /* ignore */
-    }
-    myLocationMarkerRef.current = null;
-
-    try {
-      resizeObsRef.current?.disconnect();
-    } catch {
-      /* ignore */
-    }
-    resizeObsRef.current = null;
-
-    manualLabelMarkersRef.current.forEach((marker) => {
-      try {
-        marker.setMap(null);
-      } catch {
-        /* ignore */
-      }
-    });
-    manualLabelMarkersRef.current = [];
-    facilityPinMarkersRef.current.forEach((marker) => {
-      try {
-        marker.setMap(null);
-      } catch {
-        /* ignore */
-      }
-    });
-    facilityPinMarkersRef.current = [];
-
-    footprintPolygonsRef.current.forEach(({ poly }) => {
-      try {
-        poly.setMap(null);
-      } catch {
-        /* ignore */
-      }
-    });
-    footprintPolygonsRef.current = [];
-
-    clearRoutePolylines(routeOutlineRef.current, routeSegmentPolylinesRef.current);
-    routeOutlineRef.current = null;
-    routeSegmentPolylinesRef.current = [];
-    routeMarkersRef.current.forEach((m) => {
-      try {
-        m.setMap(null);
-      } catch {
-        /* ignore */
-      }
-    });
-    routeMarkersRef.current = [];
-    elevatorMarkersRef.current.forEach((m) => {
-      try {
-        m.setMap(null);
-      } catch {
-        /* ignore */
-      }
-    });
-    elevatorMarkersRef.current = [];
-    try {
-      navUserMarkerRef.current?.setMap(null);
-    } catch {
-      /* ignore */
-    }
-    navUserMarkerRef.current = null;
-
-    try {
-      (mapInstanceRef.current as null | { destroy?: () => void })?.destroy?.();
-    } catch {
-      /* ignore */
-    }
-    mapInstanceRef.current = null;
-
-    const el = containerRef.current;
-    if (el) el.innerHTML = "";
-  }, []);
-
-  useEffect(() => {
-    if (!sdkLoaded || !clientId || !containerRef.current) return;
-
-    const maps = window.naver?.maps as NMaps | undefined;
-    if (!maps?.Map || !maps.LatLng || !maps.Marker || !maps.Event?.addListener || !maps.Point) return;
-
-    teardown();
-    exploreFitAfterFootprintRef.current = false;
-
-    const el = containerRef.current;
-    const MapCtor = maps.Map as unknown as new (node: HTMLElement, opts?: Record<string, unknown>) => {
-      destroy: () => void;
-      setZoom: (z: number) => void;
-      getZoom: () => number;
-      panTo: (ll: unknown, opts?: unknown) => void;
-      fitBounds: (bounds: unknown, opts?: unknown) => void;
-    };
-
-    const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
-
-    const initialZoom =
-      mapLayout === "explore" && isMobileNavViewport() ? 17 : 16;
-
-    const map = new MapCtor(el, {
-      center: new LatLngCtor(centerMemo.lat, centerMemo.lng),
-      zoom: initialZoom,
-      zoomControl: false,
-      mapDataControl: false,
-      scaleControl: false,
-    });
-
-    mapInstanceRef.current = map;
-    setMapReadyEpoch((n) => n + 1);
-    setMapTypeKey("NORMAL");
-
-    const EventTrigger = maps.Event as unknown as { trigger?: (target: unknown, evt: string) => void };
-
-    const relayoutMap = () => {
-      try {
-        (map as { relayout?: () => void }).relayout?.();
-      } catch {
-        /* ignore */
-      }
-      try {
-        EventTrigger.trigger?.(map, "resize");
-      } catch {
-        /* ignore */
-      }
-    };
-
-    const scheduleRelayout = () => {
-      const inNav = followUserRef.current && navigationModeRef.current;
-      relayoutMap();
-      if (inNav) return;
-      requestAnimationFrame(() => {
-        relayoutMap();
-        requestAnimationFrame(relayoutMap);
-      });
-    };
-    scheduleRelayout();
-
-    maps.Event.addListener(map, "idle", () => {
-      relayoutMap();
-      mapIsIdleRef.current = true;
-      onMapIdleRef.current?.();
-    });
-
-    const MarkerCtor = maps.Marker as unknown as new (opts: Record<string, unknown>) => {
-      setMap: (target: typeof map | null) => void;
-    };
-
-    const PointCtor = maps.Point as new (x: number, y: number) => unknown;
-    const MANUAL_LABEL_MIN_ZOOM = 17;
-
-    if (typeof ResizeObserver !== "undefined") {
-      const ro = new ResizeObserver(() => {
-        relayoutMap();
-      });
-      ro.observe(el);
-      resizeObsRef.current = ro;
-    }
-
-    const syncManualLabelVisibility = () => {
-      const zoom = (map as { getZoom?: () => number }).getZoom?.() ?? 16;
-      const shouldShow = zoom >= MANUAL_LABEL_MIN_ZOOM;
-      for (const marker of manualLabelMarkersRef.current) {
-        try {
-          marker.setMap(shouldShow ? map : null);
-        } catch {
-          /* ignore */
-        }
-      }
-    };
-
-    for (const label of MANUAL_BUILDING_LABELS) {
-      const marker = new MarkerCtor({
-        map: null,
-        position: new LatLngCtor(
-          label.lat + MANUAL_LABEL_LAT_OFFSET,
-          label.lng + MANUAL_LABEL_LNG_OFFSET,
-        ),
-        title: label.name,
-        zIndex: 1200,
-        icon: {
-          content: labelMarkerHtml(label.name),
-          anchor: new PointCtor(14, -2),
-        },
-      });
-      manualLabelMarkersRef.current.push(marker);
-    }
-    syncManualLabelVisibility();
-    maps.Event.addListener(map, "zoom_changed", syncManualLabelVisibility);
-
-    if (showFacilityPins) {
-      for (const building of buildings) {
-        if (!Number.isFinite(building.lat) || !Number.isFinite(building.lng)) continue;
-        const marker = new MarkerCtor({
-          map,
-          position: new LatLngCtor(building.lat, building.lng),
-          title: ui.map.facilityFilterMatch(building.name),
-          zIndex: 1600,
-          icon: {
-            content: facilityPinHtml(),
-            anchor: new PointCtor(11, 30),
-          },
-        });
-        facilityPinMarkersRef.current.push(marker);
-        maps.Event.addListener(marker, "click", () => {
-          onBuildingSelectRef.current(building.id);
-        });
-      }
-    }
+======== components/barrier-free/campus-map.tsx lines 1087-1175 ========
 
     const routeSheetVh =
-      mapLayout === "route" && isMobileNavViewport() ? mobileSheetVhRef.current : 0;
+      mapLayout === "route" && isMobileMapViewport() ? mobileSheetVhRef.current : 0;
 
     const applyCampusFit = () => {
-      if (followUserRef.current && navigationModeRef.current) return;
-      markProgrammaticCamera(700);
       fitCampusOverview(
         maps as NMaps,
         map,
         buildings,
-        footprintCollectionRef.current,
+        footprintCollection,
         mapLayout,
         routeSheetVh,
       );
     };
 
-    if (!(followUserRef.current && navigationModeRef.current)) {
+    applyCampusFit();
+
+    requestAnimationFrame(() => {
+      relayoutMap();
       applyCampusFit();
-      requestAnimationFrame(() => {
-        relayoutMap();
-        applyCampusFit();
-        requestAnimationFrame(applyCampusFit);
-      });
-    } else {
-      suppressFollowPauseUntilRef.current = Date.now() + 900;
-      setFollowPaused(false);
-    }
+      requestAnimationFrame(applyCampusFit);
+    });
 
     const initiallySelected = selectedIdRef.current;
     if (initiallySelected) {
@@ -1161,12 +770,12 @@ function CampusMapInner({
     // onBuildingSelect 은 ref(onBuildingSelectRef)로 읽으므로 의존성에서 제외한다.
     // (의존성에 넣으면 매 렌더마다 지도가 재초기화되어 살짝 확대/재맞춤되는 현상 발생)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sdkLoaded, clientId, centerMemo.lat, centerMemo.lng, buildings, teardown, showFacilityPins, mapLayout]);
+  }, [sdkLoaded, clientId, centerMemo.lat, centerMemo.lng, buildings, teardown, showFacilityPins, mapLayout, footprintCollection]);
 
   /** 폴리곤 로드 후 모바일 — 한 번 더 캠퍼스에 맞춤 (초기 fitBounds 시 영역이 넓게 잡히는 경우 보정) */
   useEffect(() => {
     if (!sdkLoaded || !footprintCollection?.features.length) return;
-    if (!isMobileNavViewport()) return;
+    if (!isMobileMapViewport()) return;
     if (mapLayout !== "explore" && mapLayout !== "route") return;
     if (mapLayout === "route" && (navigationMode || followUser)) return;
 
@@ -1189,7 +798,7 @@ function CampusMapInner({
 
   /** 길찾기 모바일 — 하단 시트 높이에 맞춰 캠퍼스 뷰 재맞춤 */
   useEffect(() => {
-    if (!sdkLoaded || mapLayout !== "route" || !isMobileNavViewport()) return;
+    if (!sdkLoaded || mapLayout !== "route" || !isMobileMapViewport()) return;
     if (navigationMode || followUser) return;
 
     const map = mapInstanceRef.current;
@@ -1212,74 +821,7 @@ function CampusMapInner({
     });
   }, [sdkLoaded, mapLayout, mobileSheetVh, footprintCollection, buildings, navigationMode, followUser, mapReadyEpoch]);
 
-  useEffect(() => {
-    if (!sdkLoaded || !footprintCollection?.features.length) return;
-    const map = mapInstanceRef.current;
-    if (!map) return;
-
-    footprintPolygonsRef.current.forEach(({ poly }) => {
-      try {
-        poly.setMap(null);
-      } catch {
-        /* ignore */
-      }
-    });
-    footprintPolygonsRef.current = [];
-
-    const maps = window.naver?.maps as NMaps | undefined;
-    const PolygonCtor = maps?.Polygon as
-      | (new (opts: Record<string, unknown>) => {
-          setMap: (target: unknown) => void;
-          setOptions?: (opts: Record<string, unknown>) => void;
-        })
-      | undefined;
-    const LatLngCtor = maps?.LatLng as new (lat: number, lng: number) => unknown | undefined;
-    if (!PolygonCtor || !LatLngCtor || !maps?.Event?.addListener) return;
-
-    const buildingMap = new Map(buildings.map((b) => [b.id, b]));
-
-    for (const feature of footprintCollection.features) {
-      const buildingId = normalizeFootprintBuildingId(feature.properties?.id);
-      const building = buildingId ? buildingMap.get(buildingId) : undefined;
-
-      if (!showAllFootprints && !building) continue;
-
-      const level = footprintLevelForFeature(feature, buildingMap);
-      const isSelected = buildingId != null && buildingId === selectedIdRef.current;
-      const stroke = footprintStrokeOptions(level, isSelected);
-      const groups = footprintPolygonPathGroups(feature.geometry, LatLngCtor);
-
-      for (const paths of groups) {
-        const poly = new PolygonCtor({
-          map,
-          paths,
-          ...stroke,
-        });
-
-        footprintPolygonsRef.current.push({ poly, buildingId, level });
-
-        maps.Event.addListener(poly, "click", () => {
-          if (building) {
-            onBuildingSelectRef.current(building.id);
-            return;
-          }
-          const label = feature.properties?.building_n?.trim() || ui.map.buildingFallback;
-          setGeoHintMessage(ui.map.noBarrierInfo(label));
-        });
-      }
-    }
-
-    return () => {
-      footprintPolygonsRef.current.forEach(({ poly }) => {
-        try {
-          poly.setMap(null);
-        } catch {
-          /* ignore */
-        }
-      });
-      footprintPolygonsRef.current = [];
-    };
-  }, [sdkLoaded, footprintCollection, mapReadyEpoch, buildings, showAllFootprints, ui]);
+======== components/barrier-free/campus-map.tsx lines 1246-1258 ========
 
   /** 길안내 중 건물 폴리곤 숨김 (재생성 없이 setMap 토글) */
   useEffect(() => {
@@ -1295,49 +837,7 @@ function CampusMapInner({
     }
   }, [sdkLoaded, navigationMode, mapReadyEpoch]);
 
-  /** 선택 변경 시 폴리곤 테두리만 갱신 */
-  useEffect(() => {
-    if (!sdkLoaded || footprintPolygonsRef.current.length === 0) return;
-    for (const entry of footprintPolygonsRef.current) {
-      const isSelected = entry.buildingId != null && entry.buildingId === selectedBuilding;
-      try {
-        entry.poly.setOptions?.(footprintStrokeOptions(entry.level, isSelected));
-      } catch {
-        /* ignore */
-      }
-    }
-  }, [selectedBuilding, sdkLoaded]);
-
-  useEffect(() => {
-    if (!selectedBuilding) return;
-
-    const b = buildings.find((x) => x.id === selectedBuilding);
-    if (!b || !Number.isFinite(b.lat) || !Number.isFinite(b.lng)) return;
-
-    const map = mapInstanceRef.current as undefined | {
-      panTo?: (ll: unknown, opts?: unknown) => void;
-      setCenter?: (ll: unknown) => void;
-      setZoom?: (z: number) => void;
-      relayout?: () => void;
-    };
-    if (!map?.panTo && !map?.setCenter) return;
-
-    const maps = window.naver?.maps as NMaps | undefined;
-    if (!maps?.LatLng) return;
-    const Ll = maps.LatLng as new (a: number, c: number) => unknown;
-
-    const target = new Ll(b.lat, b.lng);
-    map.setCenter?.(target);
-    map.panTo?.(target, { duration: 400 });
-    map.setZoom?.(17);
-    requestAnimationFrame(() => {
-      try {
-        map.relayout?.();
-      } catch {
-        /* ignore */
-      }
-    });
-  }, [selectedBuilding, buildings]);
+======== components/barrier-free/campus-map.tsx lines 1304-2013 ========
 
   /** 길찾기 경로 폴리라인 + 출발/도착 마커 */
   useEffect(() => {
@@ -1346,10 +846,7 @@ function CampusMapInner({
     const maps = window.naver?.maps as NMaps | undefined;
     if (!map || !maps?.LatLng) return;
 
-    const drawSig =
-      followUser && navigationMode
-        ? routeDrawSignature(routeLine, routeSegments, null, destPoint)
-        : routeDrawSignature(routeLine, routeSegments, originPoint, destPoint);
+    const drawSig = routeDrawSignature(routeLine, routeSegments, originPoint, destPoint);
     const routeUnchanged =
       drawSig.length > 0 &&
       drawSig === lastRouteDrawSigRef.current &&
@@ -1441,7 +938,7 @@ function CampusMapInner({
       lastNavRouteSigDuringFollowRef.current = "";
       return;
     }
-    const sig = routeDrawSignature(routeLine, routeSegments, null, destPoint);
+    const sig = routeDrawSignature(routeLine, routeSegments, originPoint, destPoint);
     if (!sig) return;
 
     if (
@@ -1458,7 +955,7 @@ function CampusMapInner({
         liveUserPosRefProp.current?.current ??
         targetPosRef.current ??
         displayPosRef.current;
-      if (keep && isPlausibleGpsLatLng(keep)) {
+      if (keep && isNavMapLatLng(keep)) {
         targetPosRef.current = keep;
         displayPosRef.current = { ...keep };
       }
@@ -1567,19 +1064,8 @@ function CampusMapInner({
     const maps = window.naver?.maps as NMaps | undefined;
     const map = mapInstanceRef.current;
     if (!maps || !map) return;
-
-    const offCampusOrigin =
-      originPoint != null &&
-      isPlausibleGpsLatLng(originPoint) &&
-      shouldUseDirectUserSnap(originPoint, routeLine?.[0] ?? null);
-    const fitPoints =
-      offCampusOrigin && originPoint ? [originPoint, ...routeLine] : routeLine;
-
-    fitToPoints(maps as NMaps, map, fitPoints, {
-      padding: offCampusOrigin ? 48 : 70,
-      maxZoom: offCampusOrigin ? 14 : 17,
-    });
-  }, [sdkLoaded, mapReadyEpoch, routeLine, followUser, originPoint]);
+    fitToPoints(maps as NMaps, map, routeLine, { padding: 70, maxZoom: 17 });
+  }, [sdkLoaded, mapReadyEpoch, routeLine, followUser]);
 
   /** GPS 목표 위치·방향 갱신 */
   useEffect(() => {
@@ -1600,59 +1086,9 @@ function CampusMapInner({
       if (followUser && navigationMode) {
         viewportAdjustedRef.current = false;
         hasNavCenteredRef.current = false;
-        navSnapPendingRef.current = true;
       }
     }
   }, [mobileSheetVh, followUser, navigationMode]);
-
-  /** 탭 숨김/복귀 — rAF·카메라 부하 절감, 복귀 시 사용자 중심 재스냅 */
-  useEffect(() => {
-    const onVisibility = () => {
-      const hidden = isPageHidden();
-      pageHiddenRef.current = hidden;
-      if (hidden || !followUserRef.current || !navigationModeRef.current) return;
-      setFollowPaused(false);
-      navSnapPendingRef.current = true;
-      hasNavCenteredRef.current = false;
-      suppressFollowPauseUntilRef.current = Date.now() + 900;
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("pageshow", onVisibility);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("pageshow", onVisibility);
-    };
-  }, []);
-
-  /** 지도 재초기화 후 안내 추적 상태 복구 */
-  const prevMapEpochRef = useRef(mapReadyEpoch);
-  useEffect(() => {
-    if (mapReadyEpoch === prevMapEpochRef.current) return;
-    prevMapEpochRef.current = mapReadyEpoch;
-    if (!followUser || !navigationMode) return;
-    hasNavCenteredRef.current = false;
-    navSnapPendingRef.current = true;
-    navBootstrapDoneRef.current = false;
-    viewportAdjustedRef.current = false;
-    setFollowPaused(false);
-    suppressFollowPauseUntilRef.current = Date.now() + 900;
-
-    const pos = liveUserPosRefProp.current?.current ?? liveUserPosition;
-    if (pos && isPlausibleGpsLatLng(pos)) {
-      const heading =
-        routeHeadingLiveRefProp.current?.current ??
-        routeHeadingRef.current ??
-        userHeadingRef.current ??
-        0;
-      requestAnimationFrame(() => {
-        queueNavCamera(pos, heading, {
-          snap: true,
-          force: true,
-          adjustViewport: true,
-        });
-      });
-    }
-  }, [mapReadyEpoch, followUser, navigationMode, liveUserPosition, queueNavCamera]);
 
   useEffect(() => {
     const h = resolveFusedHeading();
@@ -1675,15 +1111,8 @@ function CampusMapInner({
     navSnapPendingRef.current = true;
     hasNavCenteredRef.current = false;
     viewportAdjustedRef.current = false;
-    const existingPos =
-      liveUserPosRefProp.current?.current ?? liveUserPosition ?? null;
-    if (existingPos && isPlausibleGpsLatLng(existingPos)) {
-      displayPosRef.current = { ...existingPos };
-      targetPosRef.current = existingPos;
-    } else {
-      displayPosRef.current = null;
-      targetPosRef.current = null;
-    }
+    displayPosRef.current = null;
+    targetPosRef.current = null;
     lastMarkerHeadingRef.current = null;
     lastAppliedCamRef.current = null;
     pendingNavCameraRef.current = null;
@@ -1696,17 +1125,89 @@ function CampusMapInner({
 
   /** GPS 수신 전 — 출발 지점·경로 방향으로 길안내 화면 즉시 맞춤 (전체 경로 fitBounds 대신) */
   useEffect(() => {
-    const pos = liveUserPosRefProp.current?.current ?? liveUserPosition;
-    if (!sdkLoaded || !followUser || !navigationMode || followPaused) return;
-    if (!pos || !isPlausibleGpsLatLng(pos)) return;
-    if (hasNavCenteredRef.current && !navSnapPendingRef.current) return;
+    const hasGps =
+      liveUserPosition != null || liveUserPosRefProp.current?.current != null;
+    if (
+      !sdkLoaded ||
+      !followUser ||
+      !navigationMode ||
+      hasGps ||
+      followPaused ||
+      navBootstrapDoneRef.current
+    ) {
+      return;
+    }
+
+    const map = mapInstanceRef.current;
+    const maps = window.naver?.maps as NMaps | undefined;
+    if (!map || !maps?.LatLng || !maps?.Point) return;
+
+    const seed = originPoint ?? (routeLine && routeLine.length > 0 ? routeLine[0] : null);
+    if (!seed) return;
+
+    const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
+    const PointCtor = maps.Point as new (x: number, y: number) => unknown;
+    const heading = routeHeadingRef.current ?? userHeadingRef.current ?? 0;
+    const bottomObstructionVh =
+      mapLayout === "route" &&
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 639px)").matches
+        ? mobileSheetVhRef.current
+        : 0;
+
+    try {
+      markProgrammaticCamera(480);
+      mapIsIdleRef.current = false;
+      applyNavigationCamera(
+        map as Parameters<typeof applyNavigationCamera>[0],
+        (lat, lng) => new LatLngCtor(lat, lng),
+        (x, y) => new PointCtor(x, y),
+        seed,
+        heading,
+        {
+          snap: true,
+          bottomObstructionVh,
+          adjustViewport: true,
+          lookAheadHeadingDeg: heading,
+        },
+      );
+      viewportAdjustedRef.current = true;
+      navZoomSetRef.current = true;
+      navBootstrapDoneRef.current = true;
+      try {
+        (map as { relayout?: () => void }).relayout?.();
+      } catch {
+        /* ignore */
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [
+    sdkLoaded,
+    followUser,
+    navigationMode,
+    liveUserPosition,
+    followPaused,
+    originPoint,
+    routeLine,
+    mapReadyEpoch,
+    mapLayout,
+    markProgrammaticCamera,
+  ]);
+
+  /** 첫 GPS 수신 시 즉시 사용자 위치로 맞춤 */
+  useEffect(() => {
+    const firstPos = liveUserPosition ?? liveUserPosRefProp.current?.current;
+    if (!sdkLoaded || !followUser || !navigationMode || followPaused || !firstPos) return;
+    if (!isNavMapLatLng(firstPos)) return;
+    if (hasNavCenteredRef.current) return;
 
     const heading = resolveFusedHeading();
     const cameraHeading = routeHeadingRef.current ?? heading;
-    displayPosRef.current = { ...pos };
-    targetPosRef.current = pos;
+    displayPosRef.current = { ...firstPos };
+    targetPosRef.current = firstPos;
 
-    queueNavCamera(pos, heading, {
+    queueNavCamera(firstPos, heading, {
       snap: true,
       adjustViewport: !viewportAdjustedRef.current,
       force: true,
@@ -1724,26 +1225,17 @@ function CampusMapInner({
       | undefined;
     const PointCtor = maps?.Point as (new (x: number, y: number) => unknown) | undefined;
     const LatLngCtor = maps?.LatLng as new (lat: number, lng: number) => unknown;
-    if (map && MarkerCtor && PointCtor && LatLngCtor) {
-      const ll = new LatLngCtor(pos.lat, pos.lng);
-      if (navUserMarkerRef.current?.setPosition) {
-        navUserMarkerRef.current.setPosition(ll);
-        try {
-          navUserMarkerRef.current.setMap(map);
-        } catch {
-          /* ignore */
-        }
-      } else {
-        navUserMarkerRef.current = new MarkerCtor({
-          map,
-          position: ll,
-          zIndex: 500,
-          icon: {
-            content: navArrowHtmlStatic(),
-            anchor: new PointCtor(14, 14),
-          },
-        }) as typeof navUserMarkerRef.current;
-      }
+    if (map && MarkerCtor && PointCtor && LatLngCtor && !navUserMarkerRef.current) {
+      const ll = new LatLngCtor(firstPos.lat, firstPos.lng);
+      navUserMarkerRef.current = new MarkerCtor({
+        map,
+        position: ll,
+        zIndex: 500,
+        icon: {
+          content: navArrowHtmlStatic(),
+          anchor: new PointCtor(14, 14),
+        },
+      }) as typeof navUserMarkerRef.current;
       lastMarkerHeadingRef.current = cameraHeading;
       setNavArrowRotation(cameraHeading);
     }
@@ -1865,10 +1357,6 @@ function CampusMapInner({
     const markerHeadingThreshold = isMobileNav ? NAV_MARKER_HEADING_STEP_MOBILE : 4;
 
     const tick = (now: number) => {
-      if (pageHiddenRef.current) {
-        navAnimFrameRef.current = requestAnimationFrame(tick);
-        return;
-      }
       if (minFrameMs > 0 && now - lastCameraFrameRef.current < minFrameMs) {
         navAnimFrameRef.current = requestAnimationFrame(tick);
         return;
@@ -1896,7 +1384,7 @@ function CampusMapInner({
         return;
       }
 
-      const targetOk = isPlausibleGpsLatLng(target);
+      const targetOk = isNavMapLatLng(target);
       let display = displayPosRef.current;
       const snapCamera = (navSnapPendingRef.current || !display) && targetOk;
       if (snapCamera || !display) {
@@ -1955,10 +1443,12 @@ function CampusMapInner({
       }
 
       const bottomObstructionVh =
-        mapLayout === "route" && isMobileNavViewport() ? mobileSheetVhRef.current : 0;
+        mapLayout === "route" &&
+        typeof window !== "undefined" &&
+        window.matchMedia("(max-width: 639px)").matches
+          ? mobileSheetVhRef.current
+          : 0;
 
-      const routeStart = routeLineRef.current?.[0] ?? null;
-      const directSnap = shouldUseDirectUserSnap(display, routeStart);
       const needsViewportAdjust = !viewportAdjustedRef.current;
 
       if (snapCamera || needsViewportAdjust) {
@@ -1967,18 +1457,6 @@ function CampusMapInner({
           adjustViewport: needsViewportAdjust,
           force: snapCamera,
         });
-        navAnimFrameRef.current = requestAnimationFrame(tick);
-        return;
-      }
-
-      if (directSnap) {
-        const camInterval = isMobileNav
-          ? NAV_CAMERA_PAN_INTERVAL_MS_MOBILE
-          : NAV_CAMERA_MIN_INTERVAL_MS;
-        const camDue = now - lastCameraApplyAtRef.current >= camInterval;
-        if (camDue) {
-          queueNavCamera(display, headingForCam);
-        }
         navAnimFrameRef.current = requestAnimationFrame(tick);
         return;
       }
@@ -2033,10 +1511,6 @@ function CampusMapInner({
     const posLerp = isMobile ? NAV_POS_LERP_MOBILE : NAV_POS_LERP;
 
     const tick = (now: number) => {
-      if (pageHiddenRef.current) {
-        frame = requestAnimationFrame(tick);
-        return;
-      }
       if (now - lastTick >= minMs) {
         lastTick = now;
         const dt = Math.min(48, now - lastFrameTime) / 16.67;
@@ -2076,21 +1550,7 @@ function CampusMapInner({
     };
   }, [sdkLoaded, followUser, navigationMode, followPaused, mapReadyEpoch]);
 
-  /** 추적 중이 아닐 때 GPS 위치만 표시 */
-  useEffect(() => {
-    if (!sdkLoaded || !liveUserPosition || (followUser && navigationMode && !followPaused)) return;
-    const map = mapInstanceRef.current as undefined | {
-      panTo?: (ll: unknown, o?: unknown) => void;
-      setCenter?: (ll: unknown) => void;
-    };
-    const maps = window.naver?.maps as NMaps | undefined;
-    if (!map || !maps?.LatLng) return;
-    const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
-    const pos = new LatLngCtor(liveUserPosition.lat, liveUserPosition.lng);
-    if (followUser && !navigationMode) {
-      map.panTo?.(pos, { duration: 400 });
-    }
-  }, [sdkLoaded, mapReadyEpoch, liveUserPosition, followUser, navigationMode, followPaused]);
+======== components/barrier-free/campus-map.tsx lines 2031-2123 ========
 
   /** 지도에서 출발/도착 지점 선택 */
   useEffect(() => {
@@ -2134,42 +1594,24 @@ function CampusMapInner({
 
   /** 안내 중 — 유효 GPS로 줌 유지·중심만 복귀 (내 위치 / 경로 맞춤) */
   const softRecenterOnUser = useCallback(() => {
-    setFollowPaused(false);
-    navSnapPendingRef.current = true;
-    hasNavCenteredRef.current = false;
-    suppressFollowPauseUntilRef.current = Date.now() + 700;
-
-    const snapTo = (latest: LatLng) => {
-      if (!isPlausibleGpsLatLng(latest)) return;
-      targetPosRef.current = latest;
-      displayPosRef.current = { ...latest };
-      const heading = resolveFusedHeading();
-      queueNavCamera(latest, heading, {
-        snap: true,
-        adjustViewport: true,
-        preserveZoom: !shouldUseDirectUserSnap(latest, routeLineRef.current?.[0] ?? null),
-        force: true,
-      });
-    };
-
-    const cached =
+    const latest =
       liveUserPosRefProp.current?.current ??
       targetPosRef.current ??
       displayPosRef.current;
-    if (cached && isPlausibleGpsLatLng(cached)) {
-      snapTo(cached);
-    }
+    if (!latest || !isNavMapLatLng(latest)) return;
 
-    if (typeof navigator === "undefined" || !navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        snapTo({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-      },
-      () => {
-        /* cached 위치 유지 */
-      },
-      navGeolocationOptions("recenter"),
-    );
+    targetPosRef.current = latest;
+    displayPosRef.current = { ...latest };
+    navSnapPendingRef.current = false;
+    setFollowPaused(false);
+
+    const heading = resolveFusedHeading();
+    queueNavCamera(latest, heading, {
+      snap: true,
+      adjustViewport: true,
+      preserveZoom: true,
+      force: true,
+    });
   }, [queueNavCamera, resolveFusedHeading]);
 
   const fitRouteOnMap = useCallback(() => {
@@ -2193,7 +1635,7 @@ function CampusMapInner({
     const maps = window.naver?.maps as NMaps | undefined;
     if (!maps || !mapInstanceRef.current) return;
     const sheetVh =
-      mapLayout === "route" && isMobileNavViewport() ? mobileSheetVhRef.current : 0;
+      mapLayout === "route" && isMobileMapViewport() ? mobileSheetVhRef.current : 0;
     fitCampusOverview(
       maps,
       mapInstanceRef.current,
@@ -2204,268 +1646,8 @@ function CampusMapInner({
     );
   }, [buildings, footprintCollection, mapLayout]);
 
-  const applyMapType = useCallback((key: MapTypeOptionId) => {
-    const mapsApi = window.naver?.maps as (NMaps & { MapTypeId?: Record<string, unknown> }) | undefined;
-    const map = mapInstanceRef.current as {
-      getMapTypeId?: () => unknown;
-      setMapTypeId?: (mapTypeId: unknown) => void;
-    } | null;
-    if (!mapsApi?.MapTypeId || !map?.setMapTypeId) return;
-    const nextType = mapsApi.MapTypeId[key];
-    if (nextType === undefined) return;
-    try {
-      if (map.getMapTypeId?.() === nextType) return;
-      map.setMapTypeId(nextType);
-      setMapTypeKey(key);
-      requestAnimationFrame(() => {
-        try {
-          (map as { relayout?: () => void }).relayout?.();
-        } catch {
-          /* ignore */
-        }
-      });
-    } catch {
-      /* ignore */
-    }
-  }, []);
+======== components/barrier-free/campus-map.tsx lines 2387-2600 ========
 
-  const mapTypeButtons = useMemo(() => {
-    const all = MAP_TYPE_IDS.map((id) => ({ id, label: ui.map.mapTypes[id] }));
-    if (typeof window === "undefined") return all;
-    const m = window.naver?.maps as { MapTypeId?: Record<string, unknown> } | undefined;
-    if (!m?.MapTypeId) return all;
-    return all.filter((opt) => m.MapTypeId![opt.id] !== undefined);
-  }, [sdkLoaded, ui]);
-
-  useEffect(() => {
-    if (!geoHintMessage) return;
-    const t = window.setTimeout(() => setGeoHintMessage(null), 8000);
-    return () => window.clearTimeout(t);
-  }, [geoHintMessage]);
-
-  useEffect(() => {
-    return () => {
-      try {
-        myLocationMarkerRef.current?.setMap(null);
-      } catch {
-        /* ignore */
-      }
-      myLocationMarkerRef.current = null;
-    };
-  }, []);
-
-  const beginLocationTracking = useCallback(() => {
-    if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setGeoHintMessage(ui.map.geoUnsupported);
-      return;
-    }
-    const maps = window.naver?.maps as NMaps | undefined;
-    const map = mapInstanceRef.current;
-    if (!maps?.LatLng || !maps?.Marker || !maps?.Point || !map) {
-      setGeoHintMessage(ui.map.mapNotReady);
-      return;
-    }
-
-    const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
-    const PointCtor = maps.Point as new (x: number, y: number) => unknown;
-    const MarkerCtor = maps.Marker as unknown as new (opts: Record<string, unknown>) => {
-      setMap: (t: unknown) => void;
-      setPosition?: (p: unknown) => void;
-    };
-
-    const myIconHtml =
-      '<div aria-hidden="true" style="width:22px;height:22px;border-radius:50%;background:#2563eb;border:3px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.35);"></div>';
-
-    const applyCoords = (lat: number, lng: number) => {
-      const ll = new LatLngCtor(lat, lng);
-      const existing = myLocationMarkerRef.current;
-      if (existing?.setPosition) {
-        try {
-          existing.setPosition(ll);
-        } catch {
-          try {
-            existing.setMap(null);
-          } catch {
-            /* ignore */
-          }
-          myLocationMarkerRef.current = null;
-        }
-      }
-      if (!myLocationMarkerRef.current) {
-        const m = new MarkerCtor({
-          map,
-          position: ll,
-          title: ui.map.myLocationTitle,
-          zIndex: 5000,
-          icon: {
-            content: myIconHtml,
-            anchor: new PointCtor(11, 11),
-          },
-        });
-        myLocationMarkerRef.current = m;
-      }
-    };
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setGeoHintMessage(null);
-        setLocationTracking(true);
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        applyCoords(lat, lng);
-
-        const ll = new LatLngCtor(lat, lng);
-        const mp = map as {
-          setCenter?: (target: unknown) => void;
-          panTo?: (target: unknown, options?: unknown) => void;
-          setZoom?: (z: number) => void;
-          relayout?: () => void;
-        };
-        mp.setCenter?.(ll);
-        mp.panTo?.(ll, { duration: 320 });
-        mp.setZoom?.(17);
-        requestAnimationFrame(() => {
-          try {
-            mp.relayout?.();
-          } catch {
-            /* ignore */
-          }
-        });
-      },
-      (err) => {
-        setLocationTracking(false);
-        let msg = ui.map.geoFailed;
-        if (err.code === 1) msg = ui.map.geoDenied;
-        else if (err.code === 2) msg = ui.map.geoUnavailable;
-        else if (err.code === 3) msg = ui.map.geoTimeout;
-        setGeoHintMessage(msg);
-        try {
-          myLocationMarkerRef.current?.setMap(null);
-        } catch {
-          /* ignore */
-        }
-        myLocationMarkerRef.current = null;
-      },
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
-    );
-  }, [ui]);
-
-  const stopLocationTracking = useCallback(() => {
-    setLocationTracking(false);
-    try {
-      myLocationMarkerRef.current?.setMap(null);
-    } catch {
-      /* ignore */
-    }
-    myLocationMarkerRef.current = null;
-  }, []);
-
-  if (!clientId) {
-    return (
-      <div className="relative flex h-full min-h-0 flex-1 items-center justify-center bg-muted/40 p-8 text-center">
-        <div className="max-w-md space-y-2 rounded-lg border border-border bg-card p-6 shadow-sm">
-          <p className="font-semibold text-foreground">{ui.map.clientIdRequired}</p>
-          <p className="text-sm text-muted-foreground">{ui.map.clientIdHint}</p>
-        </div>
-      </div>
-    );
-  }
-
-  const scriptSrc = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${encodeURIComponent(clientId)}`;
-
-  const overlayTransitionClass =
-    "transition-[bottom] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]";
-
-  const exploreOverlayBottomClass = cn(
-    overlayTransitionClass,
-    "bottom-[calc(env(safe-area-inset-bottom,0px)+1.75rem)]",
-    "sm:bottom-[calc(env(safe-area-inset-bottom,0px)+1.125rem)]",
-  );
-
-  const routeOverlayBottomClass = cn(
-    overlayTransitionClass,
-    "max-sm:bottom-[calc(var(--route-sheet-vh)*1vh+0.625rem)]",
-    "sm:bottom-[calc(env(safe-area-inset-bottom,0px)+1.125rem)]",
-  );
-
-  const leftOverlayBottomClass =
-    mapLayout === "route" ? routeOverlayBottomClass : exploreOverlayBottomClass;
-
-  const zoomControlButtons = (
-    <div className="flex overflow-hidden rounded-lg border border-border bg-card/95 shadow-md backdrop-blur-sm sm:flex-col">
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        onClick={() => zoomDelta(1)}
-        className="h-9 w-9 rounded-none border-r border-border hover:bg-secondary sm:border-r-0 sm:border-b"
-        aria-label={ui.map.zoomIn}
-      >
-        <Plus className="h-4 w-4" />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        onClick={() => zoomDelta(-1)}
-        className="h-9 w-9 rounded-none hover:bg-secondary"
-        aria-label={ui.map.zoomOut}
-      >
-        <Minus className="h-4 w-4" />
-      </Button>
-    </div>
-  );
-
-  const mapBannerClass = cn(
-    "pointer-events-none absolute z-20 text-center text-xs shadow-md backdrop-blur-sm",
-    mapLayout === "route"
-      ? "top-[max(0.75rem,env(safe-area-inset-top))] left-3 right-14 sm:left-[calc(22rem+0.75rem)] sm:right-4 sm:max-w-md sm:text-left"
-      : "left-1/2 top-[max(0.75rem,env(safe-area-inset-top))] max-w-[min(calc(100%-1.5rem),24rem)] -translate-x-1/2",
-  );
-
-  return (
-    <div
-      className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-muted/30"
-      style={
-        mapLayout === "route"
-          ? ({ "--route-sheet-vh": mobileSheetVh } as React.CSSProperties)
-          : undefined
-      }
-    >
-      <Script
-        id="naver-maps-sdk"
-        strategy="afterInteractive"
-        src={scriptSrc}
-        onLoad={() => {
-          setScriptError(false);
-          setSdkLoaded(true);
-        }}
-        onError={() => setScriptError(true)}
-      />
-
-      {!sdkLoaded && !scriptError && (
-        <div className="absolute inset-0 z-[5] flex items-center justify-center bg-muted/50 text-sm text-muted-foreground">
-          {ui.map.loading}
-        </div>
-      )}
-
-      {scriptError && (
-        <div className="absolute inset-0 z-[5] flex items-center justify-center bg-muted/60 p-6 text-center">
-          <div className="max-w-md rounded-lg border border-border bg-card p-4 text-sm text-foreground shadow-sm">
-            <p className="font-medium">{ui.map.scriptError}</p>
-            <p className="mt-2 text-muted-foreground">{ui.map.scriptErrorHint}</p>
-          </div>
-        </div>
-      )}
-
-      <div className="relative min-h-0 flex-1 overflow-hidden">
-        <div
-          ref={containerRef}
-          id="map"
-          className="absolute inset-0 z-0 h-full w-full min-h-[1px]"
-          role="presentation"
-          style={pickMode ? { cursor: "crosshair" } : undefined}
-        />
         {pickMode && (
           <div
             className={cn(
@@ -2680,33 +1862,239 @@ function CampusMapInner({
               </Link>
             </Button>
           </div>
-        ) : null}
-      </div>
 
-      <AlertDialog open={locationDialogOpen} onOpenChange={setLocationDialogOpen}>
-        <AlertDialogContent className="z-[100]">
-          <AlertDialogHeader>
-            <AlertDialogTitle>{ui.map.locationDialogTitle}</AlertDialogTitle>
-            <AlertDialogDescription className="text-left">{ui.map.locationDialogBody}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <Button type="button" variant="outline" onClick={() => setLocationDialogOpen(false)}>
-              {ui.map.locationDialogCancel}
-            </Button>
-            <Button
-              type="button"
-              onClick={() => {
-                setLocationDialogOpen(false);
-                beginLocationTracking();
-              }}
-            >
-              {ui.map.locationDialogConfirm}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+======== components/barrier-free/route-page-map.tsx lines 1-151 ========
+
+"use client";
+
+import { memo, useMemo, type RefObject } from "react";
+import { CampusMap } from "@/components/barrier-free/campus-map";
+import type { BarrierBuilding } from "@/lib/building-types";
+import type { LatLng } from "@/lib/routing/geo";
+import type { ElevatorRecord } from "@/lib/routing/elevators";
+import type { ComputedRoute } from "@/lib/routing/types";
+import type { DeviceHeadingSnapshot, NavMotionSnapshot } from "@/lib/device-orientation";
+import { simplifyForMapDisplay } from "@/lib/routing/polyline-simplify";
+import type { RoutePoint } from "@/lib/routing/types";
+
+export type RoutePageMapProps = {
+  buildings: BarrierBuilding[];
+  route: ComputedRoute | null;
+  routeEndpoints: { from: LatLng; to: LatLng } | null;
+  origin: RoutePoint | null;
+  destination: RoutePoint | null;
+  navigating: boolean;
+  userPos: LatLng | null;
+  userPosRef: RefObject<LatLng | null>;
+  userHeading: number | null;
+  routeHeading: number | null;
+  deviceHeadingRef: RefObject<DeviceHeadingSnapshot>;
+  navMotionRef: RefObject<NavMotionSnapshot>;
+  pickMode: "origin" | "destination" | null;
+  mobileSheetVh: number;
+  elevators: ElevatorRecord[];
+  routeElevatorIds: Set<string>;
+  onBuildingSelect: (id: string) => void;
+  onMapPick: (point: LatLng) => void;
+  onFollowPausedChange?: (paused: boolean) => void;
+  onRerouteRoute?: () => void;
+};
+
+function RoutePageMapInner({
+  buildings,
+  route,
+  routeEndpoints,
+  origin,
+  destination,
+  navigating,
+  userPos,
+  userPosRef,
+  userHeading,
+  routeHeading,
+  deviceHeadingRef,
+  navMotionRef,
+  pickMode,
+  mobileSheetVh,
+  elevators,
+  routeElevatorIds,
+  onBuildingSelect,
+  onMapPick,
+  onFollowPausedChange,
+  onRerouteRoute,
+}: RoutePageMapProps) {
+  const mapRouteDisplay = useMemo(() => {
+    if (!route?.coords || route.coords.length < 2) {
+      return { coords: null, segmentTypes: null };
+    }
+    return simplifyForMapDisplay(route.coords, route.segmentTypes ?? []);
+  }, [route]);
+
+  const mapOriginPoint = useMemo(
+    () => routeEndpoints?.from ?? origin?.point ?? null,
+    [routeEndpoints, origin],
+  );
+
+  const mapDestPoint = useMemo(
+    () => routeEndpoints?.to ?? destination?.point ?? null,
+    [routeEndpoints, destination],
+  );
+
+  return (
+    <CampusMap
+      buildings={buildings}
+      selectedBuilding={null}
+      onBuildingSelect={onBuildingSelect}
+      routeLine={mapRouteDisplay.coords}
+      routeSegments={mapRouteDisplay.segmentTypes}
+      originPoint={mapOriginPoint}
+      destPoint={mapDestPoint}
+      liveUserPosition={navigating ? userPos : null}
+      liveUserPositionRef={userPosRef}
+      pickMode={pickMode}
+      onMapPick={onMapPick}
+      followUser={navigating}
+      navigationMode={navigating}
+      userHeading={userHeading}
+      routeHeading={routeHeading}
+      deviceHeadingRef={deviceHeadingRef}
+      navMotionRef={navMotionRef}
+      mapLayout="route"
+      mobileSheetVh={mobileSheetVh}
+      elevators={elevators}
+      routeElevatorIds={routeElevatorIds}
+      onFollowPausedChange={onFollowPausedChange}
+      onRerouteRoute={onRerouteRoute}
+    />
+  );
+}
+
+/** 안내 중 — null→첫 GPS·안내 종료만 리렌더, 이후 위치는 userPosRef */
+function navUserPosNeedsRender(prev: LatLng | null, next: LatLng | null): boolean {
+  if (prev === next) return false;
+  if (!prev && next) return true;
+  if (prev && !next) return true;
+  return false;
+}
+
+function mapPropsAreEqual(prev: RoutePageMapProps, next: RoutePageMapProps): boolean {
+  const skipVolatileNav = prev.navigating && next.navigating;
+
+  const stableKeys: (keyof RoutePageMapProps)[] = [
+    "buildings",
+    "route",
+    "routeEndpoints",
+    "origin",
+    "destination",
+    "navigating",
+    "pickMode",
+    "mobileSheetVh",
+    "elevators",
+    "routeElevatorIds",
+    "userPosRef",
+    "deviceHeadingRef",
+    "navMotionRef",
+    "onBuildingSelect",
+    "onMapPick",
+    "onFollowPausedChange",
+    "onRerouteRoute",
+  ];
+
+  for (const key of stableKeys) {
+    if (prev[key] !== next[key]) return false;
+  }
+
+  if (skipVolatileNav) {
+    if (navUserPosNeedsRender(prev.userPos, next.userPos)) return false;
+  } else {
+    if (prev.userPos !== next.userPos) return false;
+    if (prev.userHeading !== next.userHeading) return false;
+    if (prev.routeHeading !== next.routeHeading) return false;
+  }
+
+  return true;
+}
+
+export const RoutePageMap = memo(RoutePageMapInner, mapPropsAreEqual);
+
+======== components/barrier-free/route-legend.tsx lines 1-79 ========
+
+"use client";
+
+import { useUi } from "@/hooks/use-ui";
+import { ROUTE_LEGEND, legendItemsForRoute } from "@/lib/routing/style";
+import type { WalkwayType } from "@/lib/routing/types";
+import { cn } from "@/lib/utils";
+
+interface RouteLegendProps {
+  segmentTypes: WalkwayType[];
+  /** 지도 위 오버레이 — 배경·그림자 강조 */
+  variant?: "panel" | "map" | "inline";
+  className?: string;
+}
+
+export function RouteLegend({ segmentTypes, variant = "panel", className }: RouteLegendProps) {
+  const ui = useUi();
+  const items = legendItemsForRoute(segmentTypes);
+
+  if (items.length <= 1) return null;
+
+  if (variant === "inline") {
+    return (
+      <ul
+        className={cn("flex flex-wrap items-center gap-x-2 gap-y-0.5", className)}
+        role="note"
+        aria-label={ui.route.legendTitle}
+      >
+        {items.map((l) => (
+          <li key={l.type} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            <span
+              className="inline-block h-1.5 w-3 shrink-0 rounded-full"
+              style={{ backgroundColor: l.color }}
+              aria-hidden
+            />
+            <span>{ui.route.legend[l.type as keyof typeof ui.route.legend]}</span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        variant === "map" &&
+          "rounded-lg border border-border/80 bg-background/95 px-3 py-2 shadow-md backdrop-blur-sm",
+        className,
+      )}
+      role="note"
+      aria-label={ui.route.legendTitle}
+    >
+      <p
+        className={cn(
+          "font-semibold text-foreground",
+          variant === "map" ? "mb-1.5 text-xs" : "mb-1 text-[11px]",
+        )}
+      >
+        {ui.route.legendTitle}
+      </p>
+      <ul
+        className={cn(
+          "flex flex-wrap gap-x-2 gap-y-1 sm:gap-x-3",
+          variant === "map" ? "text-[11px] sm:text-xs" : "text-[11px]",
+        )}
+      >
+        {items.map((l) => (
+          <li key={l.type} className="flex items-center gap-1.5 text-muted-foreground">
+            <span
+              className="inline-block h-2 w-5 shrink-0 rounded-full"
+              style={{ backgroundColor: l.color }}
+              aria-hidden
+            />
+            <span className="text-foreground/90">{ui.route.legend[l.type as keyof typeof ui.route.legend]}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
 
-export const CampusMap = memo(CampusMapInner, campusMapPropsAreEqual);

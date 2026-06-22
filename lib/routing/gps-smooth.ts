@@ -1,7 +1,9 @@
 import { haversineMeters, type LatLng } from "./geo";
 
 const MAX_JUMP_M = 40;
+const MEDIUM_JUMP_M = 120;
 const MIN_MOVE_M = 0.1;
+const WARMUP_SAMPLES = 4;
 
 export interface GpsSmoother {
   reset(): void;
@@ -35,8 +37,21 @@ export function createGpsSmoother(baseAlpha = 0.38): GpsSmoother {
       const jump = haversineMeters(smoothed, raw);
       const accuracy = accuracyM ?? null;
 
-      if (samples > 5 && jump > MAX_JUMP_M && (accuracy == null || accuracy > 12)) {
+      if (samples <= WARMUP_SAMPLES) {
+        const warmupAlpha = accuracy != null && accuracy <= 25 ? 0.55 : baseAlpha;
+        smoothed = {
+          lat: smoothed.lat + warmupAlpha * (raw.lat - smoothed.lat),
+          lng: smoothed.lng + warmupAlpha * (raw.lng - smoothed.lng),
+        };
+        return smoothed;
+      }
+
+      if (jump > MAX_JUMP_M && (accuracy == null || accuracy > 12)) {
         if (accuracy != null && accuracy <= 80) {
+          smoothed = { ...raw };
+          return raw;
+        }
+        if (jump > MEDIUM_JUMP_M && accuracy != null && accuracy <= 50) {
           smoothed = { ...raw };
           return raw;
         }

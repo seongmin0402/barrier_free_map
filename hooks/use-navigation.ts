@@ -39,6 +39,7 @@ import {
   headingAlongRoute,
   resolveNavigationHeading,
 } from "@/lib/routing/nav-camera";
+import { isPageHidden, navGeolocationOptions } from "@/lib/routing/nav-runtime";
 import { useDeviceHeading } from "@/hooks/use-device-heading";
 import type { NavMotionSnapshot } from "@/lib/device-orientation";
 import { getSpeechGuide } from "@/lib/routing/tts";
@@ -399,7 +400,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
           else if (err.code === 3) msg = t.geoTimeout;
           setGeoError(msg);
         },
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 },
+        { ...navGeolocationOptions("once"), timeout: 20000 },
       );
     },
     [setPoint],
@@ -715,6 +716,8 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     }
 
     clearWatch();
+    /** iOS Safari — 사용자 탭 직후(비동기 GPS 전) 나침반 권한 요청 */
+    void requestCompassPermission();
     gpsSmootherRef.current.reset();
     setUserHeading(null);
     lastGpsHeadingRef.current = null;
@@ -758,8 +761,11 @@ export function useNavigation(buildings: BarrierBuilding[]) {
 
       const prev = prevGpsRef.current;
       const accuracy = pos.coords.accuracy ?? null;
-      if (prev && haversineMeters(prev, raw) > 400) {
-        gpsSmootherRef.current.hardSnap(raw);
+      if (prev) {
+        const jumpM = haversineMeters(prev, raw);
+        if (jumpM > 400 || (jumpM > 120 && accuracy != null && accuracy <= 50)) {
+          gpsSmootherRef.current.hardSnap(raw);
+        }
       }
 
       const here = gpsSmootherRef.current.filter(raw, accuracy);
@@ -865,8 +871,6 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       navigatingRef.current = true;
       setNavigating(true);
 
-      void requestCompassPermission();
-
       navSpeechBlockedUntilRef.current = Date.now() + 10000;
       setLiveAnnouncement(previewText);
 
@@ -890,7 +894,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       watchIdRef.current = navigator.geolocation.watchPosition(
         applyGpsReading,
         onGpsError,
-        { enableHighAccuracy: true, maximumAge: 500, timeout: 12000 },
+        navGeolocationOptions("watch"),
       );
     };
 
@@ -906,7 +910,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       () => {
         beginNavigating(null);
       },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 },
+      navGeolocationOptions("once"),
     );
   }, [activeRoute, destination, clearWatch, requestCompassPermission]);
 
@@ -931,6 +935,10 @@ export function useNavigation(buildings: BarrierBuilding[]) {
 
     const METRIC_LERP = 0.16;
     const tick = () => {
+      if (isPageHidden()) {
+        metricsAnimRef.current = requestAnimationFrame(tick);
+        return;
+      }
       const target = metricsTargetRef.current;
       if (target) {
         const prev = metricsDisplayRef.current;

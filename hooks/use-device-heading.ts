@@ -41,7 +41,12 @@ export function useDeviceHeading(enabled: boolean) {
       return;
     }
 
+    let lastEventAt = 0;
     const onOrientation = (event: DeviceOrientationEvent) => {
+      const now = performance.now();
+      if (now - lastEventAt < 14) return;
+      lastEventAt = now;
+
       const raw = parseCompassHeading(event);
       if (raw == null) return;
 
@@ -55,8 +60,12 @@ export function useDeviceHeading(enabled: boolean) {
       };
     };
 
-    window.addEventListener("deviceorientationabsolute", onOrientation, true);
-    window.addEventListener("deviceorientation", onOrientation, true);
+    const useAbsolute = typeof window !== "undefined" && "ondeviceorientationabsolute" in window;
+    const eventName: "deviceorientationabsolute" | "deviceorientation" = useAbsolute
+      ? "deviceorientationabsolute"
+      : "deviceorientation";
+
+    window.addEventListener(eventName, onOrientation as EventListener, true);
 
     if (snapshotRef.current.permission === "prompt") {
       snapshotRef.current.permission = "granted";
@@ -64,8 +73,7 @@ export function useDeviceHeading(enabled: boolean) {
     snapshotRef.current.active = true;
 
     return () => {
-      window.removeEventListener("deviceorientationabsolute", onOrientation, true);
-      window.removeEventListener("deviceorientation", onOrientation, true);
+      window.removeEventListener(eventName, onOrientation as EventListener, true);
       snapshotRef.current = createDeviceHeadingSnapshot();
       smoothedRef.current = null;
     };

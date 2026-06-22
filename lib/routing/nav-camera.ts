@@ -1,4 +1,5 @@
-import { bearingDeg, isNavMapLatLng, isPlausibleGpsLatLng, type LatLng } from "./geo";
+import { bearingDeg, isNavMapLatLng, isPlausibleGpsLatLng, haversineMeters, type LatLng } from "./geo";
+import { isMobileNavViewport } from "./nav-runtime";
 import type { ComputedRoute } from "./types";
 import type { RouteProgress } from "./progress";
 
@@ -186,13 +187,7 @@ export const NAV_HEADING_LERP_MOBILE = 0.28;
 export const NAV_MARKER_HEADING_STEP_MOBILE = 3;
 
 /** 터치 기기·좁은 뷰포트 — 모바일 길안내 튜닝 대상 */
-export function isMobileNavViewport(): boolean {
-  if (typeof window === "undefined") return false;
-  return (
-    window.matchMedia("(max-width: 639px)").matches ||
-    window.matchMedia("(hover: none) and (pointer: coarse)").matches
-  );
-}
+export { isMobileNavViewport } from "./nav-runtime";
 
 export type NavigationCameraMap = {
   setCenter?: (ll: unknown) => void;
@@ -316,9 +311,18 @@ export function snapMapToUserLocation(
   }
 }
 
-/** 캠퍼스 bbox 밖이면 직접 스냅, 안이면 look-ahead 길안내 카메라 */
-export function shouldUseDirectUserSnap(user: LatLng): boolean {
-  return isPlausibleGpsLatLng(user) && !isNavMapLatLng(user);
+/** 캠퍼스 bbox 밖이거나 경로 시작점에서 멀면 직접 스냅 */
+export function shouldUseDirectUserSnap(
+  user: LatLng,
+  routeStart?: LatLng | null,
+  nearRouteM = 500,
+): boolean {
+  if (!isPlausibleGpsLatLng(user)) return false;
+  if (!isNavMapLatLng(user)) return true;
+  if (routeStart && isPlausibleGpsLatLng(routeStart)) {
+    return haversineMeters(user, routeStart) > nearRouteM;
+  }
+  return false;
 }
 
 /**
