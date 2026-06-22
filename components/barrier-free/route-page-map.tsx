@@ -62,10 +62,13 @@ function RoutePageMapInner({
     return simplifyForMapDisplay(route.coords, route.segmentTypes ?? []);
   }, [route]);
 
-  const mapOriginPoint = useMemo(
-    () => routeEndpoints?.from ?? origin?.point ?? null,
-    [routeEndpoints, origin],
-  );
+  const mapOriginPoint = useMemo(() => {
+    if (navigating) {
+      if (userPos) return userPos;
+      if (origin?.kind === "gps" && origin.point) return origin.point;
+    }
+    return routeEndpoints?.from ?? origin?.point ?? null;
+  }, [navigating, userPos, origin, routeEndpoints]);
 
   const mapDestPoint = useMemo(
     () => routeEndpoints?.to ?? destination?.point ?? null,

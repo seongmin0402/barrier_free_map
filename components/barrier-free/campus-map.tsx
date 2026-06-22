@@ -44,6 +44,8 @@ import {
   NAV_POS_LERP_MOBILE,
   isMobileNavViewport,
   shouldRecenterEdgeFollow,
+  shouldUseDirectUserSnap,
+  snapMapToUserLocation,
 } from "@/lib/routing/nav-camera";
 import type { DeviceHeadingSnapshot, NavMotionSnapshot } from "@/lib/device-orientation";
 import { compassAgeMs } from "@/lib/device-orientation";
@@ -749,20 +751,35 @@ function CampusMapInner({
     try {
       markProgrammaticCamera(pending.snap ? 480 : 380);
       mapIsIdleRef.current = false;
-      applyNavigationCamera(
-        camMap,
-        (lat, lng) => new LatLngCtor(lat, lng),
-        (x, y) => new PointCtor(x, y),
-        pending.user,
-        pending.markerHeading,
-        {
-          snap: pending.snap,
-          bottomObstructionVh,
-          adjustViewport: pending.adjustViewport,
-          preserveZoom: pending.preserveZoom,
-          lookAheadHeadingDeg: pending.cameraHeading,
-        },
-      );
+      const camOpts = {
+        snap: pending.snap,
+        bottomObstructionVh,
+        adjustViewport: pending.adjustViewport,
+        preserveZoom: pending.preserveZoom,
+        lookAheadHeadingDeg: pending.cameraHeading,
+      };
+      if (shouldUseDirectUserSnap(pending.user)) {
+        const zoom =
+          pending.preserveZoom && camMap.getZoom?.() != null
+            ? camMap.getZoom!()
+            : NAV_FOLLOW_ZOOM;
+        snapMapToUserLocation(
+          camMap,
+          (lat, lng) => new LatLngCtor(lat, lng),
+          (x, y) => new PointCtor(x, y),
+          pending.user,
+          { zoom, bottomObstructionVh },
+        );
+      } else {
+        applyNavigationCamera(
+          camMap,
+          (lat, lng) => new LatLngCtor(lat, lng),
+          (x, y) => new PointCtor(x, y),
+          pending.user,
+          pending.markerHeading,
+          camOpts,
+        );
+      }
       if (pending.adjustViewport) viewportAdjustedRef.current = true;
       if (pending.snap) {
         try {
@@ -1594,92 +1611,17 @@ function CampusMapInner({
 
   /** GPS 수신 전 — 출발 지점·경로 방향으로 길안내 화면 즉시 맞춤 (전체 경로 fitBounds 대신) */
   useEffect(() => {
-    const hasGps =
-      liveUserPosition != null || liveUserPosRefProp.current?.current != null;
-    if (
-      !sdkLoaded ||
-      !followUser ||
-      !navigationMode ||
-      hasGps ||
-      followPaused ||
-      navBootstrapDoneRef.current
-    ) {
-      return;
-    }
-
-    const map = mapInstanceRef.current;
-    const maps = window.naver?.maps as NMaps | undefined;
-    if (!map || !maps?.LatLng || !maps?.Point) return;
-
-    const seed =
-      liveUserPosRefProp.current?.current ??
-      liveUserPosition ??
-      originPoint;
-    if (!seed) return;
-
-    const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
-    const PointCtor = maps.Point as new (x: number, y: number) => unknown;
-    const heading = routeHeadingRef.current ?? userHeadingRef.current ?? 0;
-    const bottomObstructionVh =
-      mapLayout === "route" &&
-      typeof window !== "undefined" &&
-      window.matchMedia("(max-width: 639px)").matches
-        ? mobileSheetVhRef.current
-        : 0;
-
-    try {
-      markProgrammaticCamera(480);
-      mapIsIdleRef.current = false;
-      applyNavigationCamera(
-        map as Parameters<typeof applyNavigationCamera>[0],
-        (lat, lng) => new LatLngCtor(lat, lng),
-        (x, y) => new PointCtor(x, y),
-        seed,
-        heading,
-        {
-          snap: true,
-          bottomObstructionVh,
-          adjustViewport: true,
-          lookAheadHeadingDeg: heading,
-        },
-      );
-      viewportAdjustedRef.current = true;
-      navZoomSetRef.current = true;
-      navBootstrapDoneRef.current = true;
-      try {
-        (map as { relayout?: () => void }).relayout?.();
-      } catch {
-        /* ignore */
-      }
-    } catch {
-      /* ignore */
-    }
-  }, [
-    sdkLoaded,
-    followUser,
-    navigationMode,
-    liveUserPosition,
-    followPaused,
-    originPoint,
-    routeLine,
-    mapReadyEpoch,
-    mapLayout,
-    markProgrammaticCamera,
-  ]);
-
-  /** 첫 GPS 수신 시 즉시 사용자 위치로 맞춤 */
-  useEffect(() => {
-    const firstPos = liveUserPosition ?? liveUserPosRefProp.current?.current;
-    if (!sdkLoaded || !followUser || !navigationMode || followPaused || !firstPos) return;
-    if (!isPlausibleGpsLatLng(firstPos)) return;
+    const pos = liveUserPosRefProp.current?.current ?? liveUserPosition;
+    if (!sdkLoaded || !followUser || !navigationMode || followPaused) return;
+    if (!pos || !isPlausibleGpsLatLng(pos)) return;
     if (hasNavCenteredRef.current && !navSnapPendingRef.current) return;
 
     const heading = resolveFusedHeading();
     const cameraHeading = routeHeadingRef.current ?? heading;
-    displayPosRef.current = { ...firstPos };
-    targetPosRef.current = firstPos;
+    displayPosRef.current = { ...pos };
+    targetPosRef.current = pos;
 
-    queueNavCamera(firstPos, heading, {
+    queueNavCamera(pos, heading, {
       snap: true,
       adjustViewport: !viewportAdjustedRef.current,
       force: true,
@@ -1697,17 +1639,26 @@ function CampusMapInner({
       | undefined;
     const PointCtor = maps?.Point as (new (x: number, y: number) => unknown) | undefined;
     const LatLngCtor = maps?.LatLng as new (lat: number, lng: number) => unknown;
-    if (map && MarkerCtor && PointCtor && LatLngCtor && !navUserMarkerRef.current) {
-      const ll = new LatLngCtor(firstPos.lat, firstPos.lng);
-      navUserMarkerRef.current = new MarkerCtor({
-        map,
-        position: ll,
-        zIndex: 500,
-        icon: {
-          content: navArrowHtmlStatic(),
-          anchor: new PointCtor(14, 14),
-        },
-      }) as typeof navUserMarkerRef.current;
+    if (map && MarkerCtor && PointCtor && LatLngCtor) {
+      const ll = new LatLngCtor(pos.lat, pos.lng);
+      if (navUserMarkerRef.current?.setPosition) {
+        navUserMarkerRef.current.setPosition(ll);
+        try {
+          navUserMarkerRef.current.setMap(map);
+        } catch {
+          /* ignore */
+        }
+      } else {
+        navUserMarkerRef.current = new MarkerCtor({
+          map,
+          position: ll,
+          zIndex: 500,
+          icon: {
+            content: navArrowHtmlStatic(),
+            anchor: new PointCtor(14, 14),
+          },
+        }) as typeof navUserMarkerRef.current;
+      }
       lastMarkerHeadingRef.current = cameraHeading;
       setNavArrowRotation(cameraHeading);
     }

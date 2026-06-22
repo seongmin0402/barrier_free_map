@@ -1,4 +1,4 @@
-import { bearingDeg, isPlausibleGpsLatLng, type LatLng } from "./geo";
+import { bearingDeg, isNavMapLatLng, isPlausibleGpsLatLng, type LatLng } from "./geo";
 import type { ComputedRoute } from "./types";
 import type { RouteProgress } from "./progress";
 
@@ -281,6 +281,44 @@ function clampPanDelta(panX: number, panY: number, maxPx: number): { x: number; 
   if (len <= maxPx || len < 1e-6) return { x: panX, y: panY };
   const scale = maxPx / len;
   return { x: panX * scale, y: panY * scale };
+}
+
+/**
+ * 캠퍼스 밖(원거리 GPS) — look-ahead 없이 사용자 좌표로 직접 맞춤.
+ * 길안내 카메라의 panBy 보정이 먼 좌표에서 어긋나는 문제를 피한다.
+ */
+export function snapMapToUserLocation(
+  map: NavigationCameraMap,
+  createLatLng: (lat: number, lng: number) => unknown,
+  createPoint: (x: number, y: number) => unknown,
+  user: LatLng,
+  options: { zoom?: number; bottomObstructionVh?: number } = {},
+): void {
+  if (!isPlausibleGpsLatLng(user)) return;
+
+  const zoom = options.zoom ?? NAV_FOLLOW_ZOOM;
+  map.setZoom?.(zoom);
+  map.setCenter?.(createLatLng(user.lat, user.lng));
+
+  const bottomObstructionVh = Math.max(0, options.bottomObstructionVh ?? 0);
+  if (bottomObstructionVh <= 0 || !map.panBy) return;
+
+  const size = map.getSize?.();
+  const projection = map.getProjection?.();
+  if (!size?.width || !size?.height || !projection?.fromCoordToOffset) return;
+
+  const userOffset = projection.fromCoordToOffset(createLatLng(user.lat, user.lng));
+  const target = navigationUserScreenTarget(size, bottomObstructionVh);
+  const panX = target.x - userOffset.x;
+  const panY = target.y - userOffset.y;
+  if (Math.abs(panX) > 0.5 || Math.abs(panY) > 0.5) {
+    map.panBy(createPoint(panX, panY));
+  }
+}
+
+/** 캠퍼스 bbox 밖이면 직접 스냅, 안이면 look-ahead 길안내 카메라 */
+export function shouldUseDirectUserSnap(user: LatLng): boolean {
+  return isPlausibleGpsLatLng(user) && !isNavMapLatLng(user);
 }
 
 /**

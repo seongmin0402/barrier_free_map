@@ -822,6 +822,13 @@ export function useNavigation(buildings: BarrierBuilding[]) {
         prevGpsRef.current = initialPos;
         gpsSmootherRef.current.filter(initialPos, null);
         setUserPos(initialPos);
+        if (origin?.kind === "gps") {
+          setOrigin({
+            kind: "gps",
+            label: getUi(localeRef.current).route.currentLocationLabel,
+            point: initialPos,
+          });
+        }
       } else {
         userPosRef.current = null;
         setUserPos(null);
