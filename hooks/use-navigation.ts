@@ -381,6 +381,10 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       setPickMode(null);
       navigator.geolocation.getCurrentPosition(
         (pos) => {
+          if (pos.coords.accuracy != null && pos.coords.accuracy > 500) {
+            setGeoError(t.geoUnavailable);
+            return;
+          }
           setGeoError(null);
           setPoint(which, {
             kind: "gps",
@@ -711,20 +715,7 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     }
 
     clearWatch();
-    const originGps =
-      origin?.kind === "gps" && origin.point ? { ...origin.point } : null;
-    if (originGps) {
-      userPosRef.current = originGps;
-      firstGpsFixRef.current = originGps;
-      prevGpsRef.current = originGps;
-      gpsSmootherRef.current.filter(originGps, 12);
-      setUserPos(originGps);
-    } else {
-      setUserPos(null);
-      firstGpsFixRef.current = null;
-      prevGpsRef.current = null;
-      gpsSmootherRef.current.reset();
-    }
+    gpsSmootherRef.current.reset();
     setUserHeading(null);
     lastGpsHeadingRef.current = null;
     speechPhaseRef.current = { stepIndex: -1, phase: "far" };
@@ -744,8 +735,6 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     navDestPointRef.current = route.coords[route.coords.length - 1] ?? destination?.point ?? null;
     navigationRouteRef.current = route;
     setNavigationRoute(route);
-    navigatingRef.current = true;
-    setNavigating(true);
     const firstStepDist = route.steps[0]?.distance ?? route.distance;
     metricsDisplayRef.current = { remaining: route.distance, distanceToNext: firstStepDist };
     metricsTargetRef.current = {
@@ -757,39 +746,11 @@ export function useNavigation(buildings: BarrierBuilding[]) {
     setRemaining(route.distance);
     setDistanceToNext(null);
 
-    if (route.coords.length >= 2) {
-      const initialHeading = bearingDeg(route.coords[0], route.coords[1]);
-      routeHeadingNavRef.current = initialHeading;
-      setRouteHeading(initialHeading);
-    }
-
-    void requestCompassPermission();
-
     const navLocale = localeRef.current;
     const destLabel = destination?.label ?? getUi(navLocale).route.destination;
     const previewText = routePreviewSpeechText(navLocale, route, destLabel);
     const departStep = route.steps.find((s) => s.maneuver === "depart") ?? route.steps[0];
     const departText = departStep?.text ?? "";
-
-    navSpeechBlockedUntilRef.current = Date.now() + 10000;
-    setLiveAnnouncement(previewText);
-
-    void (async () => {
-      const guide = getSpeechGuide();
-      if (voiceEnabledRef.current) {
-        await guide.speakAndWait(previewText, { force: true, locale: navLocale });
-      }
-      if (departText) {
-        setLiveAnnouncement(departText);
-        if (voiceEnabledRef.current) {
-          await guide.speakAndWait(departText, { force: true, locale: navLocale });
-        }
-      }
-      navSpeechBlockedUntilRef.current = Date.now() + 5500;
-      if (departStep) {
-        lastSpokenStepRef.current = route.steps.indexOf(departStep);
-      }
-    })();
 
     const applyGpsReading = (pos: GeolocationPosition) => {
       const raw = { lat: pos.coords.latitude, lng: pos.coords.longitude };
@@ -846,23 +807,97 @@ export function useNavigation(buildings: BarrierBuilding[]) {
       const te = getUi(localeRef.current).route.errors;
       let msg = te.trackFailed;
       if (err.code === 1) msg = te.geoDenied;
+      else if (err.code === 2) msg = te.geoUnavailable;
+      else if (err.code === 3) msg = te.geoTimeout;
       setGeoError(msg);
     };
 
-    if (!originGps) {
-      navigator.geolocation.getCurrentPosition(
-        applyGpsReading,
-        () => {
-          /* 캐시 없음 — watchPosition 첫 fix까지 대기 */
-        },
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 },
-      );
-    }
+    const beginNavigating = (initialPos: LatLng | null) => {
+      firstGpsFixRef.current = null;
+      prevGpsRef.current = null;
 
-    watchIdRef.current = navigator.geolocation.watchPosition(
-      applyGpsReading,
-      onGpsError,
-      { enableHighAccuracy: true, maximumAge: 500, timeout: 12000 },
+      if (initialPos && isPlausibleGpsLatLng(initialPos)) {
+        userPosRef.current = initialPos;
+        firstGpsFixRef.current = initialPos;
+        prevGpsRef.current = initialPos;
+        gpsSmootherRef.current.filter(initialPos, null);
+        setUserPos(initialPos);
+      } else {
+        userPosRef.current = null;
+        setUserPos(null);
+      }
+
+      if (route.coords.length >= 2) {
+        const routeStart = route.coords[0];
+        const nearRouteStart =
+          initialPos != null && haversineMeters(initialPos, routeStart) < 500;
+        if (nearRouteStart) {
+          const initialHeading = bearingDeg(route.coords[0], route.coords[1]);
+          routeHeadingNavRef.current = initialHeading;
+          setRouteHeading(initialHeading);
+        } else {
+          routeHeadingNavRef.current = null;
+          setRouteHeading(null);
+        }
+      }
+
+      navigatingRef.current = true;
+      setNavigating(true);
+
+      void requestCompassPermission();
+
+      navSpeechBlockedUntilRef.current = Date.now() + 10000;
+      setLiveAnnouncement(previewText);
+
+      void (async () => {
+        const guide = getSpeechGuide();
+        if (voiceEnabledRef.current) {
+          await guide.speakAndWait(previewText, { force: true, locale: navLocale });
+        }
+        if (departText) {
+          setLiveAnnouncement(departText);
+          if (voiceEnabledRef.current) {
+            await guide.speakAndWait(departText, { force: true, locale: navLocale });
+          }
+        }
+        navSpeechBlockedUntilRef.current = Date.now() + 5500;
+        if (departStep) {
+          lastSpokenStepRef.current = route.steps.indexOf(departStep);
+        }
+      })();
+
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        applyGpsReading,
+        onGpsError,
+        { enableHighAccuracy: true, maximumAge: 500, timeout: 12000 },
+      );
+    };
+
+    const originFallback =
+      origin?.kind === "gps" && origin.point ? { ...origin.point } : null;
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const raw = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        const here = gpsSmootherRef.current.filter(raw, pos.coords.accuracy);
+        if (!isPlausibleGpsLatLng(here)) {
+          setGeoError(t.geoUnavailable);
+          return;
+        }
+        beginNavigating(here);
+      },
+      (err) => {
+        if (originFallback && isPlausibleGpsLatLng(originFallback)) {
+          beginNavigating(originFallback);
+          return;
+        }
+        let msg = t.geoFailed;
+        if (err.code === 1) msg = t.geoDenied;
+        else if (err.code === 2) msg = t.geoUnavailable;
+        else if (err.code === 3) msg = t.geoTimeout;
+        setGeoError(msg);
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 },
     );
   }, [activeRoute, destination, origin, clearWatch, requestCompassPermission]);
 

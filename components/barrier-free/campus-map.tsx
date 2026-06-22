@@ -1573,8 +1573,15 @@ function CampusMapInner({
     navSnapPendingRef.current = true;
     hasNavCenteredRef.current = false;
     viewportAdjustedRef.current = false;
-    displayPosRef.current = null;
-    targetPosRef.current = null;
+    const existingPos =
+      liveUserPosRefProp.current?.current ?? liveUserPosition ?? null;
+    if (existingPos && isPlausibleGpsLatLng(existingPos)) {
+      displayPosRef.current = { ...existingPos };
+      targetPosRef.current = existingPos;
+    } else {
+      displayPosRef.current = null;
+      targetPosRef.current = null;
+    }
     lastMarkerHeadingRef.current = null;
     lastAppliedCamRef.current = null;
     pendingNavCameraRef.current = null;
@@ -1604,7 +1611,10 @@ function CampusMapInner({
     const maps = window.naver?.maps as NMaps | undefined;
     if (!map || !maps?.LatLng || !maps?.Point) return;
 
-    const seed = originPoint ?? (routeLine && routeLine.length > 0 ? routeLine[0] : null);
+    const seed =
+      liveUserPosRefProp.current?.current ??
+      liveUserPosition ??
+      originPoint;
     if (!seed) return;
 
     const LatLngCtor = maps.LatLng as new (lat: number, lng: number) => unknown;
@@ -1662,7 +1672,7 @@ function CampusMapInner({
     const firstPos = liveUserPosition ?? liveUserPosRefProp.current?.current;
     if (!sdkLoaded || !followUser || !navigationMode || followPaused || !firstPos) return;
     if (!isPlausibleGpsLatLng(firstPos)) return;
-    if (hasNavCenteredRef.current) return;
+    if (hasNavCenteredRef.current && !navSnapPendingRef.current) return;
 
     const heading = resolveFusedHeading();
     const cameraHeading = routeHeadingRef.current ?? heading;
